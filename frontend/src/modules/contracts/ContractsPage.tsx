@@ -11,6 +11,7 @@ import type {
   OperationalDefaults,
   Property,
 } from '../../api/types'
+import { SignatureTimeline } from './SignatureTimeline'
 
 const statusLabel: Record<AdministrationContractStatus, string> = {
   draft: 'Rascunho', review: 'Em revisão', approved: 'Aprovado', pending_signature: 'Preparando assinatura', signed: 'Assinado', cancelled: 'Cancelado',
@@ -270,6 +271,7 @@ export function ContractsPage({ permissions }: Props) {
               {isExpanded && <div className="contract-expanded-detail">
                 <div className="contract-signers-summary"><span className="eyebrow">Signatários atuais</span>{item.signers.length ? item.signers.map((signer) => <div key={signer.email}><strong>{signer.name}</strong><span>{signerRoleLabel[signer.role] ?? signer.role} · {signer.email} · ordem {signer.sign_order}</span></div>) : <small>Nenhum signatário registrado nesta versão.</small>}</div>
                 <div className="contract-version-history">{[...item.versions].reverse().map((version) => <div key={version.version_number}><span>v{version.version_number}</span><strong>{version.change_summary || 'Versão registrada'}</strong><small>{new Date(version.created_at).toLocaleString('pt-BR')}</small></div>)}</div>
+                <SignatureTimeline contractId={item.id} enabled={isExpanded}/>
               </div>}
             </article>
           })}
