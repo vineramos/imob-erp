@@ -1,0 +1,66 @@
+from dataclasses import dataclass
+
+from app.domains.foundation.permissions import ADMIN_PERMISSION_KEYS
+
+
+@dataclass(frozen=True)
+class RoleTemplate:
+    key: str
+    name: str
+    description: str
+    permissions: frozenset[str]
+
+
+ROLE_TEMPLATES: tuple[RoleTemplate, ...] = (
+    RoleTemplate("admin", "Administrador", "Governança e acesso total ao ERP.", ADMIN_PERMISSION_KEYS),
+    RoleTemplate(
+        "administrative",
+        "Administrativo",
+        "Operação administrativa, contratos, documentos, agenda e manutenção.",
+        frozenset({
+            "dashboard.view", "properties.view", "properties.create", "properties.edit",
+            "captures.view", "captures.manage", "crm.view", "crm.manage",
+            "contracts.view", "contracts.create", "contracts.edit",
+            "maintenance.view", "maintenance.manage", "inspections.view", "inspections.manage",
+            "documents.view", "documents.manage", "agenda.view", "agenda.manage", "reports.view",
+        }),
+    ),
+    RoleTemplate(
+        "finance",
+        "Financeiro",
+        "Cobranças, banco, conciliação, pagamentos e repasses.",
+        frozenset({
+            "dashboard.view", "properties.view", "contracts.view", "finance.view",
+            "finance.charge.create", "finance.reconcile", "finance.payment.prepare",
+            "finance.repasse.execute", "documents.view", "agenda.view", "agenda.manage", "reports.view",
+        }),
+    ),
+    RoleTemplate(
+        "broker",
+        "Corretor",
+        "Imóveis disponíveis, próprios leads, visitas e propostas.",
+        frozenset({
+            "dashboard.view", "properties.view", "captures.view", "crm.view", "crm.manage",
+            "contracts.view", "documents.view", "agenda.view", "agenda.manage",
+        }),
+    ),
+    RoleTemplate(
+        "maintenance_inspection",
+        "Manutenção / Vistoria",
+        "Chamados, fornecedores, vistorias, laudos e agenda relacionados ao trabalho.",
+        frozenset({
+            "dashboard.view", "properties.view", "maintenance.view", "maintenance.manage",
+            "inspections.view", "inspections.manage", "documents.view", "documents.manage",
+            "agenda.view", "agenda.manage",
+        }),
+    ),
+    RoleTemplate(
+        "read_only",
+        "Consulta",
+        "Acesso somente leitura ao escopo autorizado.",
+        frozenset({
+            "dashboard.view", "properties.view", "captures.view", "crm.view", "contracts.view",
+            "finance.view", "maintenance.view", "inspections.view", "documents.view", "agenda.view", "reports.view",
+        }),
+    ),
+)
