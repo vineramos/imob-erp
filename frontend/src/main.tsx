@@ -10,6 +10,7 @@ import './settings-foundation-next.css'
 import './portfolio.css'
 import './contracts.css'
 import './commercial.css'
+import './public-site.css'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
