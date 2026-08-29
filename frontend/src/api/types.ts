@@ -23,6 +23,27 @@ export type OrganizationProfile = {
 
 export type OrganizationProfileUpdate = Omit<OrganizationProfile, 'id'>
 
+export type Role = {
+  id: string
+  key: string
+  name: string
+  description: string | null
+  is_system: boolean
+  is_active: boolean
+  permissions: string[]
+  user_count: number
+}
+
+export type AppUser = {
+  id: string
+  name: string
+  email: string
+  is_active: boolean
+  blocked_at: string | null
+  created_at: string
+  role_keys: string[]
+}
+
 export type AuditEvent = {
   id: string
   actor_user_id: string | null
