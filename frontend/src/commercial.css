@@ -25,7 +25,7 @@
 
 .commercial-workspace { display: grid; gap: 14px; }
 .commercial-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-.commercial-grid { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(310px, .75fr); gap: 14px; align-items: start; }
+.commercial-grid { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(380px, .9fr); gap: 14px; align-items: start; }
 .commercial-list-column { display: grid; gap: 9px; min-width: 0; }
 .commercial-toolbar { align-items: center; }
 .commercial-property-row { width: 100%; min-height: 78px; padding: 12px 14px; display: grid; grid-template-columns: minmax(0,1fr) 120px auto; align-items: center; gap: 12px; text-align: left; font: inherit; color: inherit; cursor: pointer; }
@@ -39,7 +39,15 @@
 .publication-inspector-heading p { margin: 5px 0 0; color: var(--text-muted); font-size: 9px; }
 .publication-ok { color: var(--success); }
 .publication-pending { color: var(--warning); }
-.publication-checklist { display: grid; gap: 7px; padding: 12px 0; }
+.commercial-profile-form { padding: 12px 0; display: grid; gap: 9px; border-bottom: 1px solid var(--border); }
+.commercial-profile-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 8px; }
+.commercial-profile-form .field span { font-size: 8.5px; }
+.commercial-profile-form textarea { resize: vertical; min-height: 86px; }
+.commercial-profile-actions { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.commercial-profile-actions small { color: var(--text-muted); font-size: 8px; }
+.publication-checklist-heading { padding-top: 12px; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.publication-checklist-heading strong { font-size: 9.5px; }
+.publication-checklist { display: grid; gap: 7px; padding: 9px 0 12px; }
 .publication-checklist > div { display: grid; grid-template-columns: 18px 1fr; gap: 8px; align-items: start; padding: 8px; border-radius: 7px; background: var(--surface-muted); }
 .publication-checklist > div.ok > svg { color: var(--success); }
 .publication-checklist > div.pending > svg { color: var(--danger); }
@@ -63,7 +71,7 @@
 @media (max-width: 760px) {
   .integration-card-expanded { grid-template-columns: auto 1fr; }
   .integration-card-expanded select, .integration-card-expanded > .status-badge, .integration-health { grid-column: 1 / -1; }
-  .integration-health, .contract-signers-heading { flex-direction: column; align-items: stretch; }
-  .contract-signer-row, .contract-expanded-detail, .commercial-property-row { grid-template-columns: 1fr; }
+  .integration-health, .contract-signers-heading, .commercial-profile-actions { flex-direction: column; align-items: stretch; }
+  .contract-signer-row, .contract-expanded-detail, .commercial-property-row, .commercial-profile-grid { grid-template-columns: 1fr; }
   .commercial-metrics { grid-template-columns: 1fr; }
 }
