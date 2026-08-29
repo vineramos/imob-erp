@@ -38,12 +38,13 @@ class AdministrationContract(Base):
     property_snapshot: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, nullable=False)
     owner_snapshot: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, default=list, nullable=False)
     rules_snapshot: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, nullable=False)
+    signers_snapshot: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, default=list, nullable=False)
     current_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     notes: Mapped[str | None] = mapped_column(Text)
 
     signing_provider: Mapped[str] = mapped_column(String(30), nullable=False, default="clicksign")
     signing_envelope_id: Mapped[str | None] = mapped_column(String(180))
-    signing_status: Mapped[str] = mapped_column(String(40), nullable=False, default="not_prepared")
+    signing_status: Mapped[str] = mapped_column(String(60), nullable=False, default="not_prepared")
     signed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     archived_document_reference: Mapped[str | None] = mapped_column(String(500))
 
@@ -71,3 +72,16 @@ class AdministrationContractVersion(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     contract: Mapped[AdministrationContract] = relationship(back_populates="versions")
+
+
+class SignatureWebhookEvent(Base):
+    __tablename__ = "signature_webhook_events"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    provider: Mapped[str] = mapped_column(String(30), nullable=False, index=True)
+    event_name: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
+    envelope_id: Mapped[str | None] = mapped_column(String(180), index=True)
+    contract_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("administration_contracts.id"), index=True)
+    payload: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, nullable=False)
+    hmac_valid: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False, index=True)
