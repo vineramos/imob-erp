@@ -1,5 +1,7 @@
 import { Bell, ChevronDown, Search } from 'lucide-react'
-import { useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { ApiError, apiRequest } from './api/client'
+import type { CurrentUser } from './api/types'
 import { authConfigured } from './auth/client'
 import { LoginPage } from './auth/LoginPage'
 import { navigation } from './config/navigation'
@@ -7,6 +9,27 @@ import { DashboardPage } from './modules/dashboard/DashboardPage'
 import { SettingsPage } from './modules/settings/SettingsPage'
 
 type ModuleKey = (typeof navigation)[number]['module']
+type AuthState = 'loading' | 'authenticated' | 'unauthenticated' | 'error'
+
+const devBypass = import.meta.env.DEV && !authConfigured
+
+const devUser: CurrentUser = {
+  id: 'dev-admin',
+  name: 'Administrador',
+  email: 'dev@local',
+  organization_id: 'dev-organization',
+  organization_name: 'Imobiliária',
+  role_keys: ['admin'],
+  permissions: [
+    ...navigation.map((item) => item.permission),
+    'settings.company.manage',
+    'settings.appearance.manage',
+    'users.manage',
+    'permissions.manage',
+    'approval_rules.manage',
+    'audit.view',
+  ],
+}
 
 function ModulePlaceholder({ module }: { module: ModuleKey }) {
   const item = navigation.find((entry) => entry.module === module)
@@ -27,13 +50,89 @@ function ModulePlaceholder({ module }: { module: ModuleKey }) {
   )
 }
 
+function BootScreen({ message = 'Preparando seu ambiente...' }: { message?: string }) {
+  return (
+    <main className="boot-screen">
+      <div className="brand-mark">I</div>
+      <strong>Imob</strong>
+      <span>{message}</span>
+    </main>
+  )
+}
+
+function AccessError({ message, onRetry }: { message: string; onRetry: () => void }) {
+  return (
+    <main className="boot-screen">
+      <div className="brand-mark">!</div>
+      <strong>Não foi possível abrir o ERP</strong>
+      <span>{message}</span>
+      <button className="button primary" type="button" onClick={onRetry}>Tentar novamente</button>
+    </main>
+  )
+}
+
 export default function App() {
   const [activeModule, setActiveModule] = useState<ModuleKey>('dashboard')
-  const [authenticated, setAuthenticated] = useState(import.meta.env.DEV && !authConfigured)
+  const [authState, setAuthState] = useState<AuthState>(devBypass ? 'authenticated' : 'loading')
+  const [currentUser, setCurrentUser] = useState<CurrentUser | null>(devBypass ? devUser : null)
+  const [authError, setAuthError] = useState('')
 
-  if (!authenticated) {
-    return <LoginPage onAuthenticated={() => setAuthenticated(true)} />
-  }
+  const refreshUser = useCallback(async () => {
+    if (devBypass) {
+      setCurrentUser(devUser)
+      setAuthState('authenticated')
+      return
+    }
+
+    setAuthState('loading')
+    setAuthError('')
+    try {
+      const user = await apiRequest<CurrentUser>('/me')
+      setCurrentUser(user)
+      setAuthState('authenticated')
+    } catch (error) {
+      setCurrentUser(null)
+      if (error instanceof ApiError && error.status === 401) {
+        setAuthState('unauthenticated')
+        return
+      }
+      if (error instanceof ApiError && error.status === 403) {
+        setAuthError(error.detail)
+      } else {
+        setAuthError(error instanceof Error ? error.message : 'Falha inesperada ao iniciar o sistema.')
+      }
+      setAuthState('error')
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!devBypass) void refreshUser()
+  }, [refreshUser])
+
+  const visibleNavigation = useMemo(() => {
+    if (!currentUser) return []
+    const granted = new Set(currentUser.permissions)
+    return navigation.filter((item) => granted.has(item.permission))
+  }, [currentUser])
+
+  useEffect(() => {
+    if (visibleNavigation.length > 0 && !visibleNavigation.some((item) => item.module === activeModule)) {
+      setActiveModule(visibleNavigation[0].module)
+    }
+  }, [activeModule, visibleNavigation])
+
+  if (authState === 'loading') return <BootScreen />
+  if (authState === 'unauthenticated') return <LoginPage onAuthenticated={() => void refreshUser()} />
+  if (authState === 'error') return <AccessError message={authError} onRetry={() => void refreshUser()} />
+  if (!currentUser) return <BootScreen message="Carregando usuário..." />
+
+  const initials = currentUser.name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join('') || 'AD'
+  const primaryRole = currentUser.role_keys.includes('admin') ? 'Administrador' : (currentUser.role_keys[0] || 'Usuário')
 
   return (
     <div className="app-shell">
@@ -47,7 +146,7 @@ export default function App() {
         </div>
 
         <nav className="nav-list" aria-label="Menu principal">
-          {navigation.map(({ label, icon: Icon, module }) => (
+          {visibleNavigation.map(({ label, icon: Icon, module }) => (
             <button
               className={`nav-item ${activeModule === module ? 'active' : ''}`}
               type="button"
@@ -63,9 +162,9 @@ export default function App() {
         <div className="sidebar-footer">
           <span className="sidebar-label">Empresa</span>
           <button type="button" className="company-switcher">
-            <div className="avatar">IM</div>
+            <div className="avatar">{currentUser.organization_name.trim().slice(0, 2).toUpperCase() || 'IM'}</div>
             <div>
-              <strong>Imobiliária</strong>
+              <strong>{currentUser.organization_name}</strong>
               <span>Ambiente principal</span>
             </div>
             <ChevronDown size={16} />
@@ -87,10 +186,10 @@ export default function App() {
               <Bell size={19} />
             </button>
             <div className="user-summary">
-              <div className="avatar avatar-user">AD</div>
+              <div className="avatar avatar-user">{initials}</div>
               <div>
-                <strong>Administrador</strong>
-                <span>Acesso total</span>
+                <strong>{currentUser.name}</strong>
+                <span>{primaryRole}</span>
               </div>
               <ChevronDown size={16} />
             </div>
@@ -98,7 +197,7 @@ export default function App() {
         </header>
 
         {activeModule === 'dashboard' && <DashboardPage />}
-        {activeModule === 'settings' && <SettingsPage />}
+        {activeModule === 'settings' && <SettingsPage permissions={currentUser.permissions} />}
         {activeModule !== 'dashboard' && activeModule !== 'settings' && <ModulePlaceholder module={activeModule} />}
       </main>
     </div>
