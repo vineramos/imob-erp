@@ -11,7 +11,7 @@ type SignatureEvent = {
   received_at: string
 }
 
-export function SignatureTimeline({ contractId, enabled }: { contractId: string; enabled: boolean }) {
+export function SignatureTimeline({ contractId, enabled = true }: { contractId: string; enabled?: boolean }) {
   const [events, setEvents] = useState<SignatureEvent[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
