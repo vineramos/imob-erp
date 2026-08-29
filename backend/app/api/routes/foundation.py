@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.database import get_db
@@ -80,6 +80,12 @@ def _user_response(user: AppUser) -> UserResponse:
         created_at=user.created_at,
         role_keys=sorted(role.key for role in user.roles if role.is_active),
     )
+
+
+@router.get("/bootstrap/status")
+def bootstrap_status(db: Session = Depends(get_db)) -> dict[str, bool]:
+    user_count = db.scalar(select(func.count(AppUser.id))) or 0
+    return {"bootstrap_open": user_count == 0}
 
 
 @router.get("/me", response_model=MeResponse)
