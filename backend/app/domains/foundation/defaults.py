@@ -22,7 +22,25 @@ ERP_THEME_DEFAULT = {
     "tableDensity": "normal",
 }
 
-# Regras de negócio específicas de locação serão adicionadas somente quando o
-# respectivo módulo entrar em sprint. A fundação não deve congelar regras ainda
-# não validadas pelo usuário.
-OPERATIONAL_DEFAULTS = {}
+# Padrões já validados para novos registros/contratos. O princípio da aplicação
+# continua sendo: configuração define o padrão; cada registro operacional guarda
+# sua própria regra e alterações posteriores não são retroativas.
+OPERATIONAL_DEFAULTS = {
+    "rent_due_day": 10,
+    "owner_repasse_business_days": 2,
+    "residential_lease_months": 30,
+    "adjustment_index": "IPCA",
+    "termination_fine_months": 3,
+    "inspection_contest_days": 5,
+    "default_admin_fee_percent": 10,
+    "delinquency_critical_day": 5,
+}
+
+INTEGRATIONS_DEFAULTS = {
+    "bank_provider": "inter",
+    "signature_provider": "clicksign",
+    "email_provider": "smtp",
+    "public_site_enabled": False,
+    "webhook_base_url": "",
+    "notes": "",
+}
