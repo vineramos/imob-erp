@@ -113,7 +113,16 @@ def _provider_status_from_event(event_name: str, payload: dict[str, Any]) -> str
     return "provider_event_received"
 
 
-@router.post("/webhooks/clicksign", status_code=status.HTTP_202_ACCEPTED)
+def _received_signature(request: Request) -> str:
+    # A documentação atual da API 3.0 referencia x-clicksign-signature;
+    # ambientes/documentação anteriores utilizam Content-Hmac. Aceitamos ambos.
+    return (
+        request.headers.get("x-clicksign-signature", "").strip()
+        or request.headers.get("content-hmac", "").strip()
+    )
+
+
+@router.post("/webhooks/clicksign", status_code=status.HTTP_200_OK)
 async def clicksign_webhook(request: Request, db: Session = Depends(get_db)) -> dict[str, str]:
     settings = get_settings()
     secret = settings.clicksign_webhook_secret.strip()
@@ -124,12 +133,20 @@ async def clicksign_webhook(request: Request, db: Session = Depends(get_db)) -> 
         )
 
     raw_body = await request.body()
-    received_hmac = request.headers.get("content-hmac", "").strip()
+    received_hmac = _received_signature(request)
     expected = hmac.new(secret.encode("utf-8"), raw_body, hashlib.sha256).hexdigest()
     received_digest = received_hmac.removeprefix("sha256=")
     hmac_valid = bool(received_digest) and hmac.compare_digest(received_digest.lower(), expected.lower())
     if not hmac_valid:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Assinatura HMAC do webhook inválida.")
+
+    event_name = request.headers.get("event", "unknown")[:120]
+    event_fingerprint = hashlib.sha256(event_name.encode("utf-8") + b"\0" + raw_body).hexdigest()
+    duplicate = db.scalar(
+        select(SignatureWebhookEvent.id).where(SignatureWebhookEvent.event_fingerprint == event_fingerprint)
+    )
+    if duplicate is not None:
+        return {"status": "accepted_duplicate"}
 
     try:
         payload = json.loads(raw_body.decode("utf-8")) if raw_body else {}
@@ -138,18 +155,20 @@ async def clicksign_webhook(request: Request, db: Session = Depends(get_db)) -> 
     if not isinstance(payload, dict):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Payload do webhook deve ser um objeto JSON.")
 
-    event_name = request.headers.get("event", "unknown")[:120]
     envelope_id = _extract_envelope_id(payload)
     contract = None
     if envelope_id:
         contract = db.scalar(select(AdministrationContract).where(AdministrationContract.signing_envelope_id == envelope_id))
         if contract is not None:
+            # Webhook atualiza apenas o estado técnico do provider. Mesmo "closed"
+            # não transforma o contrato em assinado até o arquivo final ser persistido.
             contract.signing_status = _provider_status_from_event(event_name, payload)
 
     db.add(
         SignatureWebhookEvent(
             provider="clicksign",
             event_name=event_name,
+            event_fingerprint=event_fingerprint,
             envelope_id=envelope_id,
             contract_id=contract.id if contract else None,
             payload=payload,
