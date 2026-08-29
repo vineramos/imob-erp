@@ -3,7 +3,7 @@ from decimal import Decimal
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
 
 
 AdministrationContractStatus = Literal[
@@ -13,6 +13,20 @@ AdministrationPlan = Literal["essential", "complete", "custom"]
 FeeType = Literal["percent", "fixed"]
 OperationalPayer = Literal["tenant", "owner", "agency"]
 WorkflowAction = Literal["submit_review", "approve", "prepare_signature", "return_draft", "cancel"]
+SignerRole = Literal["owner", "agency", "witness", "other"]
+SignerCommunication = Literal["email", "sms", "whatsapp", "none"]
+
+
+class ContractSignerPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    role: SignerRole = "owner"
+    name: str = Field(min_length=3, max_length=180)
+    email: EmailStr
+    document_number: str | None = Field(default=None, max_length=24)
+    phone: str | None = Field(default=None, max_length=40)
+    sign_order: int = Field(default=1, ge=1, le=50)
+    communication: SignerCommunication = "email"
 
 
 class AdministrationContractTerms(BaseModel):
@@ -33,15 +47,19 @@ class AdministrationContractTerms(BaseModel):
     start_date: date | None = None
     end_date: date | None = None
     notes: str | None = Field(default=None, max_length=4000)
+    signers: list[ContractSignerPayload] = Field(default_factory=list, max_length=20)
 
     @model_validator(mode="after")
-    def validate_fee_and_dates(self):
+    def validate_fee_dates_and_signers(self):
         if self.admin_fee_type == "percent" and self.admin_fee_percent is None:
             raise ValueError("Informe o percentual da taxa de administração.")
         if self.admin_fee_type == "fixed" and self.admin_fee_amount is None:
             raise ValueError("Informe o valor fixo da taxa de administração.")
         if self.start_date and self.end_date and self.end_date < self.start_date:
             raise ValueError("A data final não pode ser anterior à data inicial.")
+        normalized_emails = [str(signer.email).strip().lower() for signer in self.signers]
+        if len(normalized_emails) != len(set(normalized_emails)):
+            raise ValueError("Não repita o mesmo e-mail na lista de signatários.")
         return self
 
 
@@ -91,6 +109,7 @@ class AdministrationContractResponse(BaseModel):
     start_date: date | None = None
     end_date: date | None = None
     notes: str | None = None
+    signers: list[dict]
     current_version: int
     signing_provider: str
     signing_status: str
