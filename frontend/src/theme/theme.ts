@@ -46,6 +46,20 @@ export const defaultTheme: ThemeConfig = {
   tableDensity: 'normal',
 }
 
+function applyFavicon(url: string) {
+  let favicon = document.querySelector<HTMLLinkElement>('link[rel="icon"]')
+  if (!url) {
+    favicon?.remove()
+    return
+  }
+  if (!favicon) {
+    favicon = document.createElement('link')
+    favicon.rel = 'icon'
+    document.head.appendChild(favicon)
+  }
+  favicon.href = url
+}
+
 export function applyTheme(theme: ThemeConfig) {
   const root = document.documentElement
   const values: Record<string, string> = {
@@ -68,4 +82,7 @@ export function applyTheme(theme: ThemeConfig) {
 
   Object.entries(values).forEach(([key, value]) => root.style.setProperty(key, value))
   root.style.fontFamily = theme.fontFamily
+  root.dataset.tableDensity = theme.tableDensity
+  document.title = `${theme.companyShortName || theme.companyName} · ERP Imobiliário`
+  applyFavicon(theme.faviconUrl)
 }
