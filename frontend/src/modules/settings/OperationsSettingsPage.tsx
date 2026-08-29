@@ -1,8 +1,16 @@
 import { CalendarClock, Save, ShieldCheck } from 'lucide-react'
 import { FormEvent, useEffect, useState } from 'react'
 import { ApiError, apiRequest } from '../../api/client'
-import type { OperationalDefaults } from '../../api/types'
+import type { AdjustmentIndex, OperationalDefaults } from '../../api/types'
 import { authConfigured } from '../../auth/client'
+
+const adjustmentIndexes: { value: AdjustmentIndex; label: string }[] = [
+  { value: 'IPCA', label: 'IPCA — Índice Nacional de Preços ao Consumidor Amplo' },
+  { value: 'IGP-M', label: 'IGP-M — Índice Geral de Preços do Mercado' },
+  { value: 'INPC', label: 'INPC — Índice Nacional de Preços ao Consumidor' },
+  { value: 'IPC-FIPE', label: 'IPC-FIPE — Índice de Preços ao Consumidor' },
+  { value: 'IGP-DI', label: 'IGP-DI — Índice Geral de Preços - Disponibilidade Interna' },
+]
 
 const defaults: OperationalDefaults = {
   rent_due_day: 10,
@@ -83,7 +91,19 @@ export function OperationsSettingsPage({ canEdit }: Props) {
             <div className="form-grid two-columns">
               <label className="field"><span>Vencimento padrão do aluguel</span><input disabled={!canEdit} min={1} max={28} type="number" value={form.rent_due_day} onChange={(e) => numberField('rent_due_day', e.target.value)} /></label>
               <label className="field"><span>Prazo residencial padrão (meses)</span><input disabled={!canEdit} min={1} max={120} type="number" value={form.residential_lease_months} onChange={(e) => numberField('residential_lease_months', e.target.value)} /></label>
-              <label className="field"><span>Índice de reajuste</span><input disabled={!canEdit} maxLength={30} value={form.adjustment_index} onChange={(e) => setForm((current) => ({ ...current, adjustment_index: e.target.value }))} /></label>
+              <label className="field">
+                <span>Índice de reajuste</span>
+                <select
+                  disabled={!canEdit}
+                  value={form.adjustment_index}
+                  onChange={(e) => {
+                    setForm((current) => ({ ...current, adjustment_index: e.target.value as AdjustmentIndex }))
+                    setSuccess('')
+                  }}
+                >
+                  {adjustmentIndexes.map((index) => <option key={index.value} value={index.value}>{index.label}</option>)}
+                </select>
+              </label>
               <label className="field"><span>Multa rescisória (aluguéis)</span><input disabled={!canEdit} min={0} max={12} step="0.5" type="number" value={form.termination_fine_months} onChange={(e) => numberField('termination_fine_months', e.target.value)} /></label>
               <label className="field"><span>Taxa de administração padrão (%)</span><input disabled={!canEdit} min={0} max={100} step="0.1" type="number" value={form.default_admin_fee_percent} onChange={(e) => numberField('default_admin_fee_percent', e.target.value)} /></label>
               <label className="field"><span>Repasse ao proprietário (dias úteis)</span><input disabled={!canEdit} min={0} max={20} type="number" value={form.owner_repasse_business_days} onChange={(e) => numberField('owner_repasse_business_days', e.target.value)} /></label>
