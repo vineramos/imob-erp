@@ -11,6 +11,7 @@ import { ContractsPage } from './modules/contracts/ContractsPage'
 import { DashboardPage } from './modules/dashboard/DashboardPage'
 import { PropertiesPage } from './modules/properties/PropertiesPage'
 import { SettingsPage } from './modules/settings/SettingsPage'
+import { PublicSitePage } from './public/PublicSitePage'
 import { useTheme } from './theme/ThemeProvider'
 import type { ThemeConfig } from './theme/theme'
 
@@ -28,31 +29,16 @@ const devUser: CurrentUser = {
   role_keys: ['admin'],
   permissions: [
     ...navigation.map((item) => item.permission),
-    'properties.create',
-    'properties.edit',
-    'properties.publish',
-    'captures.manage',
-    'contracts.create',
-    'contracts.edit',
-    'contracts.approve',
-    'contracts.send_signature',
-    'settings.company.manage',
-    'settings.appearance.manage',
-    'users.manage',
-    'permissions.manage',
-    'approval_rules.manage',
-    'audit.view',
+    'properties.create', 'properties.edit', 'properties.publish', 'captures.manage',
+    'contracts.create', 'contracts.edit', 'contracts.approve', 'contracts.send_signature',
+    'settings.company.manage', 'settings.appearance.manage', 'users.manage', 'permissions.manage',
+    'approval_rules.manage', 'audit.view',
   ],
 }
 
 function ModulePlaceholder({ module }: { module: ModuleKey }) {
   const item = navigation.find((entry) => entry.module === module)
-  return (
-    <section className="workspace">
-      <div className="page-heading"><div><span className="eyebrow">Módulo preparado</span><h1>{item?.label}</h1><p>Este módulo entra em uma das próximas sprints. A navegação já está reservada para manter a arquitetura estável.</p></div></div>
-      <article className="panel empty-module"><strong>Estrutura pronta para evoluir.</strong><span>O módulo será ativado sobre a mesma base de permissões, auditoria e configurações do ERP.</span></article>
-    </section>
-  )
+  return <section className="workspace"><div className="page-heading"><div><span className="eyebrow">Módulo preparado</span><h1>{item?.label}</h1><p>Este módulo entra em uma das próximas sprints. A navegação já está reservada para manter a arquitetura estável.</p></div></div><article className="panel empty-module"><strong>Estrutura pronta para evoluir.</strong><span>O módulo será ativado sobre a mesma base de permissões, auditoria e configurações do ERP.</span></article></section>
 }
 
 function BrandMark({ logoUrl, initials }: { logoUrl: string; initials: string }) {
@@ -63,14 +49,14 @@ function BrandMark({ logoUrl, initials }: { logoUrl: string; initials: string })
 function BootScreen({ message = 'Preparando seu ambiente...' }: { message?: string }) {
   const { theme } = useTheme()
   const initials = theme.companyShortName.trim().slice(0, 2).toUpperCase() || 'IM'
-  return <main className="boot-screen"><BrandMark logoUrl={theme.logoUrl} initials={initials} /><strong>{theme.companyShortName || theme.companyName}</strong><span>{message}</span></main>
+  return <main className="boot-screen"><BrandMark logoUrl={theme.logoUrl} initials={initials}/><strong>{theme.companyShortName || theme.companyName}</strong><span>{message}</span></main>
 }
 
 function AccessError({ message, onRetry }: { message: string; onRetry: () => void }) {
   return <main className="boot-screen"><div className="brand-mark">!</div><strong>Não foi possível abrir o ERP</strong><span>{message}</span><button className="button primary" type="button" onClick={onRetry}>Tentar novamente</button></main>
 }
 
-export default function App() {
+function ErpApp() {
   const { theme, setTheme } = useTheme()
   const [activeModule, setActiveModule] = useState<ModuleKey>('dashboard')
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
@@ -115,28 +101,29 @@ export default function App() {
   const primaryRole = currentUser.role_keys.includes('admin') ? 'Administrador' : (currentUser.role_keys[0] || 'Usuário')
   const brandInitials = theme.companyShortName.trim().slice(0, 2).toUpperCase() || 'IM'
 
-  return (
-    <div className={`app-shell ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
-      <aside className="sidebar">
-        <div className="brand"><BrandMark logoUrl={theme.logoUrl} initials={brandInitials} /><div className="brand-copy"><strong>{theme.companyShortName || theme.companyName}</strong><span>ERP Imobiliário</span></div></div>
-        <nav className="nav-list" aria-label="Menu principal">{visibleNavigation.map(({ label, icon: Icon, module }) => <button className={`nav-item ${activeModule === module ? 'active' : ''}`} type="button" key={label} title={sidebarCollapsed ? label : undefined} onClick={() => setActiveModule(module)}><Icon size={18} strokeWidth={1.75} /><span>{label}</span></button>)}</nav>
-        <div className="sidebar-footer"><span className="sidebar-label">Empresa</span><button type="button" className="company-switcher"><div className="avatar">{currentUser.organization_name.trim().slice(0, 2).toUpperCase() || brandInitials}</div><div className="company-copy"><strong>{currentUser.organization_name}</strong><span>Ambiente principal</span></div><ChevronDown className="company-chevron" size={15} /></button></div>
-      </aside>
+  return <div className={`app-shell ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
+    <aside className="sidebar">
+      <div className="brand"><BrandMark logoUrl={theme.logoUrl} initials={brandInitials}/><div className="brand-copy"><strong>{theme.companyShortName || theme.companyName}</strong><span>ERP Imobiliário</span></div></div>
+      <nav className="nav-list" aria-label="Menu principal">{visibleNavigation.map(({ label, icon: Icon, module }) => <button className={`nav-item ${activeModule === module ? 'active' : ''}`} type="button" key={label} title={sidebarCollapsed ? label : undefined} onClick={() => setActiveModule(module)}><Icon size={18} strokeWidth={1.75}/><span>{label}</span></button>)}</nav>
+      <div className="sidebar-footer"><span className="sidebar-label">Empresa</span><button type="button" className="company-switcher"><div className="avatar">{currentUser.organization_name.trim().slice(0, 2).toUpperCase() || brandInitials}</div><div className="company-copy"><strong>{currentUser.organization_name}</strong><span>Ambiente principal</span></div><ChevronDown className="company-chevron" size={15}/></button></div>
+    </aside>
 
-      <main className="main-area">
-        <header className="topbar">
-          <div className="topbar-left"><button className="sidebar-toggle" type="button" aria-label={sidebarCollapsed ? 'Expandir menu lateral' : 'Recolher menu lateral'} onClick={() => setSidebarCollapsed((value) => !value)}><Menu size={20} /></button><label className="global-search"><Search size={17} /><input aria-label="Busca global" placeholder="Buscar imóveis, contratos, pessoas, cobranças..." /><kbd>Ctrl K</kbd></label></div>
-          <div className="topbar-actions">{!authConfigured && <span className="dev-badge">DEV · Auth pendente</span>}<button className="topbar-icon" type="button" aria-label="Notificações" title="Notificações"><Bell size={18} /></button><button className="topbar-icon topbar-secondary-action" type="button" aria-label="Mensagens" title="Mensagens"><Mail size={18} /></button><button className="topbar-icon topbar-secondary-action" type="button" aria-label="Ajuda" title="Ajuda"><CircleHelp size={18} /></button><span className="topbar-divider" aria-hidden="true" /><div className="user-summary"><div className="avatar avatar-user">{initials}</div><div><strong>{currentUser.name}</strong><span>{primaryRole}</span></div><ChevronDown size={15} /></div></div>
-        </header>
+    <main className="main-area">
+      <header className="topbar"><div className="topbar-left"><button className="sidebar-toggle" type="button" aria-label={sidebarCollapsed ? 'Expandir menu lateral' : 'Recolher menu lateral'} onClick={() => setSidebarCollapsed((value) => !value)}><Menu size={20}/></button><label className="global-search"><Search size={17}/><input aria-label="Busca global" placeholder="Buscar imóveis, contratos, pessoas, cobranças..."/><kbd>Ctrl K</kbd></label></div><div className="topbar-actions">{!authConfigured && <span className="dev-badge">DEV · Auth pendente</span>}<button className="topbar-icon" type="button" aria-label="Notificações" title="Notificações"><Bell size={18}/></button><button className="topbar-icon topbar-secondary-action" type="button" aria-label="Mensagens" title="Mensagens"><Mail size={18}/></button><button className="topbar-icon topbar-secondary-action" type="button" aria-label="Ajuda" title="Ajuda"><CircleHelp size={18}/></button><span className="topbar-divider" aria-hidden="true"/><div className="user-summary"><div className="avatar avatar-user">{initials}</div><div><strong>{currentUser.name}</strong><span>{primaryRole}</span></div><ChevronDown size={15}/></div></div></header>
 
-        {activeModule === 'dashboard' && <DashboardPage />}
-        {activeModule === 'properties' && <PropertiesPage permissions={currentUser.permissions} />}
-        {activeModule === 'captures' && <CapturesPage permissions={currentUser.permissions} />}
-        {activeModule === 'crm' && <CommercialPage permissions={currentUser.permissions} organizationId={currentUser.organization_id} />}
-        {activeModule === 'contracts' && <ContractsPage permissions={currentUser.permissions} />}
-        {activeModule === 'settings' && <SettingsPage permissions={currentUser.permissions} />}
-        {!['dashboard', 'properties', 'captures', 'crm', 'contracts', 'settings'].includes(activeModule) && <ModulePlaceholder module={activeModule} />}
-      </main>
-    </div>
-  )
+      {activeModule === 'dashboard' && <DashboardPage/>}
+      {activeModule === 'properties' && <PropertiesPage permissions={currentUser.permissions}/>} 
+      {activeModule === 'captures' && <CapturesPage permissions={currentUser.permissions}/>} 
+      {activeModule === 'crm' && <CommercialPage permissions={currentUser.permissions} organizationId={currentUser.organization_id}/>} 
+      {activeModule === 'contracts' && <ContractsPage permissions={currentUser.permissions}/>} 
+      {activeModule === 'settings' && <SettingsPage permissions={currentUser.permissions}/>} 
+      {!['dashboard', 'properties', 'captures', 'crm', 'contracts', 'settings'].includes(activeModule) && <ModulePlaceholder module={activeModule}/>} 
+    </main>
+  </div>
+}
+
+export default function App() {
+  const match = window.location.pathname.match(/^\/site\/([^/]+)(?:\/imoveis\/([^/]+))?\/?$/)
+  if (match) return <PublicSitePage organizationId={decodeURIComponent(match[1])} slug={match[2] ? decodeURIComponent(match[2]) : null}/>
+  return <ErpApp/>
 }
