@@ -75,8 +75,7 @@ def _owner_snapshot(item: Property) -> list[dict]:
 
 
 def _rules_from_payload(payload: AdministrationContractCreate | AdministrationContractUpdate) -> dict:
-    excluded = {"property_id", "change_summary"}
-    return payload.model_dump(mode="json", exclude=excluded)
+    return payload.model_dump(mode="json", exclude={"property_id", "change_summary"})
 
 
 def _apply_terms(contract: AdministrationContract, payload: AdministrationContractCreate | AdministrationContractUpdate) -> None:
@@ -108,15 +107,6 @@ def _version_snapshot(contract: AdministrationContract) -> dict:
 
 def _contract_response(contract: AdministrationContract) -> AdministrationContractResponse:
     property_snapshot = contract.property_snapshot or {}
-    versions = [
-        AdministrationContractVersionResponse(
-            version_number=version.version_number,
-            change_summary=version.change_summary,
-            created_by_user_id=version.created_by_user_id,
-            created_at=version.created_at,
-        )
-        for version in contract.versions
-    ]
     return AdministrationContractResponse(
         id=contract.id,
         internal_number=contract.internal_number,
@@ -148,7 +138,15 @@ def _contract_response(contract: AdministrationContract) -> AdministrationContra
         approved_at=contract.approved_at,
         signed_at=contract.signed_at,
         archived_document_reference=contract.archived_document_reference,
-        versions=versions,
+        versions=[
+            AdministrationContractVersionResponse(
+                version_number=version.version_number,
+                change_summary=version.change_summary,
+                created_by_user_id=version.created_by_user_id,
+                created_at=version.created_at,
+            )
+            for version in contract.versions
+        ],
         created_at=contract.created_at,
         updated_at=contract.updated_at,
     )
@@ -168,6 +166,12 @@ def _load_contract(db: Session, organization_id: UUID, contract_id: UUID) -> Adm
     return item
 
 
+def _signature_provider(db: Session, organization_id: UUID) -> str:
+    settings = db.scalar(select(OrganizationSettings).where(OrganizationSettings.organization_id == organization_id))
+    integrations = (settings.integrations if settings else {}) or {}
+    return str(integrations.get("signature_provider") or "clicksign")
+
+
 @router.get("/administration-contracts", response_model=list[AdministrationContractResponse])
 def list_administration_contracts(
     contract_status: str | None = Query(default=None, alias="status"),
@@ -183,8 +187,7 @@ def list_administration_contracts(
     )
     if contract_status:
         stmt = stmt.where(AdministrationContract.status == contract_status)
-    items = db.scalars(stmt).unique().all()
-    return [_contract_response(item) for item in items]
+    return [_contract_response(item) for item in db.scalars(stmt).unique().all()]
 
 
 @router.post("/administration-contracts", response_model=AdministrationContractResponse, status_code=status.HTTP_201_CREATED)
@@ -208,19 +211,13 @@ def create_administration_contract(
             detail="Este imóvel já possui um contrato de administração em andamento ou vigente.",
         )
 
-    settings = db.scalar(
-        select(OrganizationSettings).where(OrganizationSettings.organization_id == context.user.organization_id)
-    )
-    integrations = (settings.integrations if settings else {}) or {}
-    signature_provider = str(integrations.get("signature_provider") or "clicksign")
-
     item = AdministrationContract(
         organization_id=context.user.organization_id,
         property_id=property_item.id,
         status="draft",
         property_snapshot=_property_snapshot(property_item),
         owner_snapshot=_owner_snapshot(property_item),
-        signing_provider=signature_provider,
+        signing_provider=_signature_provider(db, context.user.organization_id),
         signing_status="not_prepared",
         current_version=1,
         created_by_user_id=context.user.id,
@@ -316,6 +313,8 @@ def administration_contract_workflow(
 ) -> AdministrationContractResponse:
     item = _load_contract(db, context.user.organization_id, contract_id)
     before_status = item.status
+    before_signing_status = item.signing_status
+    before_signing_provider = item.signing_provider
     action = payload.action
 
     if action == "submit_review":
@@ -337,8 +336,10 @@ def administration_contract_workflow(
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Permissão necessária: contracts.send_signature")
         if item.status != "approved":
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="O contrato precisa estar aprovado antes da assinatura.")
-        if item.signing_provider == "none":
+        provider = _signature_provider(db, context.user.organization_id)
+        if provider == "none":
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Configure um provedor de assinatura antes de continuar.")
+        item.signing_provider = provider
         item.status = "pending_signature"
         item.signing_status = "ready_for_provider"
     elif action == "return_draft":
@@ -370,8 +371,8 @@ def administration_contract_workflow(
         module="contracts",
         entity_type="administration_contract",
         entity_id=str(item.id),
-        before_data={"status": before_status, "signing_status": "ready_for_provider" if before_status == "pending_signature" else None},
-        after_data={"status": item.status, "signing_status": item.signing_status},
+        before_data={"status": before_status, "signing_status": before_signing_status, "signing_provider": before_signing_provider},
+        after_data={"status": item.status, "signing_status": item.signing_status, "signing_provider": item.signing_provider},
         reason=(payload.reason or "").strip() or None,
         ip_address=ip_address,
         user_agent=user_agent,
