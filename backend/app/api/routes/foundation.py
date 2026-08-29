@@ -8,11 +8,15 @@ from sqlalchemy.orm import Session, selectinload
 from app.core.database import get_db
 from app.domains.foundation.access import UserContext, require_permission
 from app.domains.foundation.audit import write_audit
-from app.domains.foundation.defaults import ERP_THEME_DEFAULT
-from app.domains.foundation.models import AppUser, AuditLog, Organization, OrganizationSettings, Role
+from app.domains.foundation.defaults import ERP_THEME_DEFAULT, INTEGRATIONS_DEFAULTS, OPERATIONAL_DEFAULTS
+from app.domains.foundation.models import ApprovalRule, AppUser, AuditLog, Organization, OrganizationSettings, Role
 from app.domains.foundation.schemas import (
+    ApprovalRulePayload,
+    ApprovalRuleResponse,
     AuditEventResponse,
+    IntegrationsConfig,
     MeResponse,
+    OperationalDefaultsConfig,
     OrganizationProfile,
     OrganizationProfileUpdate,
     RoleResponse,
@@ -47,8 +51,8 @@ def _settings_for_organization(db: Session, context: UserContext) -> Organizatio
             organization_id=context.user.organization_id,
             erp_theme=dict(ERP_THEME_DEFAULT),
             site_theme={},
-            operational_defaults={},
-            integrations={},
+            operational_defaults=dict(OPERATIONAL_DEFAULTS),
+            integrations=dict(INTEGRATIONS_DEFAULTS),
             updated_by_user_id=context.user.id,
         )
         db.add(settings)
@@ -80,6 +84,32 @@ def _user_response(user: AppUser) -> UserResponse:
         created_at=user.created_at,
         role_keys=sorted(role.key for role in user.roles if role.is_active),
     )
+
+
+def _approval_rule_response(rule: ApprovalRule) -> ApprovalRuleResponse:
+    conditions = rule.conditions or {}
+    approvals = rule.required_approvals or {}
+    return ApprovalRuleResponse(
+        id=rule.id,
+        name=rule.name,
+        scope=rule.scope,
+        priority=rule.priority,
+        min_amount=conditions.get("min_amount"),
+        max_amount=conditions.get("max_amount"),
+        required_approvals=int(approvals.get("count", 1)),
+        approver_permission=str(approvals.get("permission", "finance.payment.approve")),
+        is_active=rule.is_active,
+        created_at=rule.created_at,
+        updated_at=rule.updated_at,
+    )
+
+
+def _validate_approval_amounts(payload: ApprovalRulePayload) -> None:
+    if payload.min_amount is not None and payload.max_amount is not None and payload.max_amount < payload.min_amount:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="O valor máximo da alçada não pode ser menor que o valor mínimo.",
+        )
 
 
 @router.get("/bootstrap/status")
@@ -169,6 +199,86 @@ def update_company_settings(
     return get_company_settings(context=context, db=db)
 
 
+@router.get("/settings/operations", response_model=OperationalDefaultsConfig)
+def get_operational_defaults(
+    context: UserContext = Depends(require_permission("settings.view")),
+    db: Session = Depends(get_db),
+) -> OperationalDefaultsConfig:
+    settings = _settings_for_organization(db, context)
+    source = {**OPERATIONAL_DEFAULTS, **(settings.operational_defaults or {})}
+    return OperationalDefaultsConfig.model_validate(source)
+
+
+@router.put("/settings/operations", response_model=OperationalDefaultsConfig)
+def update_operational_defaults(
+    payload: OperationalDefaultsConfig,
+    request: Request,
+    context: UserContext = Depends(require_permission("settings.company.manage")),
+    db: Session = Depends(get_db),
+) -> OperationalDefaultsConfig:
+    settings = _settings_for_organization(db, context)
+    before = {**OPERATIONAL_DEFAULTS, **(settings.operational_defaults or {})}
+    after = payload.model_dump(mode="json")
+    settings.operational_defaults = after
+    settings.updated_by_user_id = context.user.id
+
+    ip_address, user_agent = _request_metadata(request)
+    write_audit(
+        db,
+        context=context,
+        action="settings.operations.updated",
+        module="settings",
+        entity_type="organization_settings",
+        entity_id=str(settings.id),
+        before_data=before,
+        after_data=after,
+        ip_address=ip_address,
+        user_agent=user_agent,
+    )
+    db.commit()
+    return payload
+
+
+@router.get("/settings/integrations", response_model=IntegrationsConfig)
+def get_integrations(
+    context: UserContext = Depends(require_permission("settings.view")),
+    db: Session = Depends(get_db),
+) -> IntegrationsConfig:
+    settings = _settings_for_organization(db, context)
+    source = {**INTEGRATIONS_DEFAULTS, **(settings.integrations or {})}
+    return IntegrationsConfig.model_validate(source)
+
+
+@router.put("/settings/integrations", response_model=IntegrationsConfig)
+def update_integrations(
+    payload: IntegrationsConfig,
+    request: Request,
+    context: UserContext = Depends(require_permission("settings.company.manage")),
+    db: Session = Depends(get_db),
+) -> IntegrationsConfig:
+    settings = _settings_for_organization(db, context)
+    before = {**INTEGRATIONS_DEFAULTS, **(settings.integrations or {})}
+    after = payload.model_dump(mode="json")
+    settings.integrations = after
+    settings.updated_by_user_id = context.user.id
+
+    ip_address, user_agent = _request_metadata(request)
+    write_audit(
+        db,
+        context=context,
+        action="settings.integrations.updated",
+        module="settings",
+        entity_type="organization_settings",
+        entity_id=str(settings.id),
+        before_data=before,
+        after_data=after,
+        ip_address=ip_address,
+        user_agent=user_agent,
+    )
+    db.commit()
+    return payload
+
+
 @router.get("/settings/appearance/erp", response_model=ThemeConfig)
 def get_erp_theme(
     context: UserContext = Depends(require_permission("settings.view")),
@@ -207,6 +317,109 @@ def update_erp_theme(
     )
     db.commit()
     return payload
+
+
+@router.get("/settings/approval-rules", response_model=list[ApprovalRuleResponse])
+def get_approval_rules(
+    context: UserContext = Depends(require_permission("approval_rules.manage")),
+    db: Session = Depends(get_db),
+) -> list[ApprovalRuleResponse]:
+    rules = db.scalars(
+        select(ApprovalRule)
+        .where(ApprovalRule.organization_id == context.user.organization_id)
+        .order_by(ApprovalRule.priority.asc(), ApprovalRule.name.asc())
+    ).all()
+    return [_approval_rule_response(rule) for rule in rules]
+
+
+@router.post("/settings/approval-rules", response_model=ApprovalRuleResponse, status_code=status.HTTP_201_CREATED)
+def create_approval_rule(
+    payload: ApprovalRulePayload,
+    request: Request,
+    context: UserContext = Depends(require_permission("approval_rules.manage")),
+    db: Session = Depends(get_db),
+) -> ApprovalRuleResponse:
+    _validate_approval_amounts(payload)
+    rule = ApprovalRule(
+        organization_id=context.user.organization_id,
+        name=payload.name.strip(),
+        scope=payload.scope.strip(),
+        priority=payload.priority,
+        conditions={"min_amount": payload.min_amount, "max_amount": payload.max_amount},
+        required_approvals={"count": payload.required_approvals, "permission": payload.approver_permission.strip()},
+        is_active=payload.is_active,
+        created_by_user_id=context.user.id,
+    )
+    db.add(rule)
+    db.flush()
+
+    ip_address, user_agent = _request_metadata(request)
+    write_audit(
+        db,
+        context=context,
+        action="governance.approval_rule.created",
+        module="governance",
+        entity_type="approval_rule",
+        entity_id=str(rule.id),
+        after_data=payload.model_dump(mode="json", exclude={"reason"}),
+        reason=(payload.reason or "").strip() or None,
+        ip_address=ip_address,
+        user_agent=user_agent,
+    )
+    db.commit()
+    db.refresh(rule)
+    return _approval_rule_response(rule)
+
+
+@router.put("/settings/approval-rules/{rule_id}", response_model=ApprovalRuleResponse)
+def update_approval_rule(
+    rule_id: UUID,
+    payload: ApprovalRulePayload,
+    request: Request,
+    context: UserContext = Depends(require_permission("approval_rules.manage")),
+    db: Session = Depends(get_db),
+) -> ApprovalRuleResponse:
+    _validate_approval_amounts(payload)
+    rule = db.scalar(
+        select(ApprovalRule).where(
+            ApprovalRule.id == rule_id,
+            ApprovalRule.organization_id == context.user.organization_id,
+        )
+    )
+    if rule is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Regra de alçada não encontrada")
+    if not (payload.reason or "").strip():
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Informe o motivo da alteração da alçada.",
+        )
+
+    before = _approval_rule_response(rule).model_dump(mode="json")
+    rule.name = payload.name.strip()
+    rule.scope = payload.scope.strip()
+    rule.priority = payload.priority
+    rule.conditions = {"min_amount": payload.min_amount, "max_amount": payload.max_amount}
+    rule.required_approvals = {"count": payload.required_approvals, "permission": payload.approver_permission.strip()}
+    rule.is_active = payload.is_active
+    after = payload.model_dump(mode="json", exclude={"reason"})
+
+    ip_address, user_agent = _request_metadata(request)
+    write_audit(
+        db,
+        context=context,
+        action="governance.approval_rule.updated",
+        module="governance",
+        entity_type="approval_rule",
+        entity_id=str(rule.id),
+        before_data=before,
+        after_data=after,
+        reason=payload.reason.strip(),
+        ip_address=ip_address,
+        user_agent=user_agent,
+    )
+    db.commit()
+    db.refresh(rule)
+    return _approval_rule_response(rule)
 
 
 @router.get("/settings/roles", response_model=list[RoleResponse])
