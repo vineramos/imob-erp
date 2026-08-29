@@ -99,4 +99,137 @@ export type AuditEvent = {
   created_at: string
 }
 
+export type Address = {
+  street: string
+  number: string
+  complement: string
+  neighborhood: string
+  city: string
+  state: string
+  postal_code: string
+}
+
+export type Person = {
+  id: string
+  person_type: 'individual' | 'company'
+  name: string
+  document_number: string | null
+  email: string | null
+  phone: string | null
+  address: Address
+  notes: string | null
+  is_active: boolean
+  role_keys: string[]
+  created_at: string
+}
+
+export type PersonCreate = {
+  person_type: 'individual' | 'company'
+  name: string
+  document_number?: string | null
+  email?: string | null
+  phone?: string | null
+  address: Address
+  notes?: string | null
+  role_keys: Array<'owner' | 'tenant' | 'guarantor' | 'broker' | 'supplier' | 'referrer'>
+}
+
+export type PropertyOwner = {
+  person_id: string
+  name: string
+  ownership_percent: number
+}
+
+export type Property = {
+  id: string
+  internal_number: number
+  code: string
+  property_type: string
+  purpose: string
+  status: string
+  address: Address
+  rent_amount: number | null
+  condo_amount: number | null
+  iptu_amount: number | null
+  area_m2: number | null
+  bedrooms: number
+  suites: number
+  bathrooms: number
+  parking_spaces: number
+  furnished: boolean
+  pets_allowed: boolean
+  public_title: string | null
+  publication_enabled: boolean
+  owners: PropertyOwner[]
+  created_at: string
+  updated_at: string
+}
+
+export type PropertyCreate = {
+  property_type: 'apartment' | 'house' | 'commercial' | 'land' | 'studio' | 'other'
+  purpose: 'rent' | 'sale'
+  status: 'draft' | 'available' | 'reserved' | 'leased' | 'inactive'
+  address: Address
+  rent_amount?: number | null
+  condo_amount?: number | null
+  iptu_amount?: number | null
+  area_m2?: number | null
+  bedrooms: number
+  suites: number
+  bathrooms: number
+  parking_spaces: number
+  furnished: boolean
+  pets_allowed: boolean
+  public_title?: string | null
+  public_description?: string | null
+  publication_enabled: boolean
+  owners: Array<{ person_id: string; ownership_percent: number }>
+}
+
+export type Capture = {
+  id: string
+  status: string
+  source: string
+  contact_person_id: string | null
+  contact_person_name: string | null
+  responsible_user_id: string | null
+  converted_property_id: string | null
+  property_type: string | null
+  property_address: Address
+  estimated_rent: number | null
+  notes: string | null
+  lost_reason: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type CaptureCreate = {
+  status: 'new' | 'negotiation' | 'documents' | 'inspection' | 'approved' | 'available' | 'lost'
+  source: 'direct' | 'site' | 'referral' | 'broker' | 'campaign' | 'other'
+  contact_person_id?: string | null
+  responsible_user_id?: string | null
+  property_type?: 'apartment' | 'house' | 'commercial' | 'land' | 'studio' | 'other' | null
+  property_address: Address
+  estimated_rent?: number | null
+  notes?: string | null
+}
+
+export type EconomicIndexValue = {
+  index_code: AdjustmentIndex
+  sgs_code: number
+  competence: string
+  monthly_rate: number
+  source: string
+  fetched_at: string
+}
+
+export type EconomicIndexSync = {
+  index_code: AdjustmentIndex
+  status: 'never' | 'synced' | 'awaiting_publication' | 'error'
+  imported: number
+  latest_competence: string | null
+  next_retry_at: string | null
+  message: string
+}
+
 export type { ThemeConfig }
