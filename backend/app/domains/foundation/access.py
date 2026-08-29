@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.core.database import get_db
 from app.core.security import AuthIdentity, get_auth_identity
+from app.domains.foundation.bootstrap import bootstrap_first_admin
 from app.domains.foundation.models import AppUser, Role
 
 
@@ -28,6 +29,9 @@ def get_current_user_context(
         .where(AppUser.auth_user_id == identity.subject)
     )
     user = db.scalar(stmt)
+
+    if user is None:
+        user = bootstrap_first_admin(db, identity)
 
     if user is None:
         raise HTTPException(
