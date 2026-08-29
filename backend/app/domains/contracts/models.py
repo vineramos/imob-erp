@@ -49,6 +49,7 @@ class AdministrationContract(Base):
     signing_provider: Mapped[str] = mapped_column(String(30), nullable=False, default="clicksign")
     signing_envelope_id: Mapped[str | None] = mapped_column(String(180))
     signing_document_id: Mapped[str | None] = mapped_column(String(180))
+    signing_metadata: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, nullable=False)
     signing_status: Mapped[str] = mapped_column(String(60), nullable=False, default="not_prepared")
     signed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
