@@ -14,6 +14,27 @@ PROVIDER_ID="github"
 GITHUB_REPOSITORY="vineramos/imob-erp"
 GITHUB_BRANCH="sprint-1-foundation"
 
+retry_iam() {
+  local attempt=1
+  local max_attempts=12
+  local delay_seconds=5
+
+  while true; do
+    if "$@"; then
+      return 0
+    fi
+
+    if (( attempt >= max_attempts )); then
+      echo "❌ O Google Cloud não concluiu a propagação do IAM após ${max_attempts} tentativas." >&2
+      return 1
+    fi
+
+    echo "⏳ IAM ainda propagando (${attempt}/${max_attempts}). Tentando novamente em ${delay_seconds}s..."
+    sleep "$delay_seconds"
+    attempt=$((attempt + 1))
+  done
+}
+
 printf '\n==> Configurando deploy automático do Imob ERP\n'
 gcloud config set project "$PROJECT_ID" >/dev/null
 
@@ -34,6 +55,20 @@ if ! gcloud iam service-accounts describe "$DEPLOYER_SERVICE_ACCOUNT" >/dev/null
   gcloud iam service-accounts create "$DEPLOYER_NAME" \
     --display-name="Imob ERP GitHub deployer" >/dev/null
 fi
+
+# Service accounts are eventually consistent across Google IAM backends.
+# Wait until the account is visible before attempting project policy bindings.
+for attempt in {1..12}; do
+  if gcloud iam service-accounts describe "$DEPLOYER_SERVICE_ACCOUNT" >/dev/null 2>&1; then
+    break
+  fi
+  if (( attempt == 12 )); then
+    echo "❌ A service account de deploy não ficou disponível a tempo." >&2
+    exit 1
+  fi
+  echo "⏳ Aguardando propagação da service account (${attempt}/12)..."
+  sleep 5
+done
 
 if ! gcloud iam workload-identity-pools describe "$POOL_ID" --location=global >/dev/null 2>&1; then
   gcloud iam workload-identity-pools create "$POOL_ID" \
@@ -56,18 +91,18 @@ for ROLE in \
   roles/run.admin \
   roles/artifactregistry.writer \
   roles/serviceusage.serviceUsageConsumer; do
-  gcloud projects add-iam-policy-binding "$PROJECT_ID" \
+  retry_iam gcloud projects add-iam-policy-binding "$PROJECT_ID" \
     --member="serviceAccount:${DEPLOYER_SERVICE_ACCOUNT}" \
     --role="$ROLE" \
     --condition=None >/dev/null
  done
 
-gcloud iam service-accounts add-iam-policy-binding "$RUNTIME_SERVICE_ACCOUNT" \
+retry_iam gcloud iam service-accounts add-iam-policy-binding "$RUNTIME_SERVICE_ACCOUNT" \
   --member="serviceAccount:${DEPLOYER_SERVICE_ACCOUNT}" \
   --role="roles/iam.serviceAccountUser" >/dev/null
 
 PRINCIPAL_SET="principalSet://iam.googleapis.com/projects/${PROJECT_NUMBER}/locations/global/workloadIdentityPools/${POOL_ID}/attribute.repository/${GITHUB_REPOSITORY}"
-gcloud iam service-accounts add-iam-policy-binding "$DEPLOYER_SERVICE_ACCOUNT" \
+retry_iam gcloud iam service-accounts add-iam-policy-binding "$DEPLOYER_SERVICE_ACCOUNT" \
   --member="$PRINCIPAL_SET" \
   --role="roles/iam.workloadIdentityUser" >/dev/null
 
