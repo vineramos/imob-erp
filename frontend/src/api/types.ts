@@ -23,11 +23,13 @@ export type OrganizationProfile = {
 
 export type OrganizationProfileUpdate = Omit<OrganizationProfile, 'id'>
 
+export type AdjustmentIndex = 'IPCA' | 'IGP-M' | 'INPC' | 'IPC-FIPE' | 'IGP-DI'
+
 export type OperationalDefaults = {
   rent_due_day: number
   owner_repasse_business_days: number
   residential_lease_months: number
-  adjustment_index: string
+  adjustment_index: AdjustmentIndex
   termination_fine_months: number
   inspection_contest_days: number
   default_admin_fee_percent: number
