@@ -1,4 +1,5 @@
-from typing import Literal
+from datetime import datetime
+from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
@@ -73,3 +74,18 @@ class MeResponse(BaseModel):
     organization_name: str
     role_keys: list[str]
     permissions: list[str]
+
+
+class AuditEventResponse(BaseModel):
+    id: UUID
+    actor_user_id: UUID | None = None
+    actor_name: str | None = None
+    action: str
+    module: str
+    entity_type: str
+    entity_id: str | None = None
+    before_data: dict[str, Any] | None = None
+    after_data: dict[str, Any] | None = None
+    reason: str | None = None
+    ip_address: str | None = None
+    created_at: datetime
