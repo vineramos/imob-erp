@@ -212,7 +212,7 @@ export function LeaseContractsPage({ permissions }: Props) {
       const [contracts, props, people, operations] = await Promise.all([
         apiRequest<Lease[]>('/lease-contracts'),
         apiRequest<Property[]>('/properties'),
-        apiRequest<Person[]>('/persons'),
+        apiRequest<Person[]>('/people'),
         apiRequest<OperationalDefaults>('/settings/operations'),
       ])
       setItems(contracts)
