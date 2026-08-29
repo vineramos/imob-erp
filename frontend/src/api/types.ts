@@ -23,4 +23,19 @@ export type OrganizationProfile = {
 
 export type OrganizationProfileUpdate = Omit<OrganizationProfile, 'id'>
 
+export type AuditEvent = {
+  id: string
+  actor_user_id: string | null
+  actor_name: string | null
+  action: string
+  module: string
+  entity_type: string
+  entity_id: string | null
+  before_data: Record<string, unknown> | null
+  after_data: Record<string, unknown> | null
+  reason: string | null
+  ip_address: string | null
+  created_at: string
+}
+
 export type { ThemeConfig }
