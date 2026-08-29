@@ -94,6 +94,16 @@ class SignatureEventResponse(BaseModel):
     received_at: datetime
 
 
+class ContractDocumentResponse(BaseModel):
+    contract_id: UUID
+    code: str
+    version: int
+    hash_sha256: str
+    reference: str | None = None
+    storage_configured: bool
+    message: str
+
+
 class AdministrationContractResponse(BaseModel):
     id: UUID
     internal_number: int
@@ -120,12 +130,19 @@ class AdministrationContractResponse(BaseModel):
     notes: str | None = None
     signers: list[dict]
     current_version: int
+    generated_document_reference: str | None = None
+    generated_document_hash: str | None = None
+    generated_document_version: int | None = None
     signing_provider: str
     signing_status: str
     signing_envelope_id: str | None = None
+    signing_document_id: str | None = None
     approved_at: datetime | None = None
     signed_at: datetime | None = None
+    archive_status: str
     archived_document_reference: str | None = None
+    final_document_hash: str | None = None
+    archived_at: datetime | None = None
     versions: list[AdministrationContractVersionResponse]
     created_at: datetime
     updated_at: datetime
