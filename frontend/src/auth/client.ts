@@ -1,6 +1,8 @@
 import { createAuthClient } from '@neondatabase/neon-js/auth'
 
-const authUrl = import.meta.env.VITE_NEON_AUTH_URL as string | undefined
+import { runtimeConfig } from '../config/runtime'
+
+const authUrl = runtimeConfig.neonAuthUrl
 
 export const authConfigured = Boolean(authUrl)
 export const authClient = authUrl ? createAuthClient(authUrl) : null
