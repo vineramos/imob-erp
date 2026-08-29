@@ -1,6 +1,13 @@
 #!/bin/sh
 set -eu
 
+# Mantém o banco alinhado com a versão do container sem exigir Cloud Shell manual.
+# Alembic é idempotente: instâncias posteriores apenas confirmam que o banco já está no head.
+echo "==> Aplicando migrations do banco"
+cd /app/backend
+alembic upgrade head
+cd /app
+
 python - <<'PY'
 import json
 import os
