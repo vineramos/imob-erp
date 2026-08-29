@@ -22,6 +22,16 @@
 .contract-signers-summary strong, .contract-signers-summary span { display: block; }
 .contract-signers-summary strong { font-size: 10px; }
 .contract-signers-summary span, .contract-signers-summary small { margin-top: 3px; color: var(--text-muted); font-size: 8.5px; }
+.signature-timeline { grid-column: 1 / -1; border-top: 1px solid var(--border); padding-top: 10px; display: grid; gap: 7px; }
+.signature-timeline-heading { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.signature-timeline-heading > svg { color: var(--brand-primary); }
+.signature-timeline > small { color: var(--text-muted); font-size: 8.5px; }
+.signature-timeline-error { color: var(--danger) !important; }
+.signature-event { display: grid; grid-template-columns: 18px 1fr; gap: 7px; padding: 8px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface-muted); }
+.signature-event > svg { margin-top: 1px; color: var(--success); }
+.signature-event strong, .signature-event span, .signature-event small { display: block; }
+.signature-event strong { font-size: 9.5px; }
+.signature-event span, .signature-event small { margin-top: 3px; color: var(--text-muted); font-size: 8px; }
 
 .commercial-workspace { display: grid; gap: 14px; }
 .commercial-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
@@ -73,5 +83,6 @@
   .integration-card-expanded select, .integration-card-expanded > .status-badge, .integration-health { grid-column: 1 / -1; }
   .integration-health, .contract-signers-heading, .commercial-profile-actions { flex-direction: column; align-items: stretch; }
   .contract-signer-row, .contract-expanded-detail, .commercial-property-row, .commercial-profile-grid { grid-template-columns: 1fr; }
+  .signature-timeline { grid-column: auto; }
   .commercial-metrics { grid-template-columns: 1fr; }
 }
