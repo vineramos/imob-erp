@@ -6,6 +6,7 @@ import { authConfigured } from './auth/client'
 import { LoginPage } from './auth/LoginPage'
 import { navigation } from './config/navigation'
 import { CapturesPage } from './modules/captures/CapturesPage'
+import { ContractsPage } from './modules/contracts/ContractsPage'
 import { DashboardPage } from './modules/dashboard/DashboardPage'
 import { PropertiesPage } from './modules/properties/PropertiesPage'
 import { SettingsPage } from './modules/settings/SettingsPage'
@@ -30,6 +31,10 @@ const devUser: CurrentUser = {
     'properties.edit',
     'properties.publish',
     'captures.manage',
+    'contracts.create',
+    'contracts.edit',
+    'contracts.approve',
+    'contracts.send_signature',
     'settings.company.manage',
     'settings.appearance.manage',
     'users.manage',
@@ -137,8 +142,9 @@ export default function App() {
         {activeModule === 'dashboard' && <DashboardPage />}
         {activeModule === 'properties' && <PropertiesPage permissions={currentUser.permissions} />}
         {activeModule === 'captures' && <CapturesPage permissions={currentUser.permissions} />}
+        {activeModule === 'contracts' && <ContractsPage permissions={currentUser.permissions} />}
         {activeModule === 'settings' && <SettingsPage permissions={currentUser.permissions} />}
-        {!['dashboard', 'properties', 'captures', 'settings'].includes(activeModule) && <ModulePlaceholder module={activeModule} />}
+        {!['dashboard', 'properties', 'captures', 'contracts', 'settings'].includes(activeModule) && <ModulePlaceholder module={activeModule} />}
       </main>
     </div>
   )
