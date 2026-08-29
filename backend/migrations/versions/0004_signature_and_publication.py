@@ -29,6 +29,7 @@ def upgrade() -> None:
         sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("provider", sa.String(length=30), nullable=False),
         sa.Column("event_name", sa.String(length=120), nullable=False),
+        sa.Column("event_fingerprint", sa.String(length=64), nullable=False),
         sa.Column("envelope_id", sa.String(length=180), nullable=True),
         sa.Column("contract_id", postgresql.UUID(as_uuid=True), nullable=True),
         sa.Column("payload", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
@@ -39,6 +40,7 @@ def upgrade() -> None:
     )
     op.create_index("ix_signature_webhook_events_provider", "signature_webhook_events", ["provider"], unique=False)
     op.create_index("ix_signature_webhook_events_event_name", "signature_webhook_events", ["event_name"], unique=False)
+    op.create_index("ix_signature_webhook_events_event_fingerprint", "signature_webhook_events", ["event_fingerprint"], unique=True)
     op.create_index("ix_signature_webhook_events_envelope_id", "signature_webhook_events", ["envelope_id"], unique=False)
     op.create_index("ix_signature_webhook_events_contract_id", "signature_webhook_events", ["contract_id"], unique=False)
     op.create_index("ix_signature_webhook_events_received_at", "signature_webhook_events", ["received_at"], unique=False)
@@ -66,6 +68,7 @@ def downgrade() -> None:
     op.drop_index("ix_signature_webhook_events_received_at", table_name="signature_webhook_events")
     op.drop_index("ix_signature_webhook_events_contract_id", table_name="signature_webhook_events")
     op.drop_index("ix_signature_webhook_events_envelope_id", table_name="signature_webhook_events")
+    op.drop_index("ix_signature_webhook_events_event_fingerprint", table_name="signature_webhook_events")
     op.drop_index("ix_signature_webhook_events_event_name", table_name="signature_webhook_events")
     op.drop_index("ix_signature_webhook_events_provider", table_name="signature_webhook_events")
     op.drop_table("signature_webhook_events")
