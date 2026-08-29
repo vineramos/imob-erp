@@ -16,6 +16,7 @@ venv/
 .env
 .env.*
 !.env.example
+gha-creds-*.json
 
 # IDE / OS
 .vscode/
