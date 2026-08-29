@@ -56,7 +56,7 @@ export function SettingsPage({ permissions }: Props) {
       {activeTab === 'operations' && <OperationsSettingsPage canEdit={canManageCompany} />}
       {activeTab === 'integrations' && <IntegrationsSettingsPage canEdit={canManageCompany} />}
       {activeTab === 'appearance' && <AppearanceSettingsPage canEdit={permissionSet.has('settings.appearance.manage')} />}
-      {activeTab === 'access' && <AccessSettingsPage />}
+      {activeTab === 'access' && <AccessSettingsPage canManagePermissions={permissionSet.has('permissions.manage')} />}
       {activeTab === 'approvals' && <ApprovalRulesSettingsPage />}
       {activeTab === 'audit' && <AuditSettingsPage />}
     </div>
