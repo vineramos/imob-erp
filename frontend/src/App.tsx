@@ -5,7 +5,9 @@ import type { CurrentUser } from './api/types'
 import { authConfigured } from './auth/client'
 import { LoginPage } from './auth/LoginPage'
 import { navigation } from './config/navigation'
+import { CapturesPage } from './modules/captures/CapturesPage'
 import { DashboardPage } from './modules/dashboard/DashboardPage'
+import { PropertiesPage } from './modules/properties/PropertiesPage'
 import { SettingsPage } from './modules/settings/SettingsPage'
 import { useTheme } from './theme/ThemeProvider'
 import type { ThemeConfig } from './theme/theme'
@@ -24,6 +26,10 @@ const devUser: CurrentUser = {
   role_keys: ['admin'],
   permissions: [
     ...navigation.map((item) => item.permission),
+    'properties.create',
+    'properties.edit',
+    'properties.publish',
+    'captures.manage',
     'settings.company.manage',
     'settings.appearance.manage',
     'users.manage',
@@ -53,33 +59,18 @@ function ModulePlaceholder({ module }: { module: ModuleKey }) {
 }
 
 function BrandMark({ logoUrl, initials }: { logoUrl: string; initials: string }) {
-  if (logoUrl) {
-    return <div className="brand-mark brand-mark-image"><img src={logoUrl} alt="" /></div>
-  }
+  if (logoUrl) return <div className="brand-mark brand-mark-image"><img src={logoUrl} alt="" /></div>
   return <div className="brand-mark">{initials}</div>
 }
 
 function BootScreen({ message = 'Preparando seu ambiente...' }: { message?: string }) {
   const { theme } = useTheme()
   const initials = theme.companyShortName.trim().slice(0, 2).toUpperCase() || 'IM'
-  return (
-    <main className="boot-screen">
-      <BrandMark logoUrl={theme.logoUrl} initials={initials} />
-      <strong>{theme.companyShortName || theme.companyName}</strong>
-      <span>{message}</span>
-    </main>
-  )
+  return <main className="boot-screen"><BrandMark logoUrl={theme.logoUrl} initials={initials} /><strong>{theme.companyShortName || theme.companyName}</strong><span>{message}</span></main>
 }
 
 function AccessError({ message, onRetry }: { message: string; onRetry: () => void }) {
-  return (
-    <main className="boot-screen">
-      <div className="brand-mark">!</div>
-      <strong>Não foi possível abrir o ERP</strong>
-      <span>{message}</span>
-      <button className="button primary" type="button" onClick={onRetry}>Tentar novamente</button>
-    </main>
-  )
+  return <main className="boot-screen"><div className="brand-mark">!</div><strong>Não foi possível abrir o ERP</strong><span>{message}</span><button className="button primary" type="button" onClick={onRetry}>Tentar novamente</button></main>
 }
 
 export default function App() {
@@ -91,44 +82,22 @@ export default function App() {
   const [authError, setAuthError] = useState('')
 
   const refreshUser = useCallback(async () => {
-    if (devBypass) {
-      setCurrentUser(devUser)
-      setAuthState('authenticated')
-      return
-    }
-
-    setAuthState('loading')
-    setAuthError('')
+    if (devBypass) { setCurrentUser(devUser); setAuthState('authenticated'); return }
+    setAuthState('loading'); setAuthError('')
     try {
       const user = await apiRequest<CurrentUser>('/me')
       setCurrentUser(user)
-
-      try {
-        const branding = await apiRequest<ThemeConfig>('/theme/erp')
-        setTheme(branding)
-      } catch {
-        // O tema padrão mantém o ERP utilizável mesmo se a identidade visual não puder ser carregada.
-      }
-
+      try { setTheme(await apiRequest<ThemeConfig>('/theme/erp')) } catch { /* tema padrão mantém o ERP utilizável */ }
       setAuthState('authenticated')
     } catch (error) {
       setCurrentUser(null)
-      if (error instanceof ApiError && error.status === 401) {
-        setAuthState('unauthenticated')
-        return
-      }
-      if (error instanceof ApiError && error.status === 403) {
-        setAuthError(error.detail)
-      } else {
-        setAuthError(error instanceof Error ? error.message : 'Falha inesperada ao iniciar o sistema.')
-      }
+      if (error instanceof ApiError && error.status === 401) { setAuthState('unauthenticated'); return }
+      setAuthError(error instanceof ApiError ? error.detail : error instanceof Error ? error.message : 'Falha inesperada ao iniciar o sistema.')
       setAuthState('error')
     }
   }, [setTheme])
 
-  useEffect(() => {
-    if (!devBypass) void refreshUser()
-  }, [refreshUser])
+  useEffect(() => { if (!devBypass) void refreshUser() }, [refreshUser])
 
   const visibleNavigation = useMemo(() => {
     if (!currentUser) return []
@@ -137,9 +106,7 @@ export default function App() {
   }, [currentUser])
 
   useEffect(() => {
-    if (visibleNavigation.length > 0 && !visibleNavigation.some((item) => item.module === activeModule)) {
-      setActiveModule(visibleNavigation[0].module)
-    }
+    if (visibleNavigation.length > 0 && !visibleNavigation.some((item) => item.module === activeModule)) setActiveModule(visibleNavigation[0].module)
   }, [activeModule, visibleNavigation])
 
   if (authState === 'loading') return <BootScreen />
@@ -147,99 +114,31 @@ export default function App() {
   if (authState === 'error') return <AccessError message={authError} onRetry={() => void refreshUser()} />
   if (!currentUser) return <BootScreen message="Carregando usuário..." />
 
-  const initials = currentUser.name
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase())
-    .join('') || 'AD'
+  const initials = currentUser.name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join('') || 'AD'
   const primaryRole = currentUser.role_keys.includes('admin') ? 'Administrador' : (currentUser.role_keys[0] || 'Usuário')
   const brandInitials = theme.companyShortName.trim().slice(0, 2).toUpperCase() || 'IM'
 
   return (
     <div className={`app-shell ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
       <aside className="sidebar">
-        <div className="brand">
-          <BrandMark logoUrl={theme.logoUrl} initials={brandInitials} />
-          <div className="brand-copy">
-            <strong>{theme.companyShortName || theme.companyName}</strong>
-            <span>ERP Imobiliário</span>
-          </div>
-        </div>
-
+        <div className="brand"><BrandMark logoUrl={theme.logoUrl} initials={brandInitials} /><div className="brand-copy"><strong>{theme.companyShortName || theme.companyName}</strong><span>ERP Imobiliário</span></div></div>
         <nav className="nav-list" aria-label="Menu principal">
-          {visibleNavigation.map(({ label, icon: Icon, module }) => (
-            <button
-              className={`nav-item ${activeModule === module ? 'active' : ''}`}
-              type="button"
-              key={label}
-              title={sidebarCollapsed ? label : undefined}
-              onClick={() => setActiveModule(module)}
-            >
-              <Icon size={18} strokeWidth={1.75} />
-              <span>{label}</span>
-            </button>
-          ))}
+          {visibleNavigation.map(({ label, icon: Icon, module }) => <button className={`nav-item ${activeModule === module ? 'active' : ''}`} type="button" key={label} title={sidebarCollapsed ? label : undefined} onClick={() => setActiveModule(module)}><Icon size={18} strokeWidth={1.75} /><span>{label}</span></button>)}
         </nav>
-
-        <div className="sidebar-footer">
-          <span className="sidebar-label">Empresa</span>
-          <button type="button" className="company-switcher">
-            <div className="avatar">{currentUser.organization_name.trim().slice(0, 2).toUpperCase() || brandInitials}</div>
-            <div className="company-copy">
-              <strong>{currentUser.organization_name}</strong>
-              <span>Ambiente principal</span>
-            </div>
-            <ChevronDown className="company-chevron" size={15} />
-          </button>
-        </div>
+        <div className="sidebar-footer"><span className="sidebar-label">Empresa</span><button type="button" className="company-switcher"><div className="avatar">{currentUser.organization_name.trim().slice(0, 2).toUpperCase() || brandInitials}</div><div className="company-copy"><strong>{currentUser.organization_name}</strong><span>Ambiente principal</span></div><ChevronDown className="company-chevron" size={15} /></button></div>
       </aside>
 
       <main className="main-area">
         <header className="topbar">
-          <div className="topbar-left">
-            <button
-              className="sidebar-toggle"
-              type="button"
-              aria-label={sidebarCollapsed ? 'Expandir menu lateral' : 'Recolher menu lateral'}
-              onClick={() => setSidebarCollapsed((value) => !value)}
-            >
-              <Menu size={20} />
-            </button>
-
-            <label className="global-search">
-              <Search size={17} />
-              <input aria-label="Busca global" placeholder="Buscar imóveis, contratos, pessoas, cobranças..." />
-              <kbd>Ctrl K</kbd>
-            </label>
-          </div>
-
-          <div className="topbar-actions">
-            {!authConfigured && <span className="dev-badge">DEV · Auth pendente</span>}
-            <button className="topbar-icon" type="button" aria-label="Notificações" title="Notificações">
-              <Bell size={18} />
-            </button>
-            <button className="topbar-icon topbar-secondary-action" type="button" aria-label="Mensagens" title="Mensagens">
-              <Mail size={18} />
-            </button>
-            <button className="topbar-icon topbar-secondary-action" type="button" aria-label="Ajuda" title="Ajuda">
-              <CircleHelp size={18} />
-            </button>
-            <span className="topbar-divider" aria-hidden="true" />
-            <div className="user-summary">
-              <div className="avatar avatar-user">{initials}</div>
-              <div>
-                <strong>{currentUser.name}</strong>
-                <span>{primaryRole}</span>
-              </div>
-              <ChevronDown size={15} />
-            </div>
-          </div>
+          <div className="topbar-left"><button className="sidebar-toggle" type="button" aria-label={sidebarCollapsed ? 'Expandir menu lateral' : 'Recolher menu lateral'} onClick={() => setSidebarCollapsed((value) => !value)}><Menu size={20} /></button><label className="global-search"><Search size={17} /><input aria-label="Busca global" placeholder="Buscar imóveis, contratos, pessoas, cobranças..." /><kbd>Ctrl K</kbd></label></div>
+          <div className="topbar-actions">{!authConfigured && <span className="dev-badge">DEV · Auth pendente</span>}<button className="topbar-icon" type="button" aria-label="Notificações" title="Notificações"><Bell size={18} /></button><button className="topbar-icon topbar-secondary-action" type="button" aria-label="Mensagens" title="Mensagens"><Mail size={18} /></button><button className="topbar-icon topbar-secondary-action" type="button" aria-label="Ajuda" title="Ajuda"><CircleHelp size={18} /></button><span className="topbar-divider" aria-hidden="true" /><div className="user-summary"><div className="avatar avatar-user">{initials}</div><div><strong>{currentUser.name}</strong><span>{primaryRole}</span></div><ChevronDown size={15} /></div></div>
         </header>
 
         {activeModule === 'dashboard' && <DashboardPage />}
+        {activeModule === 'properties' && <PropertiesPage permissions={currentUser.permissions} />}
+        {activeModule === 'captures' && <CapturesPage permissions={currentUser.permissions} />}
         {activeModule === 'settings' && <SettingsPage permissions={currentUser.permissions} />}
-        {activeModule !== 'dashboard' && activeModule !== 'settings' && <ModulePlaceholder module={activeModule} />}
+        {!['dashboard', 'properties', 'captures', 'settings'].includes(activeModule) && <ModulePlaceholder module={activeModule} />}
       </main>
     </div>
   )
