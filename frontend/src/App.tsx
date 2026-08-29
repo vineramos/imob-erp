@@ -1,4 +1,4 @@
-import { Bell, ChevronDown, Search } from 'lucide-react'
+import { Bell, ChevronDown, CircleHelp, Mail, Menu, Search } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ApiError, apiRequest } from './api/client'
 import type { CurrentUser } from './api/types'
@@ -45,8 +45,8 @@ function ModulePlaceholder({ module }: { module: ModuleKey }) {
         </div>
       </div>
       <article className="panel empty-module">
-        <strong>Fundação primeiro.</strong>
-        <span>Usuários, permissões, auditoria e configurações serão concluídos antes das regras operacionais deste módulo.</span>
+        <strong>Estrutura pronta para evoluir.</strong>
+        <span>O módulo será ativado sobre a mesma base de permissões, auditoria e configurações do ERP.</span>
       </article>
     </section>
   )
@@ -85,6 +85,7 @@ function AccessError({ message, onRetry }: { message: string; onRetry: () => voi
 export default function App() {
   const { theme, setTheme } = useTheme()
   const [activeModule, setActiveModule] = useState<ModuleKey>('dashboard')
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [authState, setAuthState] = useState<AuthState>(devBypass ? 'authenticated' : 'loading')
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(devBypass ? devUser : null)
   const [authError, setAuthError] = useState('')
@@ -156,11 +157,11 @@ export default function App() {
   const brandInitials = theme.companyShortName.trim().slice(0, 2).toUpperCase() || 'IM'
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
       <aside className="sidebar">
         <div className="brand">
           <BrandMark logoUrl={theme.logoUrl} initials={brandInitials} />
-          <div>
+          <div className="brand-copy">
             <strong>{theme.companyShortName || theme.companyName}</strong>
             <span>ERP Imobiliário</span>
           </div>
@@ -172,9 +173,10 @@ export default function App() {
               className={`nav-item ${activeModule === module ? 'active' : ''}`}
               type="button"
               key={label}
+              title={sidebarCollapsed ? label : undefined}
               onClick={() => setActiveModule(module)}
             >
-              <Icon size={18} strokeWidth={1.8} />
+              <Icon size={18} strokeWidth={1.75} />
               <span>{label}</span>
             </button>
           ))}
@@ -184,35 +186,53 @@ export default function App() {
           <span className="sidebar-label">Empresa</span>
           <button type="button" className="company-switcher">
             <div className="avatar">{currentUser.organization_name.trim().slice(0, 2).toUpperCase() || brandInitials}</div>
-            <div>
+            <div className="company-copy">
               <strong>{currentUser.organization_name}</strong>
               <span>Ambiente principal</span>
             </div>
-            <ChevronDown size={16} />
+            <ChevronDown className="company-chevron" size={15} />
           </button>
         </div>
       </aside>
 
       <main className="main-area">
         <header className="topbar">
-          <label className="global-search">
-            <Search size={18} />
-            <input aria-label="Busca global" placeholder="Buscar imóveis, contratos, pessoas, cobranças..." />
-            <kbd>Ctrl K</kbd>
-          </label>
+          <div className="topbar-left">
+            <button
+              className="sidebar-toggle"
+              type="button"
+              aria-label={sidebarCollapsed ? 'Expandir menu lateral' : 'Recolher menu lateral'}
+              onClick={() => setSidebarCollapsed((value) => !value)}
+            >
+              <Menu size={20} />
+            </button>
+
+            <label className="global-search">
+              <Search size={17} />
+              <input aria-label="Busca global" placeholder="Buscar imóveis, contratos, pessoas, cobranças..." />
+              <kbd>Ctrl K</kbd>
+            </label>
+          </div>
 
           <div className="topbar-actions">
             {!authConfigured && <span className="dev-badge">DEV · Auth pendente</span>}
-            <button className="icon-button" type="button" aria-label="Notificações">
-              <Bell size={19} />
+            <button className="topbar-icon" type="button" aria-label="Notificações" title="Notificações">
+              <Bell size={18} />
             </button>
+            <button className="topbar-icon topbar-secondary-action" type="button" aria-label="Mensagens" title="Mensagens">
+              <Mail size={18} />
+            </button>
+            <button className="topbar-icon topbar-secondary-action" type="button" aria-label="Ajuda" title="Ajuda">
+              <CircleHelp size={18} />
+            </button>
+            <span className="topbar-divider" aria-hidden="true" />
             <div className="user-summary">
               <div className="avatar avatar-user">{initials}</div>
               <div>
                 <strong>{currentUser.name}</strong>
                 <span>{primaryRole}</span>
               </div>
-              <ChevronDown size={16} />
+              <ChevronDown size={15} />
             </div>
           </div>
         </header>
