@@ -13,6 +13,12 @@ class Settings(BaseSettings):
     bootstrap_admin_email: str = ""
     cors_origins: str = "http://localhost:5173"
 
+    # Segredos de integrações entram somente por ambiente/Secret Manager.
+    # Nunca são persistidos nas configurações operacionais do ERP.
+    clicksign_access_token: str = ""
+    clicksign_environment: str = "sandbox"
+    clicksign_webhook_secret: str = ""
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     @property
@@ -35,6 +41,12 @@ class Settings(BaseSettings):
         if not parsed.scheme or not parsed.netloc:
             return ""
         return f"{parsed.scheme}://{parsed.netloc}"
+
+    @property
+    def clicksign_base_url(self) -> str:
+        if self.clicksign_environment.strip().lower() == "production":
+            return "https://app.clicksign.com/api/v3"
+        return "https://sandbox.clicksign.com/api/v3"
 
 
 @lru_cache
