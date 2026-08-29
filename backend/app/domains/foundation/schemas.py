@@ -66,6 +66,58 @@ class OrganizationProfileUpdate(BaseModel):
     address: AddressPayload = Field(default_factory=AddressPayload)
 
 
+class OperationalDefaultsConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    rent_due_day: int = Field(default=10, ge=1, le=28)
+    owner_repasse_business_days: int = Field(default=2, ge=0, le=20)
+    residential_lease_months: int = Field(default=30, ge=1, le=120)
+    adjustment_index: str = Field(default="IPCA", min_length=1, max_length=30)
+    termination_fine_months: float = Field(default=3, ge=0, le=12)
+    inspection_contest_days: int = Field(default=5, ge=1, le=30)
+    default_admin_fee_percent: float = Field(default=10, ge=0, le=100)
+    delinquency_critical_day: int = Field(default=5, ge=1, le=90)
+
+
+class IntegrationsConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    bank_provider: Literal["none", "inter"] = "inter"
+    signature_provider: Literal["none", "clicksign"] = "clicksign"
+    email_provider: Literal["none", "smtp"] = "smtp"
+    public_site_enabled: bool = False
+    webhook_base_url: str = Field(default="", max_length=500)
+    notes: str = Field(default="", max_length=1000)
+
+
+class ApprovalRulePayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=2, max_length=160)
+    scope: str = Field(min_length=2, max_length=80)
+    priority: int = Field(default=100, ge=1, le=999)
+    min_amount: float | None = Field(default=None, ge=0)
+    max_amount: float | None = Field(default=None, ge=0)
+    required_approvals: int = Field(default=1, ge=1, le=5)
+    approver_permission: str = Field(min_length=2, max_length=140)
+    is_active: bool = True
+    reason: str | None = Field(default=None, max_length=500)
+
+
+class ApprovalRuleResponse(BaseModel):
+    id: UUID
+    name: str
+    scope: str
+    priority: int
+    min_amount: float | None = None
+    max_amount: float | None = None
+    required_approvals: int
+    approver_permission: str
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+
+
 class MeResponse(BaseModel):
     id: UUID
     name: str
