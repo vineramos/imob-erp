@@ -34,19 +34,29 @@ def get_auth_identity(
     if credentials is None or credentials.scheme.lower() != "bearer":
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Autenticação necessária")
 
+    settings = get_settings()
+    issuer = settings.effective_neon_auth_issuer
+    if not issuer:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Neon Auth issuer não configurado",
+        )
+
     token = credentials.credentials
     try:
         signing_key = get_jwks_client().get_signing_key_from_jwt(token)
         header = jwt.get_unverified_header(token)
         algorithm = header.get("alg")
-        if algorithm not in {"RS256", "ES256", "EdDSA"}:
+        if algorithm != "EdDSA":
             raise jwt.InvalidAlgorithmError("Algoritmo JWT não permitido")
 
         payload = jwt.decode(
             token,
             signing_key.key,
-            algorithms=[algorithm],
-            options={"verify_aud": False, "require": ["exp", "sub"]},
+            algorithms=["EdDSA"],
+            issuer=issuer,
+            audience=issuer,
+            options={"require": ["exp", "sub", "iss", "aud"]},
         )
     except RuntimeError as exc:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
