@@ -18,27 +18,16 @@ export class ApiError extends Error {
 async function getAccessToken(): Promise<string | null> {
   if (!authConfigured || !authClient) return null
 
-  const result = await authClient.token()
-  if (result.error) return null
-  return result.data?.token || null
+  try {
+    const result = await authClient.token()
+    if (result.error) return null
+    return result.data?.token || null
+  } catch {
+    return null
+  }
 }
 
-export async function apiRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const token = await getAccessToken()
-  const headers = new Headers(init.headers)
-
-  if (init.body && !headers.has('Content-Type')) {
-    headers.set('Content-Type', 'application/json')
-  }
-  if (token) {
-    headers.set('Authorization', `Bearer ${token}`)
-  }
-
-  const response = await fetch(`${API_URL}${path.startsWith('/') ? path : `/${path}`}`, {
-    ...init,
-    headers,
-  })
-
+async function parseResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
     let detail = `Erro ${response.status}`
     try {
@@ -52,4 +41,31 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}): Promi
 
   if (response.status === 204) return undefined as T
   return (await response.json()) as T
+}
+
+function apiUrl(path: string): string {
+  return `${API_URL}${path.startsWith('/') ? path : `/${path}`}`
+}
+
+export async function publicApiRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const headers = new Headers(init.headers)
+  if (init.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json')
+
+  const response = await fetch(apiUrl(path), { ...init, headers })
+  return parseResponse<T>(response)
+}
+
+export async function apiRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const token = await getAccessToken()
+  const headers = new Headers(init.headers)
+
+  if (init.body && !headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json')
+  }
+  if (token) {
+    headers.set('Authorization', `Bearer ${token}`)
+  }
+
+  const response = await fetch(apiUrl(path), { ...init, headers })
+  return parseResponse<T>(response)
 }
