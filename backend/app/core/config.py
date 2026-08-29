@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     database_url: str = ""
     neon_auth_url: str = ""
     neon_auth_jwks_url: str = ""
+    bootstrap_admin_email: str = ""
     cors_origins: str = "http://localhost:5173"
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
