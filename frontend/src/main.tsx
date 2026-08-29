@@ -9,6 +9,7 @@ import './polish.css'
 import './settings-foundation-next.css'
 import './portfolio.css'
 import './contracts.css'
+import './commercial.css'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
