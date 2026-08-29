@@ -19,6 +19,7 @@ from app.domains.foundation.access import UserContext, require_permission
 from app.domains.foundation.audit import write_audit
 from app.domains.foundation.models import OrganizationSettings
 from app.domains.portfolio.models import Property, PropertyOwner
+from app.integrations.signature import SignatureProviderError, get_signature_provider
 
 router = APIRouter(tags=["contracts"])
 
@@ -68,14 +69,36 @@ def _owner_snapshot(item: Property) -> list[dict]:
             "person_id": str(owner.person_id),
             "name": owner.person.name,
             "document_number": owner.person.document_number,
+            "email": owner.person.email,
+            "phone": owner.person.phone,
             "ownership_percent": str(owner.ownership_percent),
         }
         for owner in item.owners
     ]
 
 
+def _default_signers_from_owners(item: Property) -> list[dict]:
+    return [
+        {
+            "role": "owner",
+            "name": owner.person.name,
+            "email": owner.person.email,
+            "document_number": owner.person.document_number,
+            "phone": owner.person.phone,
+            "sign_order": 1,
+            "communication": "email",
+        }
+        for owner in item.owners
+        if owner.person.email
+    ]
+
+
 def _rules_from_payload(payload: AdministrationContractCreate | AdministrationContractUpdate) -> dict:
-    return payload.model_dump(mode="json", exclude={"property_id", "change_summary"})
+    return payload.model_dump(mode="json", exclude={"property_id", "change_summary", "signers"})
+
+
+def _signers_from_payload(payload: AdministrationContractCreate | AdministrationContractUpdate) -> list[dict]:
+    return [signer.model_dump(mode="json") for signer in payload.signers]
 
 
 def _apply_terms(contract: AdministrationContract, payload: AdministrationContractCreate | AdministrationContractUpdate) -> None:
@@ -95,6 +118,7 @@ def _apply_terms(contract: AdministrationContract, payload: AdministrationContra
     contract.end_date = payload.end_date
     contract.notes = (payload.notes or "").strip() or None
     contract.rules_snapshot = _rules_from_payload(payload)
+    contract.signers_snapshot = _signers_from_payload(payload)
 
 
 def _version_snapshot(contract: AdministrationContract) -> dict:
@@ -102,6 +126,7 @@ def _version_snapshot(contract: AdministrationContract) -> dict:
         "property": contract.property_snapshot,
         "owners": contract.owner_snapshot,
         "rules": contract.rules_snapshot,
+        "signers": contract.signers_snapshot,
     }
 
 
@@ -131,6 +156,7 @@ def _contract_response(contract: AdministrationContract) -> AdministrationContra
         start_date=contract.start_date,
         end_date=contract.end_date,
         notes=contract.notes,
+        signers=list(contract.signers_snapshot or []),
         current_version=contract.current_version,
         signing_provider=contract.signing_provider,
         signing_status=contract.signing_status,
@@ -223,6 +249,8 @@ def create_administration_contract(
         created_by_user_id=context.user.id,
     )
     _apply_terms(item, payload)
+    if not item.signers_snapshot:
+        item.signers_snapshot = _default_signers_from_owners(property_item)
     db.add(item)
     db.flush()
     db.add(
@@ -266,7 +294,7 @@ def update_administration_contract(
             detail="Somente contratos em rascunho ou revisão podem gerar uma nova versão.",
         )
 
-    before = {"status": item.status, "current_version": item.current_version, "rules": item.rules_snapshot}
+    before = {"status": item.status, "current_version": item.current_version, "rules": item.rules_snapshot, "signers": item.signers_snapshot}
     _apply_terms(item, payload)
     item.current_version += 1
     if item.status == "review":
@@ -294,7 +322,7 @@ def update_administration_contract(
         entity_type="administration_contract",
         entity_id=str(item.id),
         before_data=before,
-        after_data={"status": item.status, "current_version": item.current_version, "rules": item.rules_snapshot},
+        after_data={"status": item.status, "current_version": item.current_version, "rules": item.rules_snapshot, "signers": item.signers_snapshot},
         reason=payload.change_summary.strip(),
         ip_address=ip_address,
         user_agent=user_agent,
@@ -336,6 +364,8 @@ def administration_contract_workflow(
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Permissão necessária: contracts.send_signature")
         if item.status != "approved":
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="O contrato precisa estar aprovado antes da assinatura.")
+        if not item.signers_snapshot:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Inclua ao menos um signatário antes de preparar a assinatura.")
         provider = _signature_provider(db, context.user.organization_id)
         if provider == "none":
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Configure um provedor de assinatura antes de continuar.")
@@ -374,6 +404,46 @@ def administration_contract_workflow(
         before_data={"status": before_status, "signing_status": before_signing_status, "signing_provider": before_signing_provider},
         after_data={"status": item.status, "signing_status": item.signing_status, "signing_provider": item.signing_provider},
         reason=(payload.reason or "").strip() or None,
+        ip_address=ip_address,
+        user_agent=user_agent,
+    )
+    db.commit()
+    return _contract_response(_load_contract(db, context.user.organization_id, item.id))
+
+
+@router.post("/administration-contracts/{contract_id}/signature/envelope", response_model=AdministrationContractResponse)
+def initialize_signature_envelope(
+    contract_id: UUID,
+    request: Request,
+    context: UserContext = Depends(require_permission("contracts.send_signature")),
+    db: Session = Depends(get_db),
+) -> AdministrationContractResponse:
+    item = _load_contract(db, context.user.organization_id, contract_id)
+    if item.status != "pending_signature" or item.signing_status != "ready_for_provider":
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Prepare a assinatura antes de criar o envelope no provider.")
+    if item.signing_envelope_id:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Este contrato já possui envelope de assinatura.")
+    provider = get_signature_provider(item.signing_provider)
+    if provider is None:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Provider de assinatura não suportado.")
+    if not provider.configured:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="A credencial do provider ainda não foi configurada no Secret Manager.")
+    try:
+        envelope_id = provider.create_empty_envelope(f"{f'ADM-{item.internal_number:06d}'} · Contrato de Administração")
+    except SignatureProviderError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+    item.signing_envelope_id = envelope_id
+    item.signing_status = "envelope_created_waiting_document"
+    ip_address, user_agent = _request_metadata(request)
+    write_audit(
+        db,
+        context=context,
+        action="contracts.administration.signature_envelope_created",
+        module="contracts",
+        entity_type="administration_contract",
+        entity_id=str(item.id),
+        after_data={"provider": item.signing_provider, "envelope_id": envelope_id, "signing_status": item.signing_status},
         ip_address=ip_address,
         user_agent=user_agent,
     )
