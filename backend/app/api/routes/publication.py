@@ -274,13 +274,27 @@ def public_site_profile(organization_id: UUID, db: Session = Depends(get_db)) ->
     )
 
 
+def _public_address(item: Property) -> dict[str, str]:
+    address = item.address or {}
+    # Padrão conservador: localização útil para busca, sem divulgar a unidade/endereço exato.
+    return {
+        "street": "",
+        "number": "",
+        "complement": "",
+        "neighborhood": str(address.get("neighborhood") or ""),
+        "city": str(address.get("city") or ""),
+        "state": str(address.get("state") or ""),
+        "postal_code": "",
+    }
+
+
 def _public_response(item: Property) -> PublicPropertyResponse:
     return PublicPropertyResponse(
         code=f"{item.internal_number:06d}",
         slug=item.public_slug or f"imovel-{item.internal_number:06d}",
         property_type=item.property_type,
         purpose=item.purpose,
-        address=dict(item.address or {}),
+        address=_public_address(item),
         rent_amount=item.rent_amount,
         condo_amount=item.condo_amount,
         iptu_amount=item.iptu_amount,
