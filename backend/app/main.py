@@ -1,5 +1,10 @@
+import os
+from pathlib import Path
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 from app.api.router import api_router
 from app.core.config import get_settings
@@ -23,7 +28,20 @@ app.add_middleware(
 
 app.include_router(api_router, prefix="/api")
 
+frontend_dir = Path(os.getenv("FRONTEND_DIST", "")).resolve() if os.getenv("FRONTEND_DIST") else None
 
-@app.get("/")
-def root() -> dict[str, str]:
-    return {"name": settings.app_name, "status": "online"}
+if frontend_dir and frontend_dir.is_dir():
+    assets_dir = frontend_dir / "assets"
+    if assets_dir.is_dir():
+        app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
+
+    @app.get("/{full_path:path}", include_in_schema=False)
+    def frontend(full_path: str) -> FileResponse:
+        requested = (frontend_dir / full_path).resolve()
+        if full_path and requested.is_file() and frontend_dir in requested.parents:
+            return FileResponse(requested)
+        return FileResponse(frontend_dir / "index.html")
+else:
+    @app.get("/")
+    def root() -> dict[str, str]:
+        return {"name": settings.app_name, "status": "online"}
