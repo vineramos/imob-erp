@@ -1,4 +1,5 @@
 from functools import lru_cache
+from urllib.parse import urlparse
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -25,6 +26,15 @@ class Settings(BaseSettings):
         if self.neon_auth_url:
             return f"{self.neon_auth_url.rstrip('/')}/.well-known/jwks.json"
         return ""
+
+    @property
+    def effective_neon_auth_issuer(self) -> str:
+        if not self.neon_auth_url:
+            return ""
+        parsed = urlparse(self.neon_auth_url)
+        if not parsed.scheme or not parsed.netloc:
+            return ""
+        return f"{parsed.scheme}://{parsed.netloc}"
 
 
 @lru_cache
