@@ -96,6 +96,129 @@ jobs:
             --image "$IMAGE" \
             --quiet
 
+      - name: Smoke test Clicksign configuration
+        env:
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          REGION: ${{ vars.GCP_REGION }}
+          SERVICE: ${{ vars.GCP_SERVICE }}
+        shell: bash
+        run: |
+          set -u
+          SERVICE_JSON="$(mktemp)"
+          TOKEN_FILE="$(mktemp)"
+          META_FILE="$(mktemp)"
+          trap 'rm -f "$SERVICE_JSON" "$TOKEN_FILE" "$META_FILE" /tmp/clicksign-response.json' EXIT
+          chmod 600 "$TOKEN_FILE"
+
+          gcloud run services describe "$SERVICE" \
+            --project "$PROJECT_ID" \
+            --region "$REGION" \
+            --format=json > "$SERVICE_JSON"
+
+          python - "$SERVICE_JSON" "$TOKEN_FILE" "$META_FILE" <<'PY'
+          import json
+          import sys
+
+          service_path, token_path, meta_path = sys.argv[1:]
+          data = json.load(open(service_path, encoding="utf-8"))
+
+          env_entries = []
+          def walk(node):
+              if isinstance(node, dict):
+                  env = node.get("env")
+                  if isinstance(env, list) and all(isinstance(item, dict) for item in env):
+                      env_entries.extend(env)
+                  for value in node.values():
+                      walk(value)
+              elif isinstance(node, list):
+                  for value in node:
+                      walk(value)
+          walk(data)
+
+          by_name = {str(item.get("name") or ""): item for item in env_entries if item.get("name")}
+          token = by_name.get("CLICKSIGN_ACCESS_TOKEN") or {}
+          environment = by_name.get("CLICKSIGN_ENVIRONMENT") or {}
+          webhook = by_name.get("CLICKSIGN_WEBHOOK_SECRET") or {}
+
+          token_value = token.get("value")
+          token_source = "none"
+          secret_name = ""
+          secret_version = "latest"
+          if isinstance(token_value, str) and token_value.strip():
+              token_source = "plain"
+              open(token_path, "w", encoding="utf-8").write(token_value.strip())
+          else:
+              ref = token.get("valueFrom") or token.get("value_from") or {}
+              secret_ref = ref.get("secretKeyRef") or ref.get("secret_key_ref") or {}
+              secret_name = str(secret_ref.get("name") or secret_ref.get("secret") or "").strip()
+              secret_version = str(secret_ref.get("key") or secret_ref.get("version") or "latest").strip() or "latest"
+              if secret_name:
+                  token_source = "secret"
+
+          env_value = str(environment.get("value") or "sandbox").strip().lower() or "sandbox"
+          webhook_configured = bool(
+              str(webhook.get("value") or "").strip()
+              or ((webhook.get("valueFrom") or webhook.get("value_from") or {}).get("secretKeyRef") or (webhook.get("valueFrom") or webhook.get("value_from") or {}).get("secret_key_ref"))
+          )
+
+          with open(meta_path, "w", encoding="utf-8") as fh:
+              fh.write(f"TOKEN_SOURCE={token_source}\n")
+              fh.write(f"CLICK_ENV={env_value}\n")
+              fh.write(f"WEBHOOK_CONFIGURED={'true' if webhook_configured else 'false'}\n")
+              fh.write(f"SECRET_NAME={secret_name}\n")
+              fh.write(f"SECRET_VERSION={secret_version}\n")
+          PY
+
+          # shellcheck disable=SC1090
+          source "$META_FILE"
+          echo "Clicksign environment: ${CLICK_ENV}"
+          echo "Clicksign credential configured: $([[ "$TOKEN_SOURCE" != "none" ]] && echo yes || echo no)"
+          echo "Clicksign webhook secret configured: $([[ "$WEBHOOK_CONFIGURED" == "true" ]] && echo yes || echo no)"
+
+          if [[ "$TOKEN_SOURCE" == "secret" ]]; then
+            if gcloud secrets versions access "$SECRET_VERSION" \
+              --secret "$SECRET_NAME" \
+              --project "$PROJECT_ID" > "$TOKEN_FILE" 2>/tmp/clicksign-secret-error.log; then
+              echo "Clicksign credential source: Secret Manager (readable by deploy identity for smoke test)"
+            else
+              echo "Clicksign credential source: Secret Manager"
+              echo "Clicksign API authentication test: not executed (deploy identity cannot read the secret; runtime may still have access)."
+              exit 0
+            fi
+          elif [[ "$TOKEN_SOURCE" == "plain" ]]; then
+            echo "Clicksign credential source: Cloud Run environment"
+          else
+            echo "Clicksign API authentication test: NOT CONFIGURED"
+            exit 0
+          fi
+
+          if [[ ! -s "$TOKEN_FILE" ]]; then
+            echo "Clicksign API authentication test: NOT CONFIGURED"
+            exit 0
+          fi
+
+          case "$CLICK_ENV" in
+            production) BASE_URL="https://app.clicksign.com/api/v3" ;;
+            *) BASE_URL="https://sandbox.clicksign.com/api/v3" ;;
+          esac
+
+          HTTP_CODE="$(curl --silent --show-error \
+            --output /tmp/clicksign-response.json \
+            --write-out '%{http_code}' \
+            --max-time 15 \
+            --get "${BASE_URL}/envelopes" \
+            --data-urlencode 'page[size]=1' \
+            --header "Authorization: Bearer $(cat "$TOKEN_FILE")" \
+            --header 'Accept: application/vnd.api+json' || true)"
+
+          if [[ "$HTTP_CODE" == "200" ]]; then
+            echo "Clicksign API authentication test: SUCCESS (HTTP 200)"
+          elif [[ -n "$HTTP_CODE" && "$HTTP_CODE" != "000" ]]; then
+            echo "Clicksign API authentication test: FAILED (HTTP ${HTTP_CODE})"
+          else
+            echo "Clicksign API authentication test: FAILED (network/timeout)"
+          fi
+
       - name: Show service URL
         env:
           PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
