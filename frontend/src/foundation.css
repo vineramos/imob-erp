@@ -39,6 +39,25 @@
   font-size: 12px;
 }
 
+.audit-empty {
+  min-height: 170px;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 6px;
+  padding: 24px;
+  text-align: center;
+}
+
+.audit-empty strong {
+  font-size: 13px;
+}
+
+.audit-empty span {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
 .company-address-panel {
   margin-top: 16px;
 }
