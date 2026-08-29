@@ -8,6 +8,7 @@ import './foundation.css'
 import './polish.css'
 import './settings-foundation-next.css'
 import './portfolio.css'
+import './contracts.css'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
