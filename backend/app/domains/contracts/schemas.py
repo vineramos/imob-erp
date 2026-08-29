@@ -85,6 +85,15 @@ class AdministrationContractVersionResponse(BaseModel):
     created_at: datetime
 
 
+class SignatureEventResponse(BaseModel):
+    id: UUID
+    provider: str
+    event_name: str
+    envelope_id: str | None = None
+    hmac_valid: bool
+    received_at: datetime
+
+
 class AdministrationContractResponse(BaseModel):
     id: UUID
     internal_number: int
