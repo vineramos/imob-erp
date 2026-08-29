@@ -28,7 +28,8 @@ gcloud services enable \
   run.googleapis.com \
   cloudbuild.googleapis.com \
   artifactregistry.googleapis.com \
-  secretmanager.googleapis.com
+  secretmanager.googleapis.com \
+  iam.googleapis.com
 
 if ! gcloud secrets describe "$SECRET_NAME" >/dev/null 2>&1; then
   echo "Secret '$SECRET_NAME' não existe. Crie-o com a DATABASE_URL antes do deploy."
