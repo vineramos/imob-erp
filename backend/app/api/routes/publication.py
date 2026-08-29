@@ -1,9 +1,10 @@
 from datetime import datetime, timezone
 from decimal import Decimal
+from typing import Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
@@ -30,6 +31,27 @@ class PublicSiteProfileResponse(BaseModel):
     theme: dict
 
 
+class CommercialPropertyProfileResponse(BaseModel):
+    property_id: UUID
+    status: str
+    purpose: str
+    public_title: str
+    public_description: str
+    rent_amount: Decimal | None = None
+    condo_amount: Decimal | None = None
+    iptu_amount: Decimal | None = None
+    publication_enabled: bool
+
+
+class CommercialPropertyProfileUpdate(BaseModel):
+    status: Literal["draft", "available", "inactive"]
+    public_title: str = Field(default="", max_length=180)
+    public_description: str = Field(default="", max_length=5000)
+    rent_amount: Decimal | None = Field(default=None, ge=0)
+    condo_amount: Decimal | None = Field(default=None, ge=0)
+    iptu_amount: Decimal | None = Field(default=None, ge=0)
+
+
 def _request_metadata(request: Request) -> tuple[str | None, str | None]:
     forwarded_for = request.headers.get("x-forwarded-for", "").split(",", 1)[0].strip()
     ip_address = forwarded_for or (request.client.host if request.client else None)
@@ -45,6 +67,20 @@ def _load_property(db: Session, organization_id: UUID, property_id: UUID) -> Pro
     if item is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Imóvel não encontrado.")
     return item
+
+
+def _commercial_profile(item: Property) -> CommercialPropertyProfileResponse:
+    return CommercialPropertyProfileResponse(
+        property_id=item.id,
+        status=item.status,
+        purpose=item.purpose,
+        public_title=item.public_title or "",
+        public_description=item.public_description or "",
+        rent_amount=item.rent_amount,
+        condo_amount=item.condo_amount,
+        iptu_amount=item.iptu_amount,
+        publication_enabled=item.publication_enabled,
+    )
 
 
 def _checklist(item: Property) -> list[PublicationChecklistItem]:
@@ -92,6 +128,74 @@ def _readiness(item: Property) -> PublicationReadinessResponse:
         public_slug=item.public_slug,
         checklist=checklist,
     )
+
+
+@router.get("/properties/{property_id}/commercial-profile", response_model=CommercialPropertyProfileResponse)
+def get_commercial_property_profile(
+    property_id: UUID,
+    context: UserContext = Depends(require_permission("properties.view")),
+    db: Session = Depends(get_db),
+) -> CommercialPropertyProfileResponse:
+    return _commercial_profile(_load_property(db, context.user.organization_id, property_id))
+
+
+@router.put("/properties/{property_id}/commercial-profile", response_model=CommercialPropertyProfileResponse)
+def update_commercial_property_profile(
+    property_id: UUID,
+    payload: CommercialPropertyProfileUpdate,
+    request: Request,
+    context: UserContext = Depends(require_permission("properties.edit")),
+    db: Session = Depends(get_db),
+) -> CommercialPropertyProfileResponse:
+    item = _load_property(db, context.user.organization_id, property_id)
+    before = {
+        "status": item.status,
+        "public_title": item.public_title,
+        "public_description": item.public_description,
+        "rent_amount": str(item.rent_amount) if item.rent_amount is not None else None,
+        "condo_amount": str(item.condo_amount) if item.condo_amount is not None else None,
+        "iptu_amount": str(item.iptu_amount) if item.iptu_amount is not None else None,
+        "publication_enabled": item.publication_enabled,
+    }
+    was_published = item.publication_enabled
+    item.status = payload.status
+    item.public_title = payload.public_title.strip() or None
+    item.public_description = payload.public_description.strip() or None
+    item.rent_amount = payload.rent_amount
+    item.condo_amount = payload.condo_amount
+    item.iptu_amount = payload.iptu_amount
+    item.publication_updated_by_user_id = context.user.id
+
+    # Qualquer edição do conteúdo comercial publicado exige nova conferência humana.
+    # Mantemos o slug estável, mas retiramos temporariamente o anúncio do catálogo.
+    if was_published:
+        item.publication_enabled = False
+
+    after = {
+        "status": item.status,
+        "public_title": item.public_title,
+        "public_description": item.public_description,
+        "rent_amount": str(item.rent_amount) if item.rent_amount is not None else None,
+        "condo_amount": str(item.condo_amount) if item.condo_amount is not None else None,
+        "iptu_amount": str(item.iptu_amount) if item.iptu_amount is not None else None,
+        "publication_enabled": item.publication_enabled,
+    }
+    ip_address, user_agent = _request_metadata(request)
+    write_audit(
+        db,
+        context=context,
+        action="properties.commercial_profile.updated",
+        module="properties",
+        entity_type="property",
+        entity_id=str(item.id),
+        before_data=before,
+        after_data=after,
+        reason="Publicação suspensa para nova conferência após alteração do perfil comercial." if was_published else None,
+        ip_address=ip_address,
+        user_agent=user_agent,
+    )
+    db.commit()
+    return _commercial_profile(_load_property(db, context.user.organization_id, property_id))
 
 
 @router.get("/properties/{property_id}/publication-readiness", response_model=PublicationReadinessResponse)
