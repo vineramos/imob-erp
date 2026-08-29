@@ -1,6 +1,7 @@
 import { authClient, authConfigured } from '../auth/client'
+import { runtimeConfig } from '../config/runtime'
 
-const API_URL = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, '') || 'http://localhost:8000/api'
+const API_URL = runtimeConfig.apiUrl
 
 export class ApiError extends Error {
   status: number
