@@ -1,0 +1,89 @@
+.boot-screen {
+  min-height: 100vh;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 10px;
+  padding: 24px;
+  text-align: center;
+  background: var(--app-bg);
+}
+
+.boot-screen .brand-mark {
+  margin-bottom: 6px;
+}
+
+.boot-screen > strong {
+  font-size: 18px;
+}
+
+.boot-screen > span {
+  max-width: 520px;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.6;
+  margin-bottom: 6px;
+}
+
+.success-alert {
+  background: #effaf4;
+  border: 1px solid #cfe9da;
+  color: #246c45;
+}
+
+.settings-loading {
+  min-height: 160px;
+  display: grid;
+  place-content: center;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.company-address-panel {
+  margin-top: 16px;
+}
+
+.address-grid {
+  grid-template-columns: minmax(0, 2fr) minmax(100px, .6fr) minmax(0, 1fr);
+}
+
+.address-street {
+  grid-column: span 2;
+}
+
+.read-only-note {
+  margin: 14px 0 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface-muted);
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.field input:disabled,
+.field select:disabled,
+.color-field input:disabled {
+  cursor: not-allowed;
+  opacity: .72;
+}
+
+@media (max-width: 900px) {
+  .address-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .address-street {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 620px) {
+  .address-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .address-street {
+    grid-column: auto;
+  }
+}
