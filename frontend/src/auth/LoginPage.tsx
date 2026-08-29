@@ -1,6 +1,7 @@
-import { Eye, EyeOff, LockKeyhole, Mail, UserRound } from 'lucide-react'
+import { Eye, EyeOff, LockKeyhole, Mail, ShieldCheck, UserRound } from 'lucide-react'
 import { FormEvent, useEffect, useState } from 'react'
 import { publicApiRequest } from '../api/client'
+import { useTheme } from '../theme/ThemeProvider'
 import { authClient, authConfigured } from './client'
 
 type LoginPageProps = {
@@ -14,6 +15,7 @@ type BootstrapStatus = {
 }
 
 export function LoginPage({ onAuthenticated }: LoginPageProps) {
+  const { theme } = useTheme()
   const [mode, setMode] = useState<AccessMode>('login')
   const [bootstrapOpen, setBootstrapOpen] = useState(false)
   const [name, setName] = useState('')
@@ -94,119 +96,136 @@ export function LoginPage({ onAuthenticated }: LoginPageProps) {
   }
 
   const isBootstrap = mode === 'bootstrap'
+  const brandName = theme.companyShortName || theme.companyName || 'Imob'
+  const brandInitials = brandName.trim().slice(0, 2).toUpperCase() || 'IM'
 
   return (
     <main className="login-page">
       <section className="login-brand-panel">
         <div className="login-brand-content">
-          <div className="brand-mark login-logo">I</div>
+          <div className={`brand-mark login-logo ${theme.logoUrl ? 'brand-mark-image' : ''}`}>
+            {theme.logoUrl ? <img src={theme.logoUrl} alt="" /> : brandInitials}
+          </div>
           <span className="eyebrow login-eyebrow">ERP Imobiliário</span>
-          <h1>Gestão profissional, sem complicação.</h1>
-          <p>Imóveis, contratos, financeiro e operação integrados em uma única base auditável.</p>
-          <div className="login-brand-lines" aria-hidden="true"><span /><span /><span /></div>
+          <h1>Gestão imobiliária com clareza e controle.</h1>
+          <p>Imóveis, contratos, financeiro e operação em uma base única, modular e auditável.</p>
+
+          <div className="login-feature-list">
+            <div><ShieldCheck size={16} /><span>Permissões e alçadas por perfil</span></div>
+            <div><ShieldCheck size={16} /><span>Histórico das ações sensíveis</span></div>
+            <div><ShieldCheck size={16} /><span>Regras operacionais preservadas por contrato</span></div>
+          </div>
         </div>
+        <span className="login-brand-signature">{brandName} · ERP Imobiliário</span>
       </section>
 
       <section className="login-form-panel">
-        <form className="login-card" onSubmit={handleSubmit}>
-          <div className="login-card-heading">
-            <span className="eyebrow">{isBootstrap ? 'Configuração inicial' : 'Acesso restrito'}</span>
-            <h2>{isBootstrap ? 'Criar Administrador' : 'Entrar no Imob'}</h2>
-            <p>
-              {isBootstrap
-                ? 'Este cadastro existe apenas para inicializar o primeiro Administrador do ERP.'
-                : 'Use o e-mail e a senha cadastrados pelo Administrador.'}
-            </p>
+        <div className="login-form-wrap">
+          <div className="login-mobile-brand">
+            <div className="brand-mark">{brandInitials}</div>
+            <div><strong>{brandName}</strong><span>ERP Imobiliário</span></div>
           </div>
 
-          {isBootstrap && (
+          <form className="login-card" onSubmit={handleSubmit}>
+            <div className="login-card-heading">
+              <span className="eyebrow">{isBootstrap ? 'Configuração inicial' : 'Acesso restrito'}</span>
+              <h2>{isBootstrap ? 'Criar Administrador' : `Entrar no ${brandName}`}</h2>
+              <p>
+                {isBootstrap
+                  ? 'Este cadastro existe apenas para inicializar o primeiro Administrador do ERP.'
+                  : 'Use suas credenciais para acessar o ambiente da imobiliária.'}
+              </p>
+            </div>
+
+            {isBootstrap && (
+              <label className="field login-field">
+                <span>Nome</span>
+                <div className="input-with-icon">
+                  <UserRound size={17} />
+                  <input
+                    autoComplete="name"
+                    placeholder="Seu nome"
+                    required
+                    type="text"
+                    value={name}
+                    onChange={(event) => setName(event.target.value)}
+                  />
+                </div>
+              </label>
+            )}
+
             <label className="field login-field">
-              <span>Nome</span>
+              <span>E-mail</span>
               <div className="input-with-icon">
-                <UserRound size={17} />
+                <Mail size={17} />
                 <input
-                  autoComplete="name"
-                  placeholder="Seu nome"
+                  autoComplete="email"
+                  inputMode="email"
+                  placeholder="nome@empresa.com.br"
                   required
-                  type="text"
-                  value={name}
-                  onChange={(event) => setName(event.target.value)}
+                  type="email"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
                 />
               </div>
             </label>
-          )}
 
-          <label className="field login-field">
-            <span>E-mail</span>
-            <div className="input-with-icon">
-              <Mail size={17} />
-              <input
-                autoComplete="email"
-                inputMode="email"
-                placeholder="nome@empresa.com.br"
-                required
-                type="email"
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-              />
-            </div>
-          </label>
-
-          <label className="field login-field">
-            <span>Senha</span>
-            <div className="input-with-icon">
-              <LockKeyhole size={17} />
-              <input
-                autoComplete={isBootstrap ? 'new-password' : 'current-password'}
-                minLength={isBootstrap ? 12 : undefined}
-                placeholder={isBootstrap ? 'Crie uma senha segura' : 'Sua senha'}
-                required
-                type={showPassword ? 'text' : 'password'}
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-              />
-              <button className="password-toggle" type="button" onClick={() => setShowPassword((value) => !value)} aria-label="Mostrar ou ocultar senha">
-                {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
-              </button>
-            </div>
-          </label>
-
-          {isBootstrap && (
             <label className="field login-field">
-              <span>Confirmar senha</span>
+              <span>Senha</span>
               <div className="input-with-icon">
                 <LockKeyhole size={17} />
                 <input
-                  autoComplete="new-password"
-                  minLength={12}
-                  placeholder="Repita a senha"
+                  autoComplete={isBootstrap ? 'new-password' : 'current-password'}
+                  minLength={isBootstrap ? 12 : undefined}
+                  placeholder={isBootstrap ? 'Crie uma senha segura' : 'Sua senha'}
                   required
                   type={showPassword ? 'text' : 'password'}
-                  value={passwordConfirmation}
-                  onChange={(event) => setPasswordConfirmation(event.target.value)}
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
                 />
+                <button className="password-toggle" type="button" onClick={() => setShowPassword((value) => !value)} aria-label="Mostrar ou ocultar senha">
+                  {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
+                </button>
               </div>
             </label>
-          )}
 
-          {error && <div className="form-alert danger-alert">{error}</div>}
+            {isBootstrap && (
+              <label className="field login-field">
+                <span>Confirmar senha</span>
+                <div className="input-with-icon">
+                  <LockKeyhole size={17} />
+                  <input
+                    autoComplete="new-password"
+                    minLength={12}
+                    placeholder="Repita a senha"
+                    required
+                    type={showPassword ? 'text' : 'password'}
+                    value={passwordConfirmation}
+                    onChange={(event) => setPasswordConfirmation(event.target.value)}
+                  />
+                </div>
+              </label>
+            )}
 
-          <button className="button primary login-submit" disabled={loading} type="submit">
-            {loading ? (isBootstrap ? 'Criando acesso...' : 'Entrando...') : (isBootstrap ? 'Criar Administrador' : 'Entrar')}
-          </button>
+            {error && <div className="form-alert danger-alert">{error}</div>}
 
-          {bootstrapOpen && (
-            <button className="text-button" type="button" onClick={() => switchMode(isBootstrap ? 'login' : 'bootstrap')}>
-              {isBootstrap ? 'Já tenho acesso' : 'Configurar primeiro acesso'}
+            <button className="button primary login-submit" disabled={loading} type="submit">
+              {loading ? (isBootstrap ? 'Criando acesso...' : 'Entrando...') : (isBootstrap ? 'Criar Administrador' : 'Entrar')}
             </button>
-          )}
 
-          <small className="login-security-note">
-            {bootstrapOpen
-              ? 'Após a criação do primeiro Administrador, esta opção é encerrada automaticamente.'
-              : 'Não existe cadastro público no ERP. Novos usuários são liberados internamente pelo Administrador.'}
-          </small>
-        </form>
+            {bootstrapOpen && (
+              <button className="text-button" type="button" onClick={() => switchMode(isBootstrap ? 'login' : 'bootstrap')}>
+                {isBootstrap ? 'Já tenho acesso' : 'Configurar primeiro acesso'}
+              </button>
+            )}
+
+            <small className="login-security-note">
+              {bootstrapOpen
+                ? 'Após a criação do primeiro Administrador, esta opção é encerrada automaticamente.'
+                : 'Novos usuários são liberados internamente por um Administrador.'}
+            </small>
+          </form>
+        </div>
       </section>
     </main>
   )
