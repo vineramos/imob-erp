@@ -9,6 +9,7 @@ from collections.abc import Sequence
 
 import sqlalchemy as sa
 from alembic import op
+from sqlalchemy.dialects import postgresql
 
 revision: str = "0005_contract_documents"
 down_revision: str | None = "0004_signature_and_publication"
@@ -23,6 +24,10 @@ def upgrade() -> None:
     op.add_column("administration_contracts", sa.Column("signing_document_id", sa.String(length=180), nullable=True))
     op.add_column(
         "administration_contracts",
+        sa.Column("signing_metadata", postgresql.JSONB(astext_type=sa.Text()), server_default=sa.text("'{}'::jsonb"), nullable=False),
+    )
+    op.add_column(
+        "administration_contracts",
         sa.Column("archive_status", sa.String(length=40), server_default="not_started", nullable=False),
     )
     op.add_column("administration_contracts", sa.Column("final_document_hash", sa.String(length=64), nullable=True))
@@ -33,6 +38,7 @@ def downgrade() -> None:
     op.drop_column("administration_contracts", "archived_at")
     op.drop_column("administration_contracts", "final_document_hash")
     op.drop_column("administration_contracts", "archive_status")
+    op.drop_column("administration_contracts", "signing_metadata")
     op.drop_column("administration_contracts", "signing_document_id")
     op.drop_column("administration_contracts", "generated_document_version")
     op.drop_column("administration_contracts", "generated_document_hash")
