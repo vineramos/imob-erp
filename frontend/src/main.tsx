@@ -6,6 +6,7 @@ import './styles.css'
 import './settings.css'
 import './foundation.css'
 import './polish.css'
+import './settings-foundation-next.css'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
