@@ -7,6 +7,8 @@ import { LoginPage } from './auth/LoginPage'
 import { navigation } from './config/navigation'
 import { DashboardPage } from './modules/dashboard/DashboardPage'
 import { SettingsPage } from './modules/settings/SettingsPage'
+import { useTheme } from './theme/ThemeProvider'
+import type { ThemeConfig } from './theme/theme'
 
 type ModuleKey = (typeof navigation)[number]['module']
 type AuthState = 'loading' | 'authenticated' | 'unauthenticated' | 'error'
@@ -50,11 +52,20 @@ function ModulePlaceholder({ module }: { module: ModuleKey }) {
   )
 }
 
+function BrandMark({ logoUrl, initials }: { logoUrl: string; initials: string }) {
+  if (logoUrl) {
+    return <div className="brand-mark brand-mark-image"><img src={logoUrl} alt="" /></div>
+  }
+  return <div className="brand-mark">{initials}</div>
+}
+
 function BootScreen({ message = 'Preparando seu ambiente...' }: { message?: string }) {
+  const { theme } = useTheme()
+  const initials = theme.companyShortName.trim().slice(0, 2).toUpperCase() || 'IM'
   return (
     <main className="boot-screen">
-      <div className="brand-mark">I</div>
-      <strong>Imob</strong>
+      <BrandMark logoUrl={theme.logoUrl} initials={initials} />
+      <strong>{theme.companyShortName || theme.companyName}</strong>
       <span>{message}</span>
     </main>
   )
@@ -72,6 +83,7 @@ function AccessError({ message, onRetry }: { message: string; onRetry: () => voi
 }
 
 export default function App() {
+  const { theme, setTheme } = useTheme()
   const [activeModule, setActiveModule] = useState<ModuleKey>('dashboard')
   const [authState, setAuthState] = useState<AuthState>(devBypass ? 'authenticated' : 'loading')
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(devBypass ? devUser : null)
@@ -89,6 +101,14 @@ export default function App() {
     try {
       const user = await apiRequest<CurrentUser>('/me')
       setCurrentUser(user)
+
+      try {
+        const branding = await apiRequest<ThemeConfig>('/theme/erp')
+        setTheme(branding)
+      } catch {
+        // O tema padrão mantém o ERP utilizável mesmo se a identidade visual não puder ser carregada.
+      }
+
       setAuthState('authenticated')
     } catch (error) {
       setCurrentUser(null)
@@ -103,7 +123,7 @@ export default function App() {
       }
       setAuthState('error')
     }
-  }, [])
+  }, [setTheme])
 
   useEffect(() => {
     if (!devBypass) void refreshUser()
@@ -133,14 +153,15 @@ export default function App() {
     .map((part) => part[0]?.toUpperCase())
     .join('') || 'AD'
   const primaryRole = currentUser.role_keys.includes('admin') ? 'Administrador' : (currentUser.role_keys[0] || 'Usuário')
+  const brandInitials = theme.companyShortName.trim().slice(0, 2).toUpperCase() || 'IM'
 
   return (
     <div className="app-shell">
       <aside className="sidebar">
         <div className="brand">
-          <div className="brand-mark">I</div>
+          <BrandMark logoUrl={theme.logoUrl} initials={brandInitials} />
           <div>
-            <strong>Imob</strong>
+            <strong>{theme.companyShortName || theme.companyName}</strong>
             <span>ERP Imobiliário</span>
           </div>
         </div>
@@ -162,7 +183,7 @@ export default function App() {
         <div className="sidebar-footer">
           <span className="sidebar-label">Empresa</span>
           <button type="button" className="company-switcher">
-            <div className="avatar">{currentUser.organization_name.trim().slice(0, 2).toUpperCase() || 'IM'}</div>
+            <div className="avatar">{currentUser.organization_name.trim().slice(0, 2).toUpperCase() || brandInitials}</div>
             <div>
               <strong>{currentUser.organization_name}</strong>
               <span>Ambiente principal</span>
