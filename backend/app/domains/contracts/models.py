@@ -80,6 +80,7 @@ class SignatureWebhookEvent(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     provider: Mapped[str] = mapped_column(String(30), nullable=False, index=True)
     event_name: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
+    event_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False, unique=True, index=True)
     envelope_id: Mapped[str | None] = mapped_column(String(180), index=True)
     contract_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("administration_contracts.id"), index=True)
     payload: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, nullable=False)
