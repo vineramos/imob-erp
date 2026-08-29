@@ -23,6 +23,44 @@ export type OrganizationProfile = {
 
 export type OrganizationProfileUpdate = Omit<OrganizationProfile, 'id'>
 
+export type OperationalDefaults = {
+  rent_due_day: number
+  owner_repasse_business_days: number
+  residential_lease_months: number
+  adjustment_index: string
+  termination_fine_months: number
+  inspection_contest_days: number
+  default_admin_fee_percent: number
+  delinquency_critical_day: number
+}
+
+export type IntegrationsConfig = {
+  bank_provider: 'none' | 'inter'
+  signature_provider: 'none' | 'clicksign'
+  email_provider: 'none' | 'smtp'
+  public_site_enabled: boolean
+  webhook_base_url: string
+  notes: string
+}
+
+export type ApprovalRule = {
+  id: string
+  name: string
+  scope: string
+  priority: number
+  min_amount: number | null
+  max_amount: number | null
+  required_approvals: number
+  approver_permission: string
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
+export type ApprovalRulePayload = Omit<ApprovalRule, 'id' | 'created_at' | 'updated_at'> & {
+  reason?: string | null
+}
+
 export type Role = {
   id: string
   key: string
