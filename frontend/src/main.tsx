@@ -5,6 +5,7 @@ import { ThemeProvider } from './theme/ThemeProvider'
 import './styles.css'
 import './settings.css'
 import './foundation.css'
+import './polish.css'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
