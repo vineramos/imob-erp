@@ -21,7 +21,7 @@ RUN pip install --no-cache-dir -r backend/requirements.txt
 
 COPY backend/app ./backend/app
 COPY backend/alembic.ini ./backend/alembic.ini
-COPY backend/alembic ./backend/alembic
+COPY backend/migrations ./backend/migrations
 COPY --from=frontend-build /frontend/dist ./frontend-dist
 COPY deploy/entrypoint.sh ./entrypoint.sh
 
