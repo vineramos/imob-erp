@@ -1,11 +1,14 @@
-import { Building2, KeyRound, Palette, ShieldCheck } from 'lucide-react'
+import { Building2, KeyRound, Palette, PlugZap, ShieldCheck, SlidersHorizontal, Workflow } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { AccessSettingsPage } from './AccessSettingsPage'
+import { ApprovalRulesSettingsPage } from './ApprovalRulesSettingsPage'
 import { AppearanceSettingsPage } from './AppearanceSettingsPage'
 import { AuditSettingsPage } from './AuditSettingsPage'
 import { CompanySettingsPage } from './CompanySettingsPage'
+import { IntegrationsSettingsPage } from './IntegrationsSettingsPage'
+import { OperationsSettingsPage } from './OperationsSettingsPage'
 
-type SettingsTab = 'appearance' | 'access' | 'audit' | 'company'
+type SettingsTab = 'appearance' | 'access' | 'approvals' | 'audit' | 'company' | 'integrations' | 'operations'
 
 type Props = {
   permissions: string[]
@@ -13,8 +16,11 @@ type Props = {
 
 const tabs = [
   { key: 'company' as const, label: 'Empresa', icon: Building2, permission: 'settings.view' },
+  { key: 'operations' as const, label: 'Padrões Operacionais', icon: SlidersHorizontal, permission: 'settings.view' },
+  { key: 'integrations' as const, label: 'Integrações', icon: PlugZap, permission: 'settings.view' },
   { key: 'appearance' as const, label: 'Aparência e Marca', icon: Palette, permission: 'settings.view' },
   { key: 'access' as const, label: 'Usuários e Permissões', icon: KeyRound, permission: 'users.manage' },
+  { key: 'approvals' as const, label: 'Alçadas', icon: Workflow, permission: 'approval_rules.manage' },
   { key: 'audit' as const, label: 'Auditoria', icon: ShieldCheck, permission: 'audit.view' },
 ]
 
@@ -24,6 +30,7 @@ export function SettingsPage({ permissions }: Props) {
   const [tab, setTab] = useState<SettingsTab>(visibleTabs[0]?.key ?? 'company')
 
   const activeTab = visibleTabs.some((item) => item.key === tab) ? tab : visibleTabs[0]?.key
+  const canManageCompany = permissionSet.has('settings.company.manage')
 
   if (!activeTab) {
     return (
@@ -45,9 +52,12 @@ export function SettingsPage({ permissions }: Props) {
           </button>
         ))}
       </div>
-      {activeTab === 'company' && <CompanySettingsPage canEdit={permissionSet.has('settings.company.manage')} />}
+      {activeTab === 'company' && <CompanySettingsPage canEdit={canManageCompany} />}
+      {activeTab === 'operations' && <OperationsSettingsPage canEdit={canManageCompany} />}
+      {activeTab === 'integrations' && <IntegrationsSettingsPage canEdit={canManageCompany} />}
       {activeTab === 'appearance' && <AppearanceSettingsPage canEdit={permissionSet.has('settings.appearance.manage')} />}
       {activeTab === 'access' && <AccessSettingsPage />}
+      {activeTab === 'approvals' && <ApprovalRulesSettingsPage />}
       {activeTab === 'audit' && <AuditSettingsPage />}
     </div>
   )
