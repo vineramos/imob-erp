@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -6,8 +6,14 @@ from app.core.database import get_db
 from app.domains.foundation.access import UserContext, require_permission
 from app.domains.foundation.audit import write_audit
 from app.domains.foundation.defaults import ERP_THEME_DEFAULT
-from app.domains.foundation.models import Organization, OrganizationSettings
-from app.domains.foundation.schemas import MeResponse, OrganizationProfile, OrganizationProfileUpdate, ThemeConfig
+from app.domains.foundation.models import AppUser, AuditLog, Organization, OrganizationSettings
+from app.domains.foundation.schemas import (
+    AuditEventResponse,
+    MeResponse,
+    OrganizationProfile,
+    OrganizationProfileUpdate,
+    ThemeConfig,
+)
 
 router = APIRouter(tags=["foundation"])
 
@@ -162,3 +168,36 @@ def update_erp_theme(
     )
     db.commit()
     return payload
+
+
+@router.get("/settings/audit", response_model=list[AuditEventResponse])
+def get_audit_events(
+    limit: int = Query(default=50, ge=1, le=200),
+    context: UserContext = Depends(require_permission("audit.view")),
+    db: Session = Depends(get_db),
+) -> list[AuditEventResponse]:
+    rows = db.execute(
+        select(AuditLog, AppUser.name)
+        .outerjoin(AppUser, AuditLog.actor_user_id == AppUser.id)
+        .where(AuditLog.organization_id == context.user.organization_id)
+        .order_by(AuditLog.created_at.desc())
+        .limit(limit)
+    ).all()
+
+    return [
+        AuditEventResponse(
+            id=event.id,
+            actor_user_id=event.actor_user_id,
+            actor_name=actor_name,
+            action=event.action,
+            module=event.module,
+            entity_type=event.entity_type,
+            entity_id=event.entity_id,
+            before_data=event.before_data,
+            after_data=event.after_data,
+            reason=event.reason,
+            ip_address=event.ip_address,
+            created_at=event.created_at,
+        )
+        for event, actor_name in rows
+    ]
