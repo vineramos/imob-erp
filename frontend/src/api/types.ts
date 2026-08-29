@@ -45,6 +45,15 @@ export type IntegrationsConfig = {
   notes: string
 }
 
+export type SignatureIntegrationStatus = {
+  provider: string
+  environment: string
+  configured: boolean
+  reachable: boolean | null
+  message: string
+  checked_at: string
+}
+
 export type ApprovalRule = {
   id: string
   name: string
@@ -159,7 +168,9 @@ export type Property = {
   furnished: boolean
   pets_allowed: boolean
   public_title: string | null
+  public_slug?: string | null
   publication_enabled: boolean
+  published_at?: string | null
   owners: PropertyOwner[]
   created_at: string
   updated_at: string
@@ -184,6 +195,23 @@ export type PropertyCreate = {
   public_description?: string | null
   publication_enabled: boolean
   owners: Array<{ person_id: string; ownership_percent: number }>
+}
+
+export type PublicationChecklistItem = {
+  key: string
+  label: string
+  ok: boolean
+  required: boolean
+  detail: string
+}
+
+export type PublicationReadiness = {
+  property_id: string
+  code: string
+  ready: boolean
+  publication_enabled: boolean
+  public_slug: string | null
+  checklist: PublicationChecklistItem[]
 }
 
 export type Capture = {
@@ -236,6 +264,18 @@ export type AdministrationContractStatus = 'draft' | 'review' | 'approved' | 'pe
 export type AdministrationPlan = 'essential' | 'complete' | 'custom'
 export type ContractFeeType = 'percent' | 'fixed'
 export type OperationalPayer = 'tenant' | 'owner' | 'agency'
+export type ContractSignerRole = 'owner' | 'agency' | 'witness' | 'other'
+export type ContractSignerCommunication = 'email' | 'sms' | 'whatsapp' | 'none'
+
+export type ContractSigner = {
+  role: ContractSignerRole
+  name: string
+  email: string
+  document_number: string | null
+  phone: string | null
+  sign_order: number
+  communication: ContractSignerCommunication
+}
 
 export type AdministrationContractTerms = {
   plan: AdministrationPlan
@@ -253,6 +293,7 @@ export type AdministrationContractTerms = {
   start_date: string | null
   end_date: string | null
   notes: string | null
+  signers: ContractSigner[]
 }
 
 export type AdministrationContractCreate = AdministrationContractTerms & {
@@ -281,6 +322,8 @@ export type AdministrationContract = AdministrationContractTerms & {
     person_id: string
     name: string
     document_number: string | null
+    email?: string | null
+    phone?: string | null
     ownership_percent: string | number
   }>
   status: AdministrationContractStatus
