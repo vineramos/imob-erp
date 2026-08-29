@@ -72,7 +72,7 @@ class OperationalDefaultsConfig(BaseModel):
     rent_due_day: int = Field(default=10, ge=1, le=28)
     owner_repasse_business_days: int = Field(default=2, ge=0, le=20)
     residential_lease_months: int = Field(default=30, ge=1, le=120)
-    adjustment_index: str = Field(default="IPCA", min_length=1, max_length=30)
+    adjustment_index: Literal["IPCA", "IGP-M", "INPC", "IPC-FIPE", "IGP-DI"] = "IPCA"
     termination_fine_months: float = Field(default=3, ge=0, le=12)
     inspection_contest_days: int = Field(default=5, ge=1, le=30)
     default_admin_fee_percent: float = Field(default=10, ge=0, le=100)
