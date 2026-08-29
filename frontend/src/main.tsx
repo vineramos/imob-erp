@@ -12,6 +12,7 @@ import './contracts.css'
 import './commercial.css'
 import './lease.css'
 import './public-site.css'
+import './metric-cards.css'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
