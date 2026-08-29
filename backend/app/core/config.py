@@ -19,6 +19,12 @@ class Settings(BaseSettings):
     clicksign_environment: str = "sandbox"
     clicksign_webhook_secret: str = ""
 
+    # Storage próprio para documentos finais/contratuais. Em Cloud Run, a
+    # autenticação usa a service account do runtime; nenhuma chave JSON é
+    # necessária nem permitida pela aplicação.
+    document_storage_bucket: str = ""
+    document_storage_prefix: str = "imob-erp"
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     @property
