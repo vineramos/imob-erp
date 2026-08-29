@@ -68,9 +68,7 @@ export type ApprovalRule = {
   updated_at: string
 }
 
-export type ApprovalRulePayload = Omit<ApprovalRule, 'id' | 'created_at' | 'updated_at'> & {
-  reason?: string | null
-}
+export type ApprovalRulePayload = Omit<ApprovalRule, 'id' | 'created_at' | 'updated_at'> & { reason?: string | null }
 
 export type Role = {
   id: string
@@ -143,11 +141,7 @@ export type PersonCreate = {
   role_keys: Array<'owner' | 'tenant' | 'guarantor' | 'broker' | 'supplier' | 'referrer'>
 }
 
-export type PropertyOwner = {
-  person_id: string
-  name: string
-  ownership_percent: number
-}
+export type PropertyOwner = { person_id: string; name: string; ownership_percent: number }
 
 export type Property = {
   id: string
@@ -197,21 +191,36 @@ export type PropertyCreate = {
   owners: Array<{ person_id: string; ownership_percent: number }>
 }
 
-export type PublicationChecklistItem = {
-  key: string
-  label: string
-  ok: boolean
-  required: boolean
-  detail: string
+export type PublicationChecklistItem = { key: string; label: string; ok: boolean; required: boolean; detail: string }
+export type PublicationReadiness = { property_id: string; code: string; ready: boolean; publication_enabled: boolean; public_slug: string | null; checklist: PublicationChecklistItem[] }
+
+export type PublicSiteProfile = {
+  organization_id: string
+  display_name: string
+  contact_email: string | null
+  contact_phone: string | null
+  theme: Record<string, unknown>
 }
 
-export type PublicationReadiness = {
-  property_id: string
+export type PublicProperty = {
   code: string
-  ready: boolean
-  publication_enabled: boolean
-  public_slug: string | null
-  checklist: PublicationChecklistItem[]
+  slug: string
+  property_type: string
+  purpose: string
+  address: Partial<Address>
+  rent_amount: number | null
+  condo_amount: number | null
+  iptu_amount: number | null
+  area_m2: number | null
+  bedrooms: number
+  suites: number
+  bathrooms: number
+  parking_spaces: number
+  furnished: boolean
+  pets_allowed: boolean
+  title: string
+  description: string
+  published_at: string | null
 }
 
 export type Capture = {
@@ -242,23 +251,8 @@ export type CaptureCreate = {
   notes?: string | null
 }
 
-export type EconomicIndexValue = {
-  index_code: AdjustmentIndex
-  sgs_code: number
-  competence: string
-  monthly_rate: number
-  source: string
-  fetched_at: string
-}
-
-export type EconomicIndexSync = {
-  index_code: AdjustmentIndex
-  status: 'never' | 'synced' | 'awaiting_publication' | 'error'
-  imported: number
-  latest_competence: string | null
-  next_retry_at: string | null
-  message: string
-}
+export type EconomicIndexValue = { index_code: AdjustmentIndex; sgs_code: number; competence: string; monthly_rate: number; source: string; fetched_at: string }
+export type EconomicIndexSync = { index_code: AdjustmentIndex; status: 'never' | 'synced' | 'awaiting_publication' | 'error'; imported: number; latest_competence: string | null; next_retry_at: string | null; message: string }
 
 export type AdministrationContractStatus = 'draft' | 'review' | 'approved' | 'pending_signature' | 'signed' | 'cancelled'
 export type AdministrationPlan = 'essential' | 'complete' | 'custom'
@@ -296,19 +290,18 @@ export type AdministrationContractTerms = {
   signers: ContractSigner[]
 }
 
-export type AdministrationContractCreate = AdministrationContractTerms & {
-  property_id: string
-}
+export type AdministrationContractCreate = AdministrationContractTerms & { property_id: string }
+export type AdministrationContractUpdate = AdministrationContractTerms & { change_summary: string }
+export type AdministrationContractVersion = { version_number: number; change_summary: string | null; created_by_user_id: string | null; created_at: string }
 
-export type AdministrationContractUpdate = AdministrationContractTerms & {
-  change_summary: string
-}
-
-export type AdministrationContractVersion = {
-  version_number: number
-  change_summary: string | null
-  created_by_user_id: string | null
-  created_at: string
+export type ContractDocument = {
+  contract_id: string
+  code: string
+  version: number
+  hash_sha256: string
+  reference: string | null
+  storage_configured: boolean
+  message: string
 }
 
 export type AdministrationContract = AdministrationContractTerms & {
@@ -318,22 +311,22 @@ export type AdministrationContract = AdministrationContractTerms & {
   property_id: string
   property_code: string
   property_address: Address
-  owners: Array<{
-    person_id: string
-    name: string
-    document_number: string | null
-    email?: string | null
-    phone?: string | null
-    ownership_percent: string | number
-  }>
+  owners: Array<{ person_id: string; name: string; document_number: string | null; email?: string | null; phone?: string | null; ownership_percent: string | number }>
   status: AdministrationContractStatus
   current_version: number
+  generated_document_reference: string | null
+  generated_document_hash: string | null
+  generated_document_version: number | null
   signing_provider: string
   signing_status: string
   signing_envelope_id: string | null
+  signing_document_id: string | null
   approved_at: string | null
   signed_at: string | null
+  archive_status: string
   archived_document_reference: string | null
+  final_document_hash: string | null
+  archived_at: string | null
   versions: AdministrationContractVersion[]
   created_at: string
   updated_at: string
