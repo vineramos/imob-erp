@@ -1,18 +1,25 @@
+from datetime import datetime, timezone
+from uuid import UUID
+
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.core.database import get_db
 from app.domains.foundation.access import UserContext, require_permission
 from app.domains.foundation.audit import write_audit
 from app.domains.foundation.defaults import ERP_THEME_DEFAULT
-from app.domains.foundation.models import AppUser, AuditLog, Organization, OrganizationSettings
+from app.domains.foundation.models import AppUser, AuditLog, Organization, OrganizationSettings, Role
 from app.domains.foundation.schemas import (
     AuditEventResponse,
     MeResponse,
     OrganizationProfile,
     OrganizationProfileUpdate,
+    RoleResponse,
     ThemeConfig,
+    UserResponse,
+    UserRolesUpdate,
+    UserStatusUpdate,
 )
 
 router = APIRouter(tags=["foundation"])
@@ -47,6 +54,32 @@ def _settings_for_organization(db: Session, context: UserContext) -> Organizatio
         db.add(settings)
         db.flush()
     return settings
+
+
+def _user_or_404(db: Session, context: UserContext, user_id: UUID) -> AppUser:
+    user = db.scalar(
+        select(AppUser)
+        .options(selectinload(AppUser.roles))
+        .where(
+            AppUser.id == user_id,
+            AppUser.organization_id == context.user.organization_id,
+        )
+    )
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Usuário não encontrado")
+    return user
+
+
+def _user_response(user: AppUser) -> UserResponse:
+    return UserResponse(
+        id=user.id,
+        name=user.name,
+        email=user.email,
+        is_active=user.is_active and user.blocked_at is None,
+        blocked_at=user.blocked_at,
+        created_at=user.created_at,
+        role_keys=sorted(role.key for role in user.roles if role.is_active),
+    )
 
 
 @router.get("/me", response_model=MeResponse)
@@ -168,6 +201,157 @@ def update_erp_theme(
     )
     db.commit()
     return payload
+
+
+@router.get("/settings/roles", response_model=list[RoleResponse])
+def get_roles(
+    context: UserContext = Depends(require_permission("users.manage")),
+    db: Session = Depends(get_db),
+) -> list[RoleResponse]:
+    roles = db.scalars(
+        select(Role)
+        .options(selectinload(Role.permissions), selectinload(Role.users))
+        .where(Role.organization_id == context.user.organization_id)
+        .order_by(Role.name.asc())
+    ).unique().all()
+
+    return [
+        RoleResponse(
+            id=role.id,
+            key=role.key,
+            name=role.name,
+            description=role.description,
+            is_system=role.is_system,
+            is_active=role.is_active,
+            permissions=sorted(permission.key for permission in role.permissions),
+            user_count=sum(1 for user in role.users if user.is_active and user.blocked_at is None),
+        )
+        for role in roles
+    ]
+
+
+@router.get("/settings/users", response_model=list[UserResponse])
+def get_users(
+    context: UserContext = Depends(require_permission("users.manage")),
+    db: Session = Depends(get_db),
+) -> list[UserResponse]:
+    users = db.scalars(
+        select(AppUser)
+        .options(selectinload(AppUser.roles))
+        .where(AppUser.organization_id == context.user.organization_id)
+        .order_by(AppUser.name.asc(), AppUser.email.asc())
+    ).unique().all()
+    return [_user_response(user) for user in users]
+
+
+@router.patch("/settings/users/{user_id}/status", response_model=UserResponse)
+def update_user_status(
+    user_id: UUID,
+    payload: UserStatusUpdate,
+    request: Request,
+    context: UserContext = Depends(require_permission("users.manage")),
+    db: Session = Depends(get_db),
+) -> UserResponse:
+    target = _user_or_404(db, context, user_id)
+
+    if target.id == context.user.id and not payload.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Você não pode bloquear o próprio usuário administrador em uso.",
+        )
+    if not payload.is_active and not (payload.reason or "").strip():
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Informe o motivo para bloquear o usuário.",
+        )
+
+    before = {
+        "is_active": target.is_active,
+        "blocked_at": target.blocked_at.isoformat() if target.blocked_at else None,
+    }
+    target.is_active = payload.is_active
+    target.blocked_at = None if payload.is_active else datetime.now(timezone.utc)
+    after = {
+        "is_active": target.is_active,
+        "blocked_at": target.blocked_at.isoformat() if target.blocked_at else None,
+    }
+
+    ip_address, user_agent = _request_metadata(request)
+    write_audit(
+        db,
+        context=context,
+        action="security.user.enabled" if payload.is_active else "security.user.blocked",
+        module="security",
+        entity_type="app_user",
+        entity_id=str(target.id),
+        before_data=before,
+        after_data=after,
+        reason=(payload.reason or "").strip() or None,
+        ip_address=ip_address,
+        user_agent=user_agent,
+    )
+    db.commit()
+    db.refresh(target)
+    return _user_response(_user_or_404(db, context, target.id))
+
+
+@router.put("/settings/users/{user_id}/roles", response_model=UserResponse)
+def update_user_roles(
+    user_id: UUID,
+    payload: UserRolesUpdate,
+    request: Request,
+    context: UserContext = Depends(require_permission("permissions.manage")),
+    db: Session = Depends(get_db),
+) -> UserResponse:
+    target = _user_or_404(db, context, user_id)
+    requested_keys = sorted(set(key.strip() for key in payload.role_keys if key.strip()))
+    if not requested_keys:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Selecione ao menos um perfil.")
+
+    roles = db.scalars(
+        select(Role).where(
+            Role.organization_id == context.user.organization_id,
+            Role.key.in_(requested_keys),
+            Role.is_active.is_(True),
+        )
+    ).all()
+    found_keys = {role.key for role in roles}
+    missing = sorted(set(requested_keys) - found_keys)
+    if missing:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Perfil inválido ou inativo: {', '.join(missing)}",
+        )
+
+    before_keys = sorted(role.key for role in target.roles if role.is_active)
+    if target.id == context.user.id and "admin" in before_keys and "admin" not in requested_keys:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Você não pode remover o próprio perfil Administrador durante a sessão.",
+        )
+    if before_keys != requested_keys and not (payload.reason or "").strip():
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Informe o motivo da alteração de perfis.",
+        )
+
+    target.roles = sorted(roles, key=lambda role: role.key)
+    ip_address, user_agent = _request_metadata(request)
+    write_audit(
+        db,
+        context=context,
+        action="security.user.roles.updated",
+        module="security",
+        entity_type="app_user",
+        entity_id=str(target.id),
+        before_data={"role_keys": before_keys},
+        after_data={"role_keys": requested_keys},
+        reason=(payload.reason or "").strip() or None,
+        ip_address=ip_address,
+        user_agent=user_agent,
+    )
+    db.commit()
+    return _user_response(_user_or_404(db, context, target.id))
 
 
 @router.get("/settings/audit", response_model=list[AuditEventResponse])
