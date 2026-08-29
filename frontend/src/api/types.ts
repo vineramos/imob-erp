@@ -232,4 +232,70 @@ export type EconomicIndexSync = {
   message: string
 }
 
+export type AdministrationContractStatus = 'draft' | 'review' | 'approved' | 'pending_signature' | 'signed' | 'cancelled'
+export type AdministrationPlan = 'essential' | 'complete' | 'custom'
+export type ContractFeeType = 'percent' | 'fixed'
+export type OperationalPayer = 'tenant' | 'owner' | 'agency'
+
+export type AdministrationContractTerms = {
+  plan: AdministrationPlan
+  admin_fee_type: ContractFeeType
+  admin_fee_percent: number | null
+  admin_fee_amount: number | null
+  intermediation_percent: number
+  intermediation_installments: number
+  owner_repasse_business_days: number
+  condo_operational_payer: OperationalPayer
+  iptu_operational_payer: OperationalPayer
+  publication_requires_owner_approval: boolean
+  maintenance_limit_amount: number | null
+  emergency_limit_amount: number | null
+  start_date: string | null
+  end_date: string | null
+  notes: string | null
+}
+
+export type AdministrationContractCreate = AdministrationContractTerms & {
+  property_id: string
+}
+
+export type AdministrationContractUpdate = AdministrationContractTerms & {
+  change_summary: string
+}
+
+export type AdministrationContractVersion = {
+  version_number: number
+  change_summary: string | null
+  created_by_user_id: string | null
+  created_at: string
+}
+
+export type AdministrationContract = AdministrationContractTerms & {
+  id: string
+  internal_number: number
+  code: string
+  property_id: string
+  property_code: string
+  property_address: Address
+  owners: Array<{
+    person_id: string
+    name: string
+    document_number: string | null
+    ownership_percent: string | number
+  }>
+  status: AdministrationContractStatus
+  current_version: number
+  signing_provider: string
+  signing_status: string
+  signing_envelope_id: string | null
+  approved_at: string | null
+  signed_at: string | null
+  archived_document_reference: string | null
+  versions: AdministrationContractVersion[]
+  created_at: string
+  updated_at: string
+}
+
+export type AdministrationContractWorkflowAction = 'submit_review' | 'approve' | 'prepare_signature' | 'return_draft' | 'cancel'
+
 export type { ThemeConfig }
