@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     app_env: str = "development"
     database_url: str = ""
     neon_auth_url: str = ""
+    neon_auth_jwks_url: str = ""
     cors_origins: str = "http://localhost:5173"
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
@@ -15,6 +16,14 @@ class Settings(BaseSettings):
     @property
     def cors_origin_list(self) -> list[str]:
         return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
+
+    @property
+    def effective_neon_auth_jwks_url(self) -> str:
+        if self.neon_auth_jwks_url:
+            return self.neon_auth_jwks_url
+        if self.neon_auth_url:
+            return f"{self.neon_auth_url.rstrip('/')}/.well-known/jwks.json"
+        return ""
 
 
 @lru_cache
