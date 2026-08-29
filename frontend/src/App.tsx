@@ -6,6 +6,7 @@ import { authConfigured } from './auth/client'
 import { LoginPage } from './auth/LoginPage'
 import { navigation } from './config/navigation'
 import { CapturesPage } from './modules/captures/CapturesPage'
+import { CommercialPage } from './modules/commercial/CommercialPage'
 import { ContractsPage } from './modules/contracts/ContractsPage'
 import { DashboardPage } from './modules/dashboard/DashboardPage'
 import { PropertiesPage } from './modules/properties/PropertiesPage'
@@ -48,17 +49,8 @@ function ModulePlaceholder({ module }: { module: ModuleKey }) {
   const item = navigation.find((entry) => entry.module === module)
   return (
     <section className="workspace">
-      <div className="page-heading">
-        <div>
-          <span className="eyebrow">Módulo preparado</span>
-          <h1>{item?.label}</h1>
-          <p>Este módulo entra em uma das próximas sprints. A navegação já está reservada para manter a arquitetura estável.</p>
-        </div>
-      </div>
-      <article className="panel empty-module">
-        <strong>Estrutura pronta para evoluir.</strong>
-        <span>O módulo será ativado sobre a mesma base de permissões, auditoria e configurações do ERP.</span>
-      </article>
+      <div className="page-heading"><div><span className="eyebrow">Módulo preparado</span><h1>{item?.label}</h1><p>Este módulo entra em uma das próximas sprints. A navegação já está reservada para manter a arquitetura estável.</p></div></div>
+      <article className="panel empty-module"><strong>Estrutura pronta para evoluir.</strong><span>O módulo será ativado sobre a mesma base de permissões, auditoria e configurações do ERP.</span></article>
     </section>
   )
 }
@@ -127,9 +119,7 @@ export default function App() {
     <div className={`app-shell ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
       <aside className="sidebar">
         <div className="brand"><BrandMark logoUrl={theme.logoUrl} initials={brandInitials} /><div className="brand-copy"><strong>{theme.companyShortName || theme.companyName}</strong><span>ERP Imobiliário</span></div></div>
-        <nav className="nav-list" aria-label="Menu principal">
-          {visibleNavigation.map(({ label, icon: Icon, module }) => <button className={`nav-item ${activeModule === module ? 'active' : ''}`} type="button" key={label} title={sidebarCollapsed ? label : undefined} onClick={() => setActiveModule(module)}><Icon size={18} strokeWidth={1.75} /><span>{label}</span></button>)}
-        </nav>
+        <nav className="nav-list" aria-label="Menu principal">{visibleNavigation.map(({ label, icon: Icon, module }) => <button className={`nav-item ${activeModule === module ? 'active' : ''}`} type="button" key={label} title={sidebarCollapsed ? label : undefined} onClick={() => setActiveModule(module)}><Icon size={18} strokeWidth={1.75} /><span>{label}</span></button>)}</nav>
         <div className="sidebar-footer"><span className="sidebar-label">Empresa</span><button type="button" className="company-switcher"><div className="avatar">{currentUser.organization_name.trim().slice(0, 2).toUpperCase() || brandInitials}</div><div className="company-copy"><strong>{currentUser.organization_name}</strong><span>Ambiente principal</span></div><ChevronDown className="company-chevron" size={15} /></button></div>
       </aside>
 
@@ -142,9 +132,10 @@ export default function App() {
         {activeModule === 'dashboard' && <DashboardPage />}
         {activeModule === 'properties' && <PropertiesPage permissions={currentUser.permissions} />}
         {activeModule === 'captures' && <CapturesPage permissions={currentUser.permissions} />}
+        {activeModule === 'crm' && <CommercialPage permissions={currentUser.permissions} organizationId={currentUser.organization_id} />}
         {activeModule === 'contracts' && <ContractsPage permissions={currentUser.permissions} />}
         {activeModule === 'settings' && <SettingsPage permissions={currentUser.permissions} />}
-        {!['dashboard', 'properties', 'captures', 'contracts', 'settings'].includes(activeModule) && <ModulePlaceholder module={activeModule} />}
+        {!['dashboard', 'properties', 'captures', 'crm', 'contracts', 'settings'].includes(activeModule) && <ModulePlaceholder module={activeModule} />}
       </main>
     </div>
   )
