@@ -11,7 +11,17 @@ type SignatureEvent = {
   received_at: string
 }
 
-export function SignatureTimeline({ contractId, enabled = true }: { contractId: string; enabled?: boolean }) {
+type ContractType = 'administration' | 'lease'
+
+export function SignatureTimeline({
+  contractId,
+  enabled = true,
+  contractType = 'administration',
+}: {
+  contractId: string
+  enabled?: boolean
+  contractType?: ContractType
+}) {
   const [events, setEvents] = useState<SignatureEvent[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -19,14 +29,15 @@ export function SignatureTimeline({ contractId, enabled = true }: { contractId: 
   useEffect(() => {
     if (!enabled) return
     let active = true
+    const prefix = contractType === 'lease' ? 'lease-contracts' : 'administration-contracts'
     setLoading(true)
     setError('')
-    void apiRequest<SignatureEvent[]>(`/administration-contracts/${contractId}/signature/events`)
+    void apiRequest<SignatureEvent[]>(`/${prefix}/${contractId}/signature/events`)
       .then((data) => { if (active) setEvents(data) })
       .catch((cause) => { if (active) setError(cause instanceof ApiError ? cause.detail : 'Não foi possível carregar a trilha de assinatura.') })
       .finally(() => { if (active) setLoading(false) })
     return () => { active = false }
-  }, [contractId, enabled])
+  }, [contractId, contractType, enabled])
 
   return (
     <div className="signature-timeline">

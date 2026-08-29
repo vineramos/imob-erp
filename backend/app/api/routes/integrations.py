@@ -14,6 +14,8 @@ from app.core.database import get_db
 from app.domains.contracts.models import AdministrationContract, SignatureWebhookEvent
 from app.domains.foundation.access import UserContext, require_permission
 from app.domains.foundation.models import OrganizationSettings
+from app.domains.leases.models import LeaseContract
+from app.domains.portfolio.models import Property
 from app.integrations.document_storage import DocumentStorageError, DocumentStorageStatus, get_document_storage
 from app.integrations.signature import SignatureProviderError, SignatureProviderStatus, get_signature_provider
 
@@ -39,11 +41,25 @@ class DocumentStorageStatusResponse(BaseModel):
 
 
 def _response(value: SignatureProviderStatus) -> SignatureIntegrationStatusResponse:
-    return SignatureIntegrationStatusResponse(provider=value.provider, environment=value.environment, configured=value.configured, reachable=value.reachable, message=value.message, checked_at=value.checked_at)
+    return SignatureIntegrationStatusResponse(
+        provider=value.provider,
+        environment=value.environment,
+        configured=value.configured,
+        reachable=value.reachable,
+        message=value.message,
+        checked_at=value.checked_at,
+    )
 
 
 def _storage_response(value: DocumentStorageStatus) -> DocumentStorageStatusResponse:
-    return DocumentStorageStatusResponse(provider=value.provider, configured=value.configured, reachable=value.reachable, bucket=value.bucket, message=value.message, checked_at=value.checked_at)
+    return DocumentStorageStatusResponse(
+        provider=value.provider,
+        configured=value.configured,
+        reachable=value.reachable,
+        bucket=value.bucket,
+        message=value.message,
+        checked_at=value.checked_at,
+    )
 
 
 def _selected_signature_provider(db: Session, organization_id) -> str:
@@ -53,10 +69,20 @@ def _selected_signature_provider(db: Session, organization_id) -> str:
 
 
 @router.get("/integrations/signature/status", response_model=SignatureIntegrationStatusResponse)
-def signature_status(context: UserContext = Depends(require_permission("settings.view")), db: Session = Depends(get_db)) -> SignatureIntegrationStatusResponse:
+def signature_status(
+    context: UserContext = Depends(require_permission("settings.view")),
+    db: Session = Depends(get_db),
+) -> SignatureIntegrationStatusResponse:
     provider_key = _selected_signature_provider(db, context.user.organization_id)
     if provider_key == "none":
-        return SignatureIntegrationStatusResponse(provider="none", environment="disabled", configured=False, reachable=None, message="Nenhum provedor de assinatura está selecionado.", checked_at=datetime.now().astimezone())
+        return SignatureIntegrationStatusResponse(
+            provider="none",
+            environment="disabled",
+            configured=False,
+            reachable=None,
+            message="Nenhum provedor de assinatura está selecionado.",
+            checked_at=datetime.now().astimezone(),
+        )
     provider = get_signature_provider(provider_key)
     if provider is None:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Provider de assinatura não suportado.")
@@ -64,7 +90,10 @@ def signature_status(context: UserContext = Depends(require_permission("settings
 
 
 @router.post("/integrations/signature/test", response_model=SignatureIntegrationStatusResponse)
-def test_signature_connection(context: UserContext = Depends(require_permission("settings.company.manage")), db: Session = Depends(get_db)) -> SignatureIntegrationStatusResponse:
+def test_signature_connection(
+    context: UserContext = Depends(require_permission("settings.company.manage")),
+    db: Session = Depends(get_db),
+) -> SignatureIntegrationStatusResponse:
     provider_key = _selected_signature_provider(db, context.user.organization_id)
     if provider_key == "none":
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Selecione um provedor de assinatura primeiro.")
@@ -75,35 +104,52 @@ def test_signature_connection(context: UserContext = Depends(require_permission(
 
 
 @router.get("/integrations/document-storage/status", response_model=DocumentStorageStatusResponse)
-def document_storage_status(context: UserContext = Depends(require_permission("settings.view"))) -> DocumentStorageStatusResponse:
+def document_storage_status(
+    context: UserContext = Depends(require_permission("settings.view")),
+) -> DocumentStorageStatusResponse:
     return _storage_response(get_document_storage().status())
 
 
 @router.post("/integrations/document-storage/test", response_model=DocumentStorageStatusResponse)
-def test_document_storage(context: UserContext = Depends(require_permission("settings.company.manage"))) -> DocumentStorageStatusResponse:
+def test_document_storage(
+    context: UserContext = Depends(require_permission("settings.company.manage")),
+) -> DocumentStorageStatusResponse:
     return _storage_response(get_document_storage().status(probe=True))
 
 
 def _extract_envelope_id(payload: dict[str, Any]) -> str | None:
-    candidates = [payload.get("envelope_id"), payload.get("envelope", {}).get("id") if isinstance(payload.get("envelope"), dict) else None, payload.get("data", {}).get("id") if isinstance(payload.get("data"), dict) else None]
+    candidates = [
+        payload.get("envelope_id"),
+        payload.get("envelope", {}).get("id") if isinstance(payload.get("envelope"), dict) else None,
+        payload.get("data", {}).get("id") if isinstance(payload.get("data"), dict) else None,
+    ]
     data = payload.get("data")
     if isinstance(data, dict):
         attributes = data.get("attributes")
-        if isinstance(attributes, dict): candidates.extend([attributes.get("envelope_id"), attributes.get("envelope")])
+        if isinstance(attributes, dict):
+            candidates.extend([attributes.get("envelope_id"), attributes.get("envelope")])
         relationships = data.get("relationships")
         if isinstance(relationships, dict):
             envelope = relationships.get("envelope")
             if isinstance(envelope, dict):
                 envelope_data = envelope.get("data")
-                if isinstance(envelope_data, dict): candidates.append(envelope_data.get("id"))
-    return next((str(value) for value in candidates if isinstance(value, (str, int)) and str(value).strip()), None)
+                if isinstance(envelope_data, dict):
+                    candidates.append(envelope_data.get("id"))
+    return next(
+        (str(value) for value in candidates if isinstance(value, (str, int)) and str(value).strip()),
+        None,
+    )
 
 
 def _provider_status_from_event(event_name: str, payload: dict[str, Any]) -> str:
-    event = event_name.lower(); serialized = json.dumps(payload, ensure_ascii=False).lower()
-    if "cancel" in event or '"canceled"' in serialized or '"cancelled"' in serialized: return "provider_cancelled"
-    if "closed" in event or "close" in event or '"closed"' in serialized: return "provider_closed_pending_archive"
-    if "sign" in event or '"signed"' in serialized: return "provider_signature_progress"
+    event = event_name.lower()
+    serialized = json.dumps(payload, ensure_ascii=False).lower()
+    if "cancel" in event or '"canceled"' in serialized or '"cancelled"' in serialized:
+        return "provider_cancelled"
+    if "closed" in event or "close" in event or '"closed"' in serialized:
+        return "provider_closed_pending_archive"
+    if "sign" in event or '"signed"' in serialized:
+        return "provider_signature_progress"
     return "provider_event_received"
 
 
@@ -111,7 +157,25 @@ def _received_signature(request: Request) -> str:
     return request.headers.get("x-clicksign-signature", "").strip() or request.headers.get("content-hmac", "").strip()
 
 
-def _try_auto_archive(contract: AdministrationContract) -> None:
+def _contract_code(contract: AdministrationContract | LeaseContract) -> str:
+    prefix = "LOC" if isinstance(contract, LeaseContract) else "ADM"
+    return f"{prefix}-{contract.internal_number:06d}"
+
+
+def _activate_lease_property(db: Session, contract: LeaseContract) -> None:
+    property_item = db.scalar(
+        select(Property).where(
+            Property.id == contract.property_id,
+            Property.organization_id == contract.organization_id,
+        )
+    )
+    if property_item is None:
+        return
+    property_item.status = "leased"
+    property_item.publication_enabled = False
+
+
+def _try_auto_archive(db: Session, contract: AdministrationContract | LeaseContract) -> None:
     """Best effort: falha de infraestrutura mantém pendência e nunca perde o webhook."""
     if not contract.signing_envelope_id or not contract.signing_document_id:
         contract.archive_status = "archive_failed"
@@ -125,16 +189,22 @@ def _try_auto_archive(contract: AdministrationContract) -> None:
     if not storage.configured:
         contract.archive_status = "storage_not_configured"
         return
+
+    code = _contract_code(contract)
     try:
         final_pdf = provider.signed_document_bytes(contract.signing_envelope_id, contract.signing_document_id)
         final_hash = hashlib.sha256(final_pdf).hexdigest()
-        code = f"ADM-{contract.internal_number:06d}"
-        object_name = storage.object_name(organization_id=str(contract.organization_id), contract_code=code, filename=f"{code}-v{contract.current_version}-ASSINADO.pdf")
+        object_name = storage.object_name(
+            organization_id=str(contract.organization_id),
+            contract_code=code,
+            filename=f"{code}-v{contract.current_version}-ASSINADO.pdf",
+        )
         reference = storage.upload_bytes(object_name=object_name, content=final_pdf, content_type="application/pdf")
     except (SignatureProviderError, DocumentStorageError):
         contract.archive_status = "archive_failed"
         contract.signing_status = "archive_failed"
         return
+
     now = datetime.now(timezone.utc)
     contract.archived_document_reference = reference
     contract.final_document_hash = final_hash
@@ -143,14 +213,24 @@ def _try_auto_archive(contract: AdministrationContract) -> None:
     contract.archive_status = "archived"
     contract.signing_status = "signed_archived"
     contract.status = "signed"
+    if isinstance(contract, LeaseContract):
+        _activate_lease_property(db, contract)
 
 
 @router.post("/webhooks/clicksign", status_code=status.HTTP_200_OK)
 async def clicksign_webhook(request: Request, db: Session = Depends(get_db)) -> dict[str, str]:
-    settings = get_settings(); secret = settings.clicksign_webhook_secret.strip()
-    if not secret: raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Webhook Clicksign ainda não possui HMAC Secret configurado.")
-    raw_body = await request.body(); received_hmac = _received_signature(request)
-    expected = hmac.new(secret.encode("utf-8"), raw_body, hashlib.sha256).hexdigest(); received_digest = received_hmac.removeprefix("sha256=")
+    settings = get_settings()
+    secret = settings.clicksign_webhook_secret.strip()
+    if not secret:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Webhook Clicksign ainda não possui HMAC Secret configurado.",
+        )
+
+    raw_body = await request.body()
+    received_hmac = _received_signature(request)
+    expected = hmac.new(secret.encode("utf-8"), raw_body, hashlib.sha256).hexdigest()
+    received_digest = received_hmac.removeprefix("sha256=")
     if not (bool(received_digest) and hmac.compare_digest(received_digest.lower(), expected.lower())):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Assinatura HMAC do webhook inválida.")
 
@@ -158,19 +238,45 @@ async def clicksign_webhook(request: Request, db: Session = Depends(get_db)) -> 
     event_fingerprint = hashlib.sha256(event_name.encode("utf-8") + b"\0" + raw_body).hexdigest()
     if db.scalar(select(SignatureWebhookEvent.id).where(SignatureWebhookEvent.event_fingerprint == event_fingerprint)) is not None:
         return {"status": "accepted_duplicate"}
-    try: payload = json.loads(raw_body.decode("utf-8")) if raw_body else {}
-    except (UnicodeDecodeError, json.JSONDecodeError) as exc: raise HTTPException(status_code=400, detail="Payload JSON inválido.") from exc
-    if not isinstance(payload, dict): raise HTTPException(status_code=400, detail="Payload do webhook deve ser um objeto JSON.")
 
-    envelope_id = _extract_envelope_id(payload); contract = None
+    try:
+        payload = json.loads(raw_body.decode("utf-8")) if raw_body else {}
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise HTTPException(status_code=400, detail="Payload JSON inválido.") from exc
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="Payload do webhook deve ser um objeto JSON.")
+
+    envelope_id = _extract_envelope_id(payload)
+    administration_contract: AdministrationContract | None = None
+    lease_contract: LeaseContract | None = None
+
     if envelope_id:
-        contract = db.scalar(select(AdministrationContract).where(AdministrationContract.signing_envelope_id == envelope_id))
+        administration_contract = db.scalar(
+            select(AdministrationContract).where(AdministrationContract.signing_envelope_id == envelope_id)
+        )
+        if administration_contract is None:
+            lease_contract = db.scalar(
+                select(LeaseContract).where(LeaseContract.signing_envelope_id == envelope_id)
+            )
+
+        contract = administration_contract or lease_contract
         if contract is not None:
             contract.signing_status = _provider_status_from_event(event_name, payload)
             if contract.signing_status == "provider_closed_pending_archive":
                 contract.archive_status = "pending"
-                _try_auto_archive(contract)
+                _try_auto_archive(db, contract)
 
-    db.add(SignatureWebhookEvent(provider="clicksign", event_name=event_name, event_fingerprint=event_fingerprint, envelope_id=envelope_id, contract_id=contract.id if contract else None, payload=payload, hmac_valid=True))
+    db.add(
+        SignatureWebhookEvent(
+            provider="clicksign",
+            event_name=event_name,
+            event_fingerprint=event_fingerprint,
+            envelope_id=envelope_id,
+            contract_id=administration_contract.id if administration_contract else None,
+            lease_contract_id=lease_contract.id if lease_contract else None,
+            payload=payload,
+            hmac_valid=True,
+        )
+    )
     db.commit()
     return {"status": "accepted"}

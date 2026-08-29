@@ -93,6 +93,7 @@ class SignatureWebhookEvent(Base):
     event_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False, unique=True, index=True)
     envelope_id: Mapped[str | None] = mapped_column(String(180), index=True)
     contract_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("administration_contracts.id"), index=True)
+    lease_contract_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("lease_contracts.id"), index=True)
     payload: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, nullable=False)
     hmac_valid: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False, index=True)
