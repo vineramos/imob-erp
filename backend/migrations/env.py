@@ -5,6 +5,7 @@ from sqlalchemy import engine_from_config, pool
 
 from app.core.config import get_settings
 from app.core.database import Base
+from app.domains.contracts import models as contracts_models  # noqa: F401
 from app.domains.foundation import models as foundation_models  # noqa: F401
 from app.domains.portfolio import models as portfolio_models  # noqa: F401
 
