@@ -1,6 +1,6 @@
 import { Eye, EyeOff, LockKeyhole, Mail, UserRound } from 'lucide-react'
 import { FormEvent, useEffect, useState } from 'react'
-import { apiRequest } from '../api/client'
+import { publicApiRequest } from '../api/client'
 import { authClient, authConfigured } from './client'
 
 type LoginPageProps = {
@@ -25,7 +25,7 @@ export function LoginPage({ onAuthenticated }: LoginPageProps) {
   const [error, setError] = useState('')
 
   useEffect(() => {
-    apiRequest<BootstrapStatus>('/bootstrap/status')
+    publicApiRequest<BootstrapStatus>('/bootstrap/status')
       .then((result) => setBootstrapOpen(result.bootstrap_open))
       .catch(() => setBootstrapOpen(false))
   }, [])
