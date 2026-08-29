@@ -2,10 +2,6 @@ import { authClient, authConfigured } from '../auth/client'
 
 const API_URL = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, '') || 'http://localhost:8000/api'
 
-type JwtTokenProvider = {
-  getJWTToken?: () => Promise<string | null | undefined>
-}
-
 export class ApiError extends Error {
   status: number
   detail: string
@@ -21,11 +17,9 @@ export class ApiError extends Error {
 async function getAccessToken(): Promise<string | null> {
   if (!authConfigured || !authClient) return null
 
-  // O método é parte do adapter-base do Neon Auth e está documentado, mas a
-  // versão beta atual não o inclui no tipo público retornado por createAuthClient.
-  const tokenProvider = authClient as typeof authClient & JwtTokenProvider
-  const token = await tokenProvider.getJWTToken?.()
-  return token || null
+  const result = await authClient.token()
+  if (result.error) return null
+  return result.data?.token || null
 }
 
 export async function apiRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
