@@ -42,11 +42,20 @@ class AdministrationContract(Base):
     current_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     notes: Mapped[str | None] = mapped_column(Text)
 
+    generated_document_reference: Mapped[str | None] = mapped_column(String(500))
+    generated_document_hash: Mapped[str | None] = mapped_column(String(64))
+    generated_document_version: Mapped[int | None] = mapped_column(Integer)
+
     signing_provider: Mapped[str] = mapped_column(String(30), nullable=False, default="clicksign")
     signing_envelope_id: Mapped[str | None] = mapped_column(String(180))
+    signing_document_id: Mapped[str | None] = mapped_column(String(180))
     signing_status: Mapped[str] = mapped_column(String(60), nullable=False, default="not_prepared")
     signed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    archive_status: Mapped[str] = mapped_column(String(40), nullable=False, default="not_started")
     archived_document_reference: Mapped[str | None] = mapped_column(String(500))
+    final_document_hash: Mapped[str | None] = mapped_column(String(64))
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("app_users.id"))
     approved_by_user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("app_users.id"))
