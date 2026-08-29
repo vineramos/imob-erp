@@ -76,6 +76,41 @@ class MeResponse(BaseModel):
     permissions: list[str]
 
 
+class RoleResponse(BaseModel):
+    id: UUID
+    key: str
+    name: str
+    description: str | None = None
+    is_system: bool
+    is_active: bool
+    permissions: list[str]
+    user_count: int = 0
+
+
+class UserResponse(BaseModel):
+    id: UUID
+    name: str
+    email: str
+    is_active: bool
+    blocked_at: datetime | None = None
+    created_at: datetime
+    role_keys: list[str]
+
+
+class UserStatusUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    is_active: bool
+    reason: str | None = Field(default=None, max_length=500)
+
+
+class UserRolesUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    role_keys: list[str] = Field(min_length=1, max_length=20)
+    reason: str | None = Field(default=None, max_length=500)
+
+
 class AuditEventResponse(BaseModel):
     id: UUID
     actor_user_id: UUID | None = None
