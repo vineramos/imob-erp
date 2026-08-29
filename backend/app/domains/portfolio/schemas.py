@@ -102,10 +102,57 @@ class PropertyResponse(BaseModel):
     furnished: bool
     pets_allowed: bool
     public_title: str | None = None
+    public_slug: str | None = None
     publication_enabled: bool
+    published_at: datetime | None = None
     owners: list[dict]
     created_at: datetime
     updated_at: datetime
+
+
+class PublicationChecklistItem(BaseModel):
+    key: str
+    label: str
+    ok: bool
+    required: bool = True
+    detail: str
+
+
+class PublicationReadinessResponse(BaseModel):
+    property_id: UUID
+    code: str
+    ready: bool
+    publication_enabled: bool
+    public_slug: str | None = None
+    checklist: list[PublicationChecklistItem]
+
+
+class PublicationUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool
+    reason: str | None = Field(default=None, max_length=1000)
+
+
+class PublicPropertyResponse(BaseModel):
+    code: str
+    slug: str
+    property_type: str
+    purpose: str
+    address: dict
+    rent_amount: Decimal | None = None
+    condo_amount: Decimal | None = None
+    iptu_amount: Decimal | None = None
+    area_m2: Decimal | None = None
+    bedrooms: int
+    suites: int
+    bathrooms: int
+    parking_spaces: int
+    furnished: bool
+    pets_allowed: bool
+    title: str
+    description: str
+    published_at: datetime | None = None
 
 
 CaptureStatus = Literal["new", "negotiation", "documents", "inspection", "approved", "available", "lost"]
