@@ -127,6 +127,5 @@ def build_maintenance_quote_pdf(*, maintenance: Any, property_item: Any, quote: 
     if specialties:
         story.extend([Paragraph("Parceiro responsável", heading), Paragraph(f"Especialidades cadastradas: {escape(', '.join(specialties))}.", small)])
 
-    story.extend([Spacer(1, 16), Paragraph("Este orçamento foi gerado pelo ERP imobiliário em nome do parceiro acima, utilizando os dados e a identidade visual congelados na proposta. Alterações posteriores no cadastro do parceiro não modificam esta emissão.", small)])
     doc.build(story)
     return buffer.getvalue()
