@@ -19,8 +19,10 @@ from app.domains.portfolio.schemas import (
     EconomicIndexValueResponse,
     PersonCreate,
     PersonResponse,
+    PersonUpdate,
     PropertyCreate,
     PropertyResponse,
+    PropertyUpdate,
 )
 
 router = APIRouter(tags=["portfolio"])
@@ -101,6 +103,35 @@ def _capture_response(item: Capture) -> CaptureResponse:
     )
 
 
+def _ensure_owner_role(person: Person) -> None:
+    existing = next((role for role in person.roles if role.role_key == "owner"), None)
+    if existing is None:
+        person.roles.append(PersonRole(role_key="owner", is_active=True))
+    else:
+        existing.is_active = True
+
+
+def _property_owner_map(db: Session, organization_id: UUID, owners) -> dict[UUID, Person]:
+    owner_ids = [owner.person_id for owner in owners]
+    if not owner_ids:
+        return {}
+    if len(owner_ids) != len(set(owner_ids)):
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="O mesmo proprietário não pode ser informado mais de uma vez.")
+    total = sum((owner.ownership_percent for owner in owners), Decimal("0"))
+    if total != Decimal("100"):
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="A participação dos proprietários deve totalizar 100%.")
+    found = db.scalars(
+        select(Person).options(selectinload(Person.roles)).where(
+            Person.organization_id == organization_id,
+            Person.id.in_(owner_ids),
+            Person.is_active.is_(True),
+        )
+    ).unique().all()
+    if len(found) != len(owner_ids):
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Um ou mais proprietários são inválidos.")
+    return {person.id: person for person in found}
+
+
 @router.get("/people", response_model=list[PersonResponse])
 def list_people(
     q: str = Query(default="", max_length=120),
@@ -167,6 +198,71 @@ def create_person(
     return _person_response(person)
 
 
+@router.put("/people/{person_id}", response_model=PersonResponse)
+def update_person(
+    person_id: UUID,
+    payload: PersonUpdate,
+    request: Request,
+    context: UserContext = Depends(require_permission("properties.edit")),
+    db: Session = Depends(get_db),
+) -> PersonResponse:
+    person = db.scalar(
+        select(Person).options(selectinload(Person.roles)).where(
+            Person.id == person_id,
+            Person.organization_id == context.user.organization_id,
+            Person.is_active.is_(True),
+        )
+    )
+    if person is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Pessoa não encontrada.")
+
+    before_roles = sorted(role.role_key for role in person.roles if role.is_active)
+    before = {"name": person.name, "document_number": person.document_number, "role_keys": before_roles}
+    requested_roles = set(payload.role_keys)
+    owner_linked = db.scalar(select(PropertyOwner.id).where(PropertyOwner.person_id == person.id).limit(1)) is not None
+    if owner_linked:
+        requested_roles.add("owner")
+
+    roles_by_key = {role.role_key: role for role in person.roles}
+    for role in person.roles:
+        role.is_active = role.role_key in requested_roles
+    for role_key in sorted(requested_roles):
+        if role_key not in roles_by_key:
+            person.roles.append(PersonRole(role_key=role_key, is_active=True))
+
+    person.person_type = payload.person_type
+    person.name = payload.name.strip()
+    person.document_number = (payload.document_number or "").strip() or None
+    person.email = str(payload.email) if payload.email else None
+    person.phone = (payload.phone or "").strip() or None
+    person.address = payload.address.model_dump()
+    person.notes = (payload.notes or "").strip() or None
+
+    try:
+        db.flush()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Já existe uma pessoa com este CPF/CNPJ.") from exc
+
+    after_roles = sorted(role.role_key for role in person.roles if role.is_active)
+    ip_address, user_agent = _request_metadata(request)
+    write_audit(
+        db,
+        context=context,
+        action="portfolio.person.updated",
+        module="portfolio",
+        entity_type="person",
+        entity_id=str(person.id),
+        before_data=before,
+        after_data={"name": person.name, "document_number": person.document_number, "role_keys": after_roles},
+        ip_address=ip_address,
+        user_agent=user_agent,
+    )
+    db.commit()
+    person = db.scalar(select(Person).options(selectinload(Person.roles)).where(Person.id == person.id))
+    return _person_response(person)
+
+
 @router.get("/properties", response_model=list[PropertyResponse])
 def list_properties(
     q: str = Query(default="", max_length=120),
@@ -197,24 +293,7 @@ def create_property(
     context: UserContext = Depends(require_permission("properties.create")),
     db: Session = Depends(get_db),
 ) -> PropertyResponse:
-    owner_ids = [owner.person_id for owner in payload.owners]
-    if owner_ids:
-        total = sum((owner.ownership_percent for owner in payload.owners), Decimal("0"))
-        if total != Decimal("100"):
-            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="A participação dos proprietários deve totalizar 100%.")
-        found = db.scalars(
-            select(Person).options(selectinload(Person.roles)).where(
-                Person.organization_id == context.user.organization_id,
-                Person.id.in_(owner_ids),
-                Person.is_active.is_(True),
-            )
-        ).unique().all()
-        if len(found) != len(set(owner_ids)):
-            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Um ou mais proprietários são inválidos.")
-        found_map = {person.id: person for person in found}
-    else:
-        found_map = {}
-
+    found_map = _property_owner_map(db, context.user.organization_id, payload.owners)
     item = Property(
         organization_id=context.user.organization_id,
         property_type=payload.property_type,
@@ -241,9 +320,8 @@ def create_property(
 
     for owner in payload.owners:
         person = found_map[owner.person_id]
-        if not any(role.role_key == "owner" and role.is_active for role in person.roles):
-            person.roles.append(PersonRole(role_key="owner", is_active=True))
-        db.add(PropertyOwner(property_id=item.id, person_id=owner.person_id, ownership_percent=owner.ownership_percent))
+        _ensure_owner_role(person)
+        item.owners.append(PropertyOwner(person_id=owner.person_id, ownership_percent=owner.ownership_percent))
 
     ip_address, user_agent = _request_metadata(request)
     write_audit(
@@ -254,6 +332,83 @@ def create_property(
         entity_type="property",
         entity_id=str(item.id),
         after_data={"code": f"{item.internal_number:06d}", "status": item.status, "property_type": item.property_type},
+        ip_address=ip_address,
+        user_agent=user_agent,
+    )
+    db.commit()
+    item = db.scalar(
+        select(Property).options(selectinload(Property.owners).selectinload(PropertyOwner.person)).where(Property.id == item.id)
+    )
+    return _property_response(item)
+
+
+@router.put("/properties/{property_id}", response_model=PropertyResponse)
+def update_property(
+    property_id: UUID,
+    payload: PropertyUpdate,
+    request: Request,
+    context: UserContext = Depends(require_permission("properties.edit")),
+    db: Session = Depends(get_db),
+) -> PropertyResponse:
+    item = db.scalar(
+        select(Property).options(selectinload(Property.owners).selectinload(PropertyOwner.person)).where(
+            Property.id == property_id,
+            Property.organization_id == context.user.organization_id,
+        )
+    )
+    if item is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Imóvel não encontrado.")
+    if item.status == "leased" and payload.status != "leased":
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="O status Locado é controlado pelo ciclo do contrato e não pode ser removido manualmente.")
+    if item.status != "leased" and payload.status == "leased":
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="O imóvel só pode ficar Locado após a conclusão do fluxo contratual.")
+
+    found_map = _property_owner_map(db, context.user.organization_id, payload.owners)
+    before = {
+        "status": item.status,
+        "property_type": item.property_type,
+        "address": dict(item.address or {}),
+        "owners": [{"person_id": str(owner.person_id), "ownership_percent": float(owner.ownership_percent)} for owner in item.owners],
+    }
+
+    item.property_type = payload.property_type
+    item.purpose = payload.purpose
+    item.status = payload.status
+    item.address = payload.address.model_dump()
+    item.rent_amount = payload.rent_amount
+    item.condo_amount = payload.condo_amount
+    item.iptu_amount = payload.iptu_amount
+    item.area_m2 = payload.area_m2
+    item.bedrooms = payload.bedrooms
+    item.suites = payload.suites
+    item.bathrooms = payload.bathrooms
+    item.parking_spaces = payload.parking_spaces
+    item.furnished = payload.furnished
+    item.pets_allowed = payload.pets_allowed
+    item.public_title = (payload.public_title or "").strip() or None
+
+    item.owners.clear()
+    db.flush()
+    for owner in payload.owners:
+        person = found_map[owner.person_id]
+        _ensure_owner_role(person)
+        item.owners.append(PropertyOwner(person_id=owner.person_id, ownership_percent=owner.ownership_percent))
+
+    ip_address, user_agent = _request_metadata(request)
+    write_audit(
+        db,
+        context=context,
+        action="properties.updated",
+        module="properties",
+        entity_type="property",
+        entity_id=str(item.id),
+        before_data=before,
+        after_data={
+            "status": item.status,
+            "property_type": item.property_type,
+            "address": dict(item.address or {}),
+            "owners": [{"person_id": str(owner.person_id), "ownership_percent": float(owner.ownership_percent)} for owner in item.owners],
+        },
         ip_address=ip_address,
         user_agent=user_agent,
     )

@@ -64,7 +64,7 @@
   min-height: 82px;
   padding: 13px 15px;
   display: grid;
-  grid-template-columns: 82px minmax(260px, 1fr) 150px 150px;
+  grid-template-columns: 82px minmax(260px, 1fr) 150px 150px 34px;
   align-items: center;
   gap: 15px;
 }
@@ -81,11 +81,114 @@
 .property-values strong { margin-top: 4px; font-size: 12px; }
 .property-status { display: grid; justify-items: start; gap: 7px; }
 
-.person-row { min-height: 68px; padding: 12px 15px; display: grid; grid-template-columns: auto minmax(260px, 1fr) minmax(190px, auto); align-items: center; gap: 12px; }
+.person-row { min-height: 68px; padding: 12px 15px; display: grid; grid-template-columns: auto minmax(260px, 1fr) minmax(190px, auto) 34px; align-items: center; gap: 12px; }
 .person-main strong, .person-main span { display: block; }
 .person-main strong { font-size: 12px; }
 .person-main span { margin-top: 4px; color: var(--text-muted); font-size: 10px; }
 .person-roles { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 5px; color: var(--text-muted); font-size: 9px; }
+.portfolio-edit-button {
+  width: 32px;
+  height: 32px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: border-color .16s ease, background .16s ease, color .16s ease;
+}
+.portfolio-edit-button:hover { border-color: var(--border); background: var(--surface-muted); color: var(--brand-primary); }
+
+.portfolio-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1300;
+  padding: 22px;
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, #0f172a 38%, transparent);
+  backdrop-filter: blur(2px);
+}
+.portfolio-modal {
+  width: min(920px, 100%);
+  max-height: min(90vh, 880px);
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 14px;
+  box-shadow: 0 24px 70px rgba(15, 23, 42, .18);
+}
+.portfolio-property-modal { width: min(1040px, 100%); }
+.portfolio-modal-header {
+  padding: 18px 20px 15px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  background: var(--surface);
+}
+.portfolio-modal-header h2 { margin: 4px 0 0; font-size: 19px; }
+.portfolio-modal-header p { margin: 5px 0 0; color: var(--text-muted); font-size: 10px; line-height: 1.5; }
+.portfolio-modal-close {
+  width: 32px;
+  height: 32px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.portfolio-modal-close:hover { background: var(--surface-muted); color: var(--text); }
+.portfolio-modal-body { padding: 18px 20px 6px; overflow: auto; }
+.portfolio-modal-body .form-alert { margin-bottom: 14px; }
+.portfolio-modal-actions { margin: 0; padding: 13px 20px; background: var(--surface); }
+.portfolio-role-grid { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 6px; }
+.portfolio-role-option {
+  min-height: 34px;
+  padding: 0 10px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: 10px;
+  cursor: pointer;
+}
+.portfolio-role-option:has(input:checked) { border-color: var(--brand-primary); background: var(--brand-primary-soft); color: var(--brand-primary); }
+.portfolio-role-option input { accent-color: var(--brand-primary); }
+.portfolio-checkbox-row { min-height: 38px; display: flex; align-items: center; flex-wrap: wrap; gap: 14px; }
+.portfolio-checkbox-row label { display: flex; align-items: center; gap: 6px; color: var(--text-muted); font-size: 10px; }
+.portfolio-checkbox-row input { accent-color: var(--brand-primary); }
+.portfolio-section-heading { min-height: 36px; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.portfolio-section-heading > div span, .portfolio-section-heading > div small { display: block; }
+.portfolio-section-heading > div span { font-size: 10px; font-weight: 700; color: var(--text); }
+.portfolio-section-heading > div small { margin-top: 2px; color: var(--text-muted); font-size: 8.5px; }
+.portfolio-owner-list { margin-top: 8px; display: grid; gap: 6px; }
+.portfolio-owner-row { display: grid; grid-template-columns: minmax(220px, 1fr) 130px 32px; gap: 7px; align-items: center; }
+.portfolio-owner-row select, .portfolio-owner-row label {
+  min-height: 36px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+}
+.portfolio-owner-row select { padding: 0 9px; color: var(--text); font: inherit; font-size: 10px; }
+.portfolio-owner-row label { padding: 0 8px; display: flex; align-items: center; gap: 4px; }
+.portfolio-owner-row label input { width: 100%; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--text); font: inherit; font-size: 10px; text-align: right; }
+.portfolio-owner-row label span { color: var(--text-muted); font-size: 9px; }
+.portfolio-owner-remove { width: 32px; height: 32px; display: grid; place-items: center; border: 0; border-radius: 8px; background: transparent; color: var(--text-muted); cursor: pointer; }
+.portfolio-owner-remove:hover { background: var(--danger-soft); color: var(--danger); }
+.portfolio-owner-empty { margin-top: 8px; min-height: 42px; padding: 0 11px; display: flex; align-items: center; border: 1px dashed var(--border); border-radius: 8px; color: var(--text-muted); font-size: 9px; }
+.portfolio-owner-total { margin-top: 7px; display: flex; justify-content: flex-end; gap: 7px; color: var(--text-muted); font-size: 9px; }
+.portfolio-owner-total strong { color: var(--text); }
+.portfolio-owner-total.invalid, .portfolio-owner-total.invalid strong { color: var(--danger); }
 
 .portfolio-empty { min-height: 180px; padding: 26px; display: grid; place-items: center; align-content: center; gap: 8px; text-align: center; color: var(--text-muted); }
 .portfolio-empty svg { color: var(--brand-primary); }
@@ -126,8 +229,9 @@
 .index-row .button { min-height: 30px; padding: 0 9px; font-size: 9px; }
 
 @media (max-width: 1100px) {
-  .property-row { grid-template-columns: 78px minmax(240px, 1fr) 130px; }
-  .property-status { grid-column: 2 / -1; grid-row: 2; display: flex; align-items: center; }
+  .property-row { grid-template-columns: 78px minmax(240px, 1fr) 130px 34px; }
+  .property-status { grid-column: 2 / 4; grid-row: 2; display: flex; align-items: center; }
+  .property-row .portfolio-edit-button { grid-column: 4; grid-row: 1 / span 2; }
   .capture-row { grid-template-columns: 10px minmax(260px, 1fr) 130px; }
   .capture-stage { grid-column: 2 / -1; display: flex; gap: 10px; align-items: center; }
 }
@@ -139,8 +243,15 @@
   .field-span-2, .field-span-3 { grid-column: auto; }
   .property-row, .capture-row, .person-row { grid-template-columns: 1fr; gap: 8px; }
   .property-code { grid-template-columns: 25px auto; width: fit-content; }
-  .property-status, .capture-stage { grid-column: auto; grid-row: auto; }
+  .property-status, .capture-stage, .property-row .portfolio-edit-button { grid-column: auto; grid-row: auto; }
   .person-roles { justify-content: flex-start; }
+  .portfolio-edit-button { justify-self: start; }
   .capture-status-rail { display: none; }
   .capture-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .portfolio-modal-backdrop { padding: 10px; align-items: end; }
+  .portfolio-modal { width: 100%; max-height: 94vh; border-radius: 14px 14px 10px 10px; }
+  .portfolio-modal-header { padding: 15px 15px 12px; }
+  .portfolio-modal-body { padding: 14px 15px 4px; }
+  .portfolio-modal-actions { padding: 12px 15px; }
+  .portfolio-owner-row { grid-template-columns: 1fr 105px 32px; }
 }

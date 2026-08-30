@@ -35,6 +35,10 @@ class PersonCreate(BaseModel):
     role_keys: list[PersonRoleKey] = Field(default_factory=list, max_length=6)
 
 
+class PersonUpdate(PersonCreate):
+    pass
+
+
 class PersonResponse(BaseModel):
     id: UUID
     person_type: PersonType
@@ -80,6 +84,27 @@ class PropertyCreate(BaseModel):
     public_title: str | None = Field(default=None, max_length=180)
     public_description: str | None = Field(default=None, max_length=5000)
     publication_enabled: bool = False
+    owners: list[PropertyOwnerPayload] = Field(default_factory=list, max_length=20)
+
+
+class PropertyUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    property_type: PropertyType
+    purpose: Literal["rent", "sale"] = "rent"
+    status: PropertyStatus
+    address: AddressPayload
+    rent_amount: Decimal | None = Field(default=None, ge=0)
+    condo_amount: Decimal | None = Field(default=None, ge=0)
+    iptu_amount: Decimal | None = Field(default=None, ge=0)
+    area_m2: Decimal | None = Field(default=None, ge=0)
+    bedrooms: int = Field(default=0, ge=0, le=30)
+    suites: int = Field(default=0, ge=0, le=30)
+    bathrooms: int = Field(default=0, ge=0, le=30)
+    parking_spaces: int = Field(default=0, ge=0, le=30)
+    furnished: bool = False
+    pets_allowed: bool = False
+    public_title: str | None = Field(default=None, max_length=180)
     owners: list[PropertyOwnerPayload] = Field(default_factory=list, max_length=20)
 
 
