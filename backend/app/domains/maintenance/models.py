@@ -29,9 +29,13 @@ class MaintenanceRequest(Base):
     responsibility: Mapped[str] = mapped_column(String(20), nullable=False, default="pending", index=True)
     approval_required: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
+    # Campos legados mantidos para compatibilidade. No fluxo novo, valores só nascem dos orçamentos.
     estimated_cost: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
     approved_cost: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
     actual_cost: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
+
+    # Serviços técnicos definidos pela imobiliária após a abertura do chamado.
+    services: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, default=list, nullable=False)
     selected_quote_id: Mapped[str | None] = mapped_column(String(36))
     quotes: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, default=list, nullable=False)
     history: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, default=list, nullable=False)

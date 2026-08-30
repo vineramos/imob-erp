@@ -1,8 +1,6 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import App from './App'
-import { MaintenanceMetricFilters } from './modules/maintenance/MaintenanceMetricFilters'
-import { MaintenancePartnerModalFeedback } from './modules/maintenance/MaintenancePartnerModalFeedback'
 import { ThemeProvider } from './theme/ThemeProvider'
 import './styles.css'
 import './settings.css'
@@ -17,8 +15,9 @@ import './public-site.css'
 import './metric-cards.css'
 import './inspections.css'
 import './modules/finance/finance.css'
+import './modules/maintenance/maintenance-v2-polish.css'
 import './modules/properties/property-list-actions.css'
 
 createRoot(document.getElementById('root')!).render(
-  <StrictMode><ThemeProvider><><App /><MaintenanceMetricFilters /><MaintenancePartnerModalFeedback /></></ThemeProvider></StrictMode>,
+  <StrictMode><ThemeProvider><App /></ThemeProvider></StrictMode>,
 )

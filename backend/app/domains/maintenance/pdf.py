@@ -40,7 +40,7 @@ def _address(value: dict[str, Any]) -> str:
 
 
 def build_maintenance_quote_pdf(*, maintenance: Any, property_item: Any, quote: dict[str, Any], logo_bytes: bytes | None = None) -> bytes:
-    """Gera orçamento com a identidade congelada do parceiro terceirizado."""
+    """Orçamento do parceiro. Valores exibidos são somente os efetivamente cobrados pelo parceiro."""
     partner = dict(quote.get("partner_snapshot") or {})
     if not partner:
         raise ValueError("Orçamento não possui snapshot de parceiro terceirizado.")
@@ -48,8 +48,14 @@ def build_maintenance_quote_pdf(*, maintenance: Any, property_item: Any, quote: 
     buffer = BytesIO()
     code = str(quote.get("quote_code") or f"MAN-{maintenance.internal_number:06d}-ORC")
     doc = SimpleDocTemplate(
-        buffer, pagesize=A4, leftMargin=17 * mm, rightMargin=17 * mm, topMargin=15 * mm, bottomMargin=15 * mm,
-        title=f"Orçamento {code}", author=str(partner.get("name") or "Parceiro de manutenção"),
+        buffer,
+        pagesize=A4,
+        leftMargin=17 * mm,
+        rightMargin=17 * mm,
+        topMargin=15 * mm,
+        bottomMargin=15 * mm,
+        title=f"Orçamento {code}",
+        author=str(partner.get("name") or "Parceiro de manutenção"),
     )
     styles = getSampleStyleSheet()
     title = ParagraphStyle("QuoteTitle", parent=styles["Title"], fontSize=14, leading=17, textColor=colors.HexColor("#102a56"), alignment=TA_RIGHT)
@@ -77,35 +83,64 @@ def build_maintenance_quote_pdf(*, maintenance: Any, property_item: Any, quote: 
     else:
         logo_flowable = Paragraph("", body)
 
-    header = Table([[logo_flowable, Paragraph("<br/>".join(line for line in issuer_lines if line), body), Paragraph(f"<b>ORÇAMENTO</b><br/>{escape(code)}<br/><font size='7'>Emitido em {_date(quote.get('created_at'))}</font>", title)]], colWidths=[38 * mm, 83 * mm, 55 * mm])
+    header = Table(
+        [[logo_flowable, Paragraph("<br/>".join(line for line in issuer_lines if line), body), Paragraph(f"<b>ORÇAMENTO</b><br/>{escape(code)}<br/><font size='7'>Emitido em {_date(quote.get('created_at'))}</font>", title)]],
+        colWidths=[38 * mm, 83 * mm, 55 * mm],
+    )
     header.setStyle(TableStyle([
-        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"), ("ALIGN", (2, 0), (2, 0), "RIGHT"),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 9), ("LINEBELOW", (0, 0), (-1, 0), 0.8, colors.HexColor("#d9e1ec")),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("ALIGN", (2, 0), (2, 0), "RIGHT"),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 9),
+        ("LINEBELOW", (0, 0), (-1, 0), 0.8, colors.HexColor("#d9e1ec")),
     ]))
 
     prop_address = dict(getattr(property_item, "address", {}) or {})
     property_title = getattr(property_item, "public_title", None) or f"Imóvel {getattr(property_item, 'internal_number', 0):06d}"
     story = [header, Spacer(1, 6), Paragraph("Dados do serviço", heading)]
     service_rows = [
-        ["Chamado", f"MAN-{maintenance.internal_number:06d}"], ["Imóvel", property_title],
-        ["Endereço", _address(prop_address)], ["Serviço", str(getattr(maintenance, "title", "") or "Manutenção")],
+        ["Chamado", f"MAN-{maintenance.internal_number:06d}"],
+        ["Imóvel", property_title],
+        ["Endereço", _address(prop_address)],
+        ["Solicitação", str(getattr(maintenance, "title", "") or "Manutenção")],
     ]
     service_table = Table(service_rows, colWidths=[34 * mm, 142 * mm])
     service_table.setStyle(TableStyle([
-        ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"), ("FONTSIZE", (0, 0), (-1, -1), 8.5),
-        ("TEXTCOLOR", (0, 0), (0, -1), colors.HexColor("#475467")), ("GRID", (0, 0), (-1, -1), 0.35, colors.HexColor("#d9e1ec")),
-        ("VALIGN", (0, 0), (-1, -1), "TOP"), ("PADDING", (0, 0), (-1, -1), 5),
+        ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
+        ("FONTSIZE", (0, 0), (-1, -1), 8.5),
+        ("TEXTCOLOR", (0, 0), (0, -1), colors.HexColor("#475467")),
+        ("GRID", (0, 0), (-1, -1), 0.35, colors.HexColor("#d9e1ec")),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("PADDING", (0, 0), (-1, -1), 5),
     ]))
     story.append(service_table)
-    story.extend([Paragraph("Escopo / descrição", heading), Paragraph(escape(str(quote.get("description") or getattr(maintenance, "description", "") or "Serviço conforme alinhamento com a imobiliária.")), body)])
 
-    value_table = Table([["Descrição", "Valor"], [str(quote.get("description") or "Serviço de manutenção"), _money(quote.get("amount"))]], colWidths=[137 * mm, 39 * mm], repeatRows=1)
+    items = [dict(item) for item in list(quote.get("items") or [])]
+    if items:
+        rows: list[list[Any]] = [["Serviço", "Qtd.", "Valor"]]
+        for item in items:
+            title_text = escape(str(item.get("title") or "Serviço"))
+            description = str(item.get("description") or "").strip()
+            if description:
+                title_text += f"<br/><font size='7' color='#667085'>{escape(description)}</font>"
+            quantity = f"{item.get('quantity') or '1'} {item.get('unit') or ''}".strip()
+            rows.append([Paragraph(title_text, body), quantity, _money(item.get("partner_cost"))])
+        value_table = Table(rows, colWidths=[116 * mm, 24 * mm, 36 * mm], repeatRows=1)
+        total_value = quote.get("partner_cost_total") or quote.get("amount")
+    else:
+        rows = [["Descrição", "Valor"], [str(quote.get("description") or "Serviço de manutenção"), _money(quote.get("amount"))]]
+        value_table = Table(rows, colWidths=[137 * mm, 39 * mm], repeatRows=1)
+        total_value = quote.get("amount")
+
     value_table.setStyle(TableStyle([
-        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#f2f5f9")), ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-        ("FONTSIZE", (0, 0), (-1, -1), 8.5), ("GRID", (0, 0), (-1, -1), 0.35, colors.HexColor("#d9e1ec")),
-        ("ALIGN", (1, 0), (1, -1), "RIGHT"), ("VALIGN", (0, 0), (-1, -1), "TOP"), ("PADDING", (0, 0), (-1, -1), 6),
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#f2f5f9")),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("FONTSIZE", (0, 0), (-1, -1), 8.5),
+        ("GRID", (0, 0), (-1, -1), 0.35, colors.HexColor("#d9e1ec")),
+        ("ALIGN", (-1, 0), (-1, -1), "RIGHT"),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("PADDING", (0, 0), (-1, -1), 6),
     ]))
-    story.extend([Paragraph("Valores", heading), value_table, Spacer(1, 6), Paragraph(f"<b>TOTAL: {_money(quote.get('amount'))}</b>", total_style)])
+    story.extend([Paragraph("Serviços e valores", heading), value_table, Spacer(1, 6), Paragraph(f"<b>TOTAL: {_money(total_value)}</b>", total_style)])
 
     details: list[str] = []
     if quote.get("valid_until"):

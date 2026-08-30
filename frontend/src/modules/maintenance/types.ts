@@ -1,0 +1,25 @@
+export type Property = { id:string; code:string; public_title:string|null; address:Record<string,string>; status:string }
+export type Person = { id:string; name:string; role_keys:string[] }
+export type Lease = { id:string; code:string; property_id:string; status:string; tenants:Array<{name:string}> }
+export type Partner = { id:string; internal_number:number; code:string; name:string; legal_name:string|null; document_number:string|null; contact_name:string|null; email:string|null; phone:string|null; whatsapp:string|null; address:Record<string,string>; specialties:string[]; pix_key:string|null; bank_details:Record<string,string>; notes:string|null; is_active:boolean; has_logo:boolean; logo_url:string|null; created_at:string; updated_at:string }
+export type ServiceItem = { id:string; title:string; description:string|null; quantity:string; unit:string; created_at:string; created_by_user_id?:string|null }
+export type QuoteLine = { service_id:string; title:string; description:string|null; quantity:string; unit:string; partner_cost:string; client_price:string; margin:string }
+export type Quote = { id:string; quote_code:string; partner_id:string|null; supplier_name:string; partner_cost_total?:string; client_price_total?:string; margin_total?:string; amount:string; items?:QuoteLine[]; valid_until:string|null; payment_terms:string|null; notes:string|null; status:string; created_at:string }
+export type HistoryItem = { event:string; detail:string|null; at:string; user_id:string }
+export type Maintenance = { id:string; code:string; property_id:string; property_code:string; property_title:string; property_address:Record<string,string>; lease_contract_id:string|null; lease_code:string|null; requester_person_id:string|null; requester_name:string|null; title:string; category:string; priority:string; status:string; description:string; responsibility:string; services:ServiceItem[]; selected_quote_id:string|null; quotes:Quote[]; history:HistoryItem[]; partner_cost_total:number|null; client_charge_total:number|null; margin_total:number|null; finance_status:string|null; reported_at:string; scheduled_at:string|null; started_at:string|null; completed_at:string|null; approved_at:string|null; cancelled_at:string|null; cancellation_reason:string|null; notes:string|null; created_at:string; updated_at:string }
+export type MaintenanceForm = { property_id:string; lease_contract_id:string; requester_person_id:string; title:string; category:string; priority:string; description:string; notes:string }
+export type PartnerForm = { name:string; legal_name:string; document_number:string; contact_name:string; email:string; phone:string; whatsapp:string; street:string; number:string; complement:string; neighborhood:string; city:string; state:string; postal_code:string; specialties:string; pix_key:string; bank_name:string; agency:string; account:string; notes:string; is_active:boolean }
+
+export const categories:Record<string,string>={general:'Geral',electrical:'Elétrica',plumbing:'Hidráulica',structural:'Estrutural',painting:'Pintura',appliance:'Equipamento',condominium:'Condomínio',other:'Outro'}
+export const priorities:Record<string,string>={low:'Baixa',normal:'Normal',high:'Alta',urgent:'Urgente'}
+export const responsibilities:Record<string,string>={pending:'A definir',owner:'Proprietário',tenant:'Locatário',agency:'Imobiliária'}
+export const statuses:Record<string,string>={requested:'Solicitado',triage:'Triagem',awaiting_quote:'Aguardando orçamento',awaiting_approval:'Aguardando aprovação',approved:'Aprovado',scheduled:'Agendado',in_progress:'Em execução',completed:'Concluído',cancelled:'Cancelado'}
+export const lockedStatuses=new Set(['approved','scheduled','in_progress','completed','cancelled'])
+export const blankMaintenance=():MaintenanceForm=>({property_id:'',lease_contract_id:'',requester_person_id:'',title:'',category:'general',priority:'normal',description:'',notes:''})
+export const blankPartner=():PartnerForm=>({name:'',legal_name:'',document_number:'',contact_name:'',email:'',phone:'',whatsapp:'',street:'',number:'',complement:'',neighborhood:'',city:'',state:'',postal_code:'',specialties:'',pix_key:'',bank_name:'',agency:'',account:'',notes:'',is_active:true})
+export const money=(value:number|string|null|undefined)=>value==null||value===''?'—':Number(value).toLocaleString('pt-BR',{style:'currency',currency:'BRL'})
+export const dateTime=(value:string|null|undefined)=>value?new Date(value).toLocaleString('pt-BR'):'—'
+export const shortDate=(value:string|null|undefined)=>value?new Date(`${value.slice(0,10)}T12:00:00`).toLocaleDateString('pt-BR'):'—'
+export const localInput=(value:string|null|undefined)=>{if(!value)return '';const d=new Date(value);return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,16)}
+export const address=(a:Record<string,string>)=>[a.street,a.number,a.neighborhood,a.city].filter(Boolean).join(', ')||'Endereço não informado'
+export const statusClass=(s:string)=>s==='completed'||s==='approved'?'success':s==='cancelled'?'danger':['awaiting_approval','awaiting_quote','scheduled'].includes(s)?'warning':s==='in_progress'?'info':'neutral'
