@@ -31,17 +31,54 @@ class MaintenanceUpdate(MaintenanceCreate):
     pass
 
 
+class MaintenancePartnerBase(BaseModel):
+    name: str = Field(min_length=2, max_length=180)
+    legal_name: str | None = Field(default=None, max_length=220)
+    document_number: str | None = Field(default=None, max_length=24)
+    contact_name: str | None = Field(default=None, max_length=180)
+    email: str | None = Field(default=None, max_length=180)
+    phone: str | None = Field(default=None, max_length=40)
+    whatsapp: str | None = Field(default=None, max_length=40)
+    address: dict[str, str] = Field(default_factory=dict)
+    specialties: list[str] = Field(default_factory=list, max_length=30)
+    pix_key: str | None = Field(default=None, max_length=180)
+    bank_details: dict[str, str] = Field(default_factory=dict)
+    notes: str | None = Field(default=None, max_length=5000)
+    is_active: bool = True
+
+
+class MaintenancePartnerCreate(MaintenancePartnerBase):
+    pass
+
+
+class MaintenancePartnerUpdate(MaintenancePartnerBase):
+    pass
+
+
+class MaintenancePartnerResponse(MaintenancePartnerBase):
+    id: UUID
+    internal_number: int
+    code: str
+    has_logo: bool
+    logo_url: str | None
+    created_at: datetime
+    updated_at: datetime
+
+
 class MaintenanceQuoteCreate(BaseModel):
+    partner_id: UUID | None = None
     supplier_person_id: UUID | None = None
     supplier_name: str | None = Field(default=None, max_length=180)
     amount: Decimal = Field(gt=0)
-    description: str | None = Field(default=None, max_length=2000)
+    description: str | None = Field(default=None, max_length=3000)
     valid_until: date | None = None
+    payment_terms: str | None = Field(default=None, max_length=1000)
+    notes: str | None = Field(default=None, max_length=2000)
 
     @model_validator(mode="after")
     def supplier_required(self):
-        if not self.supplier_person_id and not (self.supplier_name or "").strip():
-            raise ValueError("Informe o fornecedor cadastrado ou o nome do fornecedor.")
+        if not self.partner_id and not self.supplier_person_id and not (self.supplier_name or "").strip():
+            raise ValueError("Informe o parceiro cadastrado, fornecedor cadastrado ou nome do fornecedor.")
         return self
 
 

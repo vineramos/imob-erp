@@ -3,7 +3,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Identity, Numeric, String, Text, func
+from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Identity, Numeric, String, Text, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -48,5 +48,36 @@ class MaintenanceRequest(Base):
     created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("app_users.id"))
     approved_by_user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("app_users.id"))
     completed_by_user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("app_users.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+
+class MaintenancePartner(Base):
+    __tablename__ = "maintenance_partners"
+    __table_args__ = (
+        UniqueConstraint("organization_id", "document_number", name="uq_maintenance_partners_org_document"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    internal_number: Mapped[int] = mapped_column(BigInteger, Identity(), nullable=False, unique=True)
+    organization_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("organizations.id"), nullable=False, index=True)
+
+    name: Mapped[str] = mapped_column(String(180), nullable=False, index=True)
+    legal_name: Mapped[str | None] = mapped_column(String(220))
+    document_number: Mapped[str | None] = mapped_column(String(24), index=True)
+    contact_name: Mapped[str | None] = mapped_column(String(180))
+    email: Mapped[str | None] = mapped_column(String(180))
+    phone: Mapped[str | None] = mapped_column(String(40))
+    whatsapp: Mapped[str | None] = mapped_column(String(40))
+    address: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, nullable=False)
+    specialties: Mapped[list[str]] = mapped_column(JSONB, default=list, nullable=False)
+    pix_key: Mapped[str | None] = mapped_column(String(180))
+    bank_details: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, nullable=False)
+    logo_storage_reference: Mapped[str | None] = mapped_column(String(700))
+    logo_content_type: Mapped[str | None] = mapped_column(String(80))
+    notes: Mapped[str | None] = mapped_column(Text)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, index=True)
+
+    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("app_users.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
