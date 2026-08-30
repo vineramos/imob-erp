@@ -15,6 +15,7 @@ import './public-site.css'
 import './metric-cards.css'
 import './inspections.css'
 import './modules/finance/finance.css'
+import './modules/properties/property-list-actions.css'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode><ThemeProvider><App /></ThemeProvider></StrictMode>,
