@@ -40,7 +40,7 @@ def _address(value: dict[str, Any]) -> str:
 
 
 def build_maintenance_quote_pdf(*, maintenance: Any, property_item: Any, quote: dict[str, Any], logo_bytes: bytes | None = None) -> bytes:
-    """Orçamento do parceiro. Valores exibidos são somente os efetivamente cobrados pelo parceiro."""
+    """Orçamento comercial ao cliente usando a identidade visual do parceiro executor."""
     partner = dict(quote.get("partner_snapshot") or {})
     if not partner:
         raise ValueError("Orçamento não possui snapshot de parceiro terceirizado.")
@@ -123,13 +123,14 @@ def build_maintenance_quote_pdf(*, maintenance: Any, property_item: Any, quote: 
             if description:
                 title_text += f"<br/><font size='7' color='#667085'>{escape(description)}</font>"
             quantity = f"{item.get('quantity') or '1'} {item.get('unit') or ''}".strip()
-            rows.append([Paragraph(title_text, body), quantity, _money(item.get("partner_cost"))])
+            commercial_value = item.get("client_price") if item.get("client_price") is not None else item.get("partner_cost")
+            rows.append([Paragraph(title_text, body), quantity, _money(commercial_value)])
         value_table = Table(rows, colWidths=[116 * mm, 24 * mm, 36 * mm], repeatRows=1)
-        total_value = quote.get("partner_cost_total") or quote.get("amount")
+        total_value = quote.get("client_price_total") if quote.get("client_price_total") is not None else (quote.get("partner_cost_total") or quote.get("amount"))
     else:
-        rows = [["Descrição", "Valor"], [str(quote.get("description") or "Serviço de manutenção"), _money(quote.get("amount"))]]
+        total_value = quote.get("client_price_total") if quote.get("client_price_total") is not None else quote.get("amount")
+        rows = [["Descrição", "Valor"], [str(quote.get("description") or "Serviço de manutenção"), _money(total_value)]]
         value_table = Table(rows, colWidths=[137 * mm, 39 * mm], repeatRows=1)
-        total_value = quote.get("amount")
 
     value_table.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#f2f5f9")),
