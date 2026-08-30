@@ -1,6 +1,6 @@
 """maintenance services, dual pricing and finance integration
 
-Revision ID: 0014_maintenance_services_finance
+Revision ID: 0014_maint_services_finance
 Revises: 0013_maintenance_partners
 Create Date: 2026-08-30
 """
@@ -11,7 +11,7 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
 
-revision: str = "0014_maintenance_services_finance"
+revision: str = "0014_maint_services_finance"
 down_revision: str | None = "0013_maintenance_partners"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
