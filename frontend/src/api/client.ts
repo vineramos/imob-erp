@@ -40,17 +40,20 @@ async function parseResponse<T>(response: Response): Promise<T> {
 }
 
 function apiUrl(path: string): string { return `${API_URL}${path.startsWith('/') ? path : `/${path}`}` }
+function applyBodyContentType(headers: Headers, body: BodyInit | null | undefined) {
+  if (body && !(body instanceof FormData) && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json')
+}
 
 export async function publicApiRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers)
-  if (init.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json')
+  applyBodyContentType(headers, init.body)
   return parseResponse<T>(await fetch(apiUrl(path), { ...init, headers }))
 }
 
 export async function apiRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = await getAccessToken()
   const headers = new Headers(init.headers)
-  if (init.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json')
+  applyBodyContentType(headers, init.body)
   if (token) headers.set('Authorization', `Bearer ${token}`)
   return parseResponse<T>(await fetch(apiUrl(path), { ...init, headers }))
 }
