@@ -24,7 +24,7 @@ const roleOptions = [
 ] as const
 
 type PersonRoleKey = PersonCreate['role_keys'][number]
-type Props = { permissions: string[] }
+type Props = { permissions: string[]; initialTab?: 'properties' | 'people' }
 
 function money(value: number | null) {
   if (value == null) return '—'
@@ -39,11 +39,11 @@ function roleLabel(role: string) {
   return roleOptions.find(([key]) => key === role)?.[1] ?? role
 }
 
-export function PropertiesPage({ permissions }: Props) {
+export function PropertiesPage({ permissions, initialTab = 'properties' }: Props) {
   const granted = useMemo(() => new Set(permissions), [permissions])
   const canCreate = granted.has('properties.create')
   const canEdit = granted.has('properties.edit')
-  const [tab, setTab] = useState<'properties' | 'people'>('properties')
+  const [tab, setTab] = useState<'properties' | 'people'>(initialTab)
   const [items, setItems] = useState<Property[]>([])
   const [people, setPeople] = useState<Person[]>([])
   const [query, setQuery] = useState('')
@@ -75,6 +75,7 @@ export function PropertiesPage({ permissions }: Props) {
   }, [])
 
   useEffect(() => { void load() }, [load])
+  useEffect(() => { setTab(initialTab); setQuery('') }, [initialTab])
 
   useEffect(() => {
     if (!showPersonForm && !showPropertyForm) return
