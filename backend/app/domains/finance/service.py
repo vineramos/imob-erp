@@ -99,14 +99,126 @@ def administration_terms(db: Session, organization_id: UUID, property_id: UUID) 
     }
 
 
-def charge_items(lease: LeaseContract, property_item: Property, terms: dict) -> list[dict]:
-    items: list[dict] = [
-        {"key": "rent", "label": "Aluguel", "amount": str(money(lease.rent_amount)), "beneficiary": "owner"}
+def configured_monthly_charge_rules(lease: LeaseContract) -> list[dict]:
+    rules = dict(lease.rules_snapshot or {})
+    raw = rules.get("monthly_charges") or []
+    return [dict(item) for item in raw if isinstance(item, dict)]
+
+
+def suggested_monthly_charge_rules(property_item: Property, terms: dict) -> list[dict]:
+    iptu = money(property_item.iptu_amount)
+    condo = money(property_item.condo_amount)
+    return [
+        {
+            "key": "iptu",
+            "kind": "iptu",
+            "label": "IPTU",
+            "amount": str(iptu),
+            "active": iptu > 0,
+            "payer": "tenant",
+            "beneficiary": "owner",
+            "start_date": None,
+            "end_date": None,
+        },
+        {
+            "key": "condo",
+            "kind": "condo",
+            "label": "Condomínio",
+            "amount": str(condo),
+            "active": condo > 0,
+            "payer": "tenant",
+            "beneficiary": "third_party",
+            "start_date": None,
+            "end_date": None,
+        },
+        {
+            "key": "guarantee_insurance",
+            "kind": "guarantee_insurance",
+            "label": "Seguro fiança",
+            "amount": "0.00",
+            "active": False,
+            "payer": "tenant",
+            "beneficiary": "third_party",
+            "start_date": None,
+            "end_date": None,
+        },
+        {
+            "key": "fire_insurance",
+            "kind": "fire_insurance",
+            "label": "Seguro incêndio",
+            "amount": "0.00",
+            "active": False,
+            "payer": "tenant",
+            "beneficiary": "third_party",
+            "start_date": None,
+            "end_date": None,
+        },
     ]
+
+
+def _parse_date(value) -> date | None:
+    if not value:
+        return None
+    if isinstance(value, date):
+        return value
+    try:
+        return date.fromisoformat(str(value)[:10])
+    except ValueError:
+        return None
+
+
+def _rule_applies(rule: dict, competence: date) -> bool:
+    if not bool(rule.get("active", True)) or money(rule.get("amount")) <= 0:
+        return False
+    start = _parse_date(rule.get("start_date"))
+    end = _parse_date(rule.get("end_date"))
+    period_start = month_start(competence)
+    period_end = month_end(competence)
+    if start and start > period_end:
+        return False
+    if end and end < period_start:
+        return False
+    return True
+
+
+def charge_items(lease: LeaseContract, property_item: Property, terms: dict, competence: date) -> list[dict]:
+    items: list[dict] = [
+        {
+            "key": "rent",
+            "kind": "rent",
+            "label": "Aluguel",
+            "amount": str(money(lease.rent_amount)),
+            "payer": "tenant",
+            "beneficiary": "owner",
+            "source": "lease_contract",
+        }
+    ]
+    configured = configured_monthly_charge_rules(lease)
+    if configured:
+        for rule in configured:
+            if rule.get("payer", "tenant") != "tenant" or not _rule_applies(rule, competence):
+                continue
+            beneficiary = str(rule.get("beneficiary") or "third_party")
+            if beneficiary not in {"owner", "agency", "third_party"}:
+                beneficiary = "third_party"
+            items.append(
+                {
+                    "key": str(rule.get("key") or "other"),
+                    "kind": str(rule.get("kind") or "other"),
+                    "label": str(rule.get("label") or "Encargo mensal"),
+                    "amount": str(money(rule.get("amount"))),
+                    "payer": "tenant",
+                    "beneficiary": beneficiary,
+                    "source": "lease_monthly_rule",
+                }
+            )
+        return items
+
+    # Compatibilidade com contratos assinados antes da composição mensal versionada.
     if terms.get("iptu_operational_payer") == "tenant" and property_item.iptu_amount:
-        items.append({"key": "iptu", "label": "IPTU", "amount": str(money(property_item.iptu_amount)), "beneficiary": "owner"})
+        items.append({"key": "iptu", "kind": "iptu", "label": "IPTU", "amount": str(money(property_item.iptu_amount)), "payer": "tenant", "beneficiary": "owner", "source": "legacy_property"})
     if terms.get("condo_operational_payer") == "agency" and property_item.condo_amount:
-        items.append({"key": "condo", "label": "Condomínio", "amount": str(money(property_item.condo_amount)), "beneficiary": "agency"})
+        items.append({"key": "condo", "kind": "condo", "label": "Condomínio", "amount": str(money(property_item.condo_amount)), "payer": "tenant", "beneficiary": "agency", "source": "legacy_property"})
     return items
 
 
@@ -176,7 +288,7 @@ def generate_charges(
             skipped_ineligible += 1
             continue
         terms = administration_terms(db, organization_id, property_item.id)
-        components = charge_items(lease, property_item, terms)
+        components = charge_items(lease, property_item, terms, competence)
         gross = sum((money(item["amount"]) for item in components), Decimal("0.00"))
         charge = RentCharge(
             organization_id=organization_id,
@@ -210,8 +322,6 @@ def calculate_settlement(db: Session, charge: RentCharge, paid_at: datetime) -> 
     else:
         admin_fee = money(rent * Decimal(str(terms.get("admin_fee_percent") or 0)) / Decimal("100"))
 
-    start_raw = dict(charge.property_snapshot or {}).get("lease_start_date")
-    # The lease start date is not part of the property snapshot in older contracts; derive from DB when needed.
     lease = db.get(LeaseContract, charge.lease_contract_id)
     lease_start = lease.start_date if lease else charge.competence
     installment_number = months_since(lease_start, charge.competence) + 1

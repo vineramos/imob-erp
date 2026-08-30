@@ -48,6 +48,11 @@ def _date(value: Any) -> str:
     return text
 
 
+def _monthly_rules(contract: Any) -> list[dict[str, Any]]:
+    rules = dict(getattr(contract, "rules_snapshot", {}) or {})
+    return [dict(item) for item in list(rules.get("monthly_charges") or []) if isinstance(item, dict)]
+
+
 def build_lease_contract_pdf(*, contract: Any, organization: Any) -> bytes:
     """Gera o PDF operacional da versão congelada do contrato de locação."""
     buffer = BytesIO()
@@ -156,22 +161,60 @@ def build_lease_contract_pdf(*, contract: Any, organization: Any) -> bytes:
     ]))
     story.append(conditions_table)
 
+    story.append(Paragraph("6. Composição mensal e encargos recorrentes", heading))
+    payer_labels = {"tenant": "Locatário", "owner": "Proprietário", "agency": "Imobiliária"}
+    beneficiary_labels = {"owner": "Proprietário", "agency": "Imobiliária", "third_party": "Terceiro"}
+    monthly_rows = [["Encargo", "Valor", "Responsável", "Destino", "Vigência"]]
+    monthly_rows.append(["Aluguel", _money(contract.rent_amount), "Locatário", "Proprietário", "todo o contrato"])
+    tenant_total = float(contract.rent_amount)
+    for rule in _monthly_rules(contract):
+        if not bool(rule.get("active", True)):
+            continue
+        amount = float(rule.get("amount") or 0)
+        if amount <= 0:
+            continue
+        payer = str(rule.get("payer") or "tenant")
+        if payer == "tenant":
+            tenant_total += amount
+        start = _date(rule.get("start_date")) if rule.get("start_date") else "início do contrato"
+        end = _date(rule.get("end_date")) if rule.get("end_date") else "fim do contrato"
+        monthly_rows.append([
+            rule.get("label") or "Encargo mensal",
+            _money(amount),
+            payer_labels.get(payer, payer),
+            beneficiary_labels.get(str(rule.get("beneficiary") or "third_party"), "Terceiro"),
+            f"{start} a {end}",
+        ])
+    monthly_table = Table(monthly_rows, colWidths=[48 * mm, 27 * mm, 31 * mm, 31 * mm, 35 * mm], repeatRows=1)
+    monthly_table.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#f1f4f7")),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("FONTSIZE", (0, 0), (-1, -1), 7.4),
+        ("GRID", (0, 0), (-1, -1), 0.35, colors.HexColor("#d8dee6")),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("PADDING", (0, 0), (-1, -1), 4),
+    ]))
     story.extend([
-        Paragraph("6. Regras operacionais essenciais", heading),
+        monthly_table,
+        Paragraph(f"Cobrança mensal estimada do locatário nesta versão: <b>{_money(tenant_total)}</b>. Itens com vigência específica entram apenas nas competências correspondentes.", small),
+    ])
+
+    story.extend([
+        Paragraph("7. Regras operacionais essenciais", heading),
         Paragraph(
             "O imóvel permanece sob administração conforme o contrato de administração vigente. "
-            "IPTU, condomínio, consumos, repasses, inadimplência, vistoria, chaves e demais encargos "
+            "IPTU, condomínio, seguros, consumos, repasses, inadimplência, vistoria, chaves e demais encargos "
             "seguem as regras congeladas nesta versão e os documentos operacionais vinculados ao ERP.",
             body,
         ),
-        Paragraph("7. Garantia locatícia", heading),
+        Paragraph("8. Garantia locatícia", heading),
         Paragraph(escape(str(contract.guarantee_details or {})), body),
     ])
 
     if contract.notes:
-        story.extend([Paragraph("8. Condições especiais", heading), Paragraph(escape(str(contract.notes)), body)])
+        story.extend([Paragraph("9. Condições especiais", heading), Paragraph(escape(str(contract.notes)), body)])
 
-    story.append(Paragraph("9. Signatários desta versão", heading))
+    story.append(Paragraph("10. Signatários desta versão", heading))
     signers = list(contract.signers_snapshot or [])
     if signers:
         rows = [["Papel", "Nome", "E-mail", "Ordem"]]

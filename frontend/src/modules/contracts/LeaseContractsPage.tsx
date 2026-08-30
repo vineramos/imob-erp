@@ -25,6 +25,27 @@ type LeaseStatus = 'draft' | 'review' | 'approved' | 'pending_signature' | 'sign
 type GuaranteeType = 'insurance' | 'deposit' | 'capitalization' | 'guarantor' | 'none'
 type LeaseWorkflowAction = 'submit_review' | 'approve' | 'prepare_signature' | 'return_draft' | 'cancel'
 type LeaseSignerRole = 'owner' | 'tenant' | 'agency' | 'witness' | 'other'
+type MonthlyChargeKind = 'iptu' | 'condo' | 'guarantee_insurance' | 'fire_insurance' | 'other'
+type MonthlyChargePayer = 'tenant' | 'owner' | 'agency'
+type MonthlyChargeBeneficiary = 'owner' | 'agency' | 'third_party'
+type MonthlyCharge = {
+  key: string
+  kind: MonthlyChargeKind
+  label: string
+  amount: number
+  active: boolean
+  payer: MonthlyChargePayer
+  beneficiary: MonthlyChargeBeneficiary
+  start_date: string | null
+  end_date: string | null
+}
+type MonthlyChargeConfig = {
+  lease_contract_id: string
+  lease_code: string
+  configured: boolean
+  monthly_charges: Array<Omit<MonthlyCharge, 'amount'> & { amount: number | string }>
+  tenant_monthly_total: number | string
+}
 type LeaseSigner = {
   role: LeaseSignerRole
   name: string
@@ -91,6 +112,7 @@ type LeaseForm = {
   inspection_contest_days: number
   guarantee_type: GuaranteeType
   guarantee_details: Record<string, unknown>
+  monthly_charges: MonthlyCharge[]
   notes: string
   signers: LeaseSigner[]
 }
@@ -118,6 +140,8 @@ const signerRoleLabels: Record<LeaseSignerRole, string> = {
   witness: 'Testemunha',
   other: 'Outro',
 }
+const payerLabels: Record<MonthlyChargePayer, string> = { tenant: 'Locatário', owner: 'Proprietário', agency: 'Imobiliária' }
+const beneficiaryLabels: Record<MonthlyChargeBeneficiary, string> = { owner: 'Proprietário', agency: 'Imobiliária', third_party: 'Terceiro' }
 
 function isoAddMonths(value: string, months: number) {
   if (!value) return ''
@@ -156,6 +180,19 @@ function signingLabel(item: Lease) {
 function blankSigner(): LeaseSigner {
   return { role: 'tenant', name: '', email: '', document_number: null, phone: null, sign_order: 1, communication: 'email' }
 }
+function standardMonthlyCharges(property?: Property): MonthlyCharge[] {
+  const iptu = Number(property?.iptu_amount ?? 0)
+  const condo = Number(property?.condo_amount ?? 0)
+  return [
+    { key: 'iptu', kind: 'iptu', label: 'IPTU', amount: iptu, active: iptu > 0, payer: 'tenant', beneficiary: 'owner', start_date: null, end_date: null },
+    { key: 'condo', kind: 'condo', label: 'Condomínio', amount: condo, active: condo > 0, payer: 'tenant', beneficiary: 'third_party', start_date: null, end_date: null },
+    { key: 'guarantee_insurance', kind: 'guarantee_insurance', label: 'Seguro fiança', amount: 0, active: false, payer: 'tenant', beneficiary: 'third_party', start_date: null, end_date: null },
+    { key: 'fire_insurance', kind: 'fire_insurance', label: 'Seguro incêndio', amount: 0, active: false, payer: 'tenant', beneficiary: 'third_party', start_date: null, end_date: null },
+  ]
+}
+function normalizeMonthlyCharges(items: MonthlyChargeConfig['monthly_charges']): MonthlyCharge[] {
+  return items.map((item) => ({ ...item, amount: Number(item.amount || 0) }))
+}
 function defaultForm(defaults?: OperationalDefaults): LeaseForm {
   return {
     property_id: '',
@@ -173,6 +210,7 @@ function defaultForm(defaults?: OperationalDefaults): LeaseForm {
     inspection_contest_days: defaults?.inspection_contest_days ?? 5,
     guarantee_type: 'insurance',
     guarantee_details: {},
+    monthly_charges: standardMonthlyCharges(),
     notes: '',
     signers: [],
   }
@@ -242,6 +280,7 @@ export function LeaseContractsPage({ permissions }: Props) {
     signature: items.filter((item) => item.status === 'approved' || item.status === 'pending_signature').length,
     signed: items.filter((item) => item.status === 'signed').length,
   }), [items])
+  const tenantMonthlyTotal = useMemo(() => Number(form.rent_amount || 0) + form.monthly_charges.reduce((total, item) => total + (item.active && item.payer === 'tenant' ? Number(item.amount || 0) : 0), 0), [form.rent_amount, form.monthly_charges])
 
   function openNew() {
     setEditing(null)
@@ -252,8 +291,19 @@ export function LeaseContractsPage({ permissions }: Props) {
     setSuccess('')
   }
 
-  function openEdit(item: Lease) {
+  async function openEdit(item: Lease) {
     setEditing(item)
+    setChangeSummary('')
+    setError('')
+    setSuccess('')
+    const property = properties.find((candidate) => candidate.id === item.property_id)
+    let monthlyCharges = standardMonthlyCharges(property)
+    try {
+      const result = await apiRequest<MonthlyChargeConfig>(`/finance/lease-contracts/${item.id}/monthly-charges`)
+      monthlyCharges = normalizeMonthlyCharges(result.monthly_charges)
+    } catch {
+      // Mantém sugestões do cadastro do imóvel caso a configuração financeira ainda não exista.
+    }
     setForm({
       property_id: item.property_id,
       tenant_ids: item.tenants.map((tenant) => tenant.person_id),
@@ -270,13 +320,11 @@ export function LeaseContractsPage({ permissions }: Props) {
       inspection_contest_days: item.inspection_contest_days,
       guarantee_type: item.guarantee_type,
       guarantee_details: item.guarantee_details,
+      monthly_charges: monthlyCharges,
       notes: item.notes ?? '',
       signers: item.signers.map((signer) => ({ ...signer })),
     })
-    setChangeSummary('')
     setShowForm(true)
-    setError('')
-    setSuccess('')
   }
 
   function changeStart(value: string) {
@@ -303,6 +351,19 @@ export function LeaseContractsPage({ permissions }: Props) {
       signers: current.signers.map((signer, signerIndex) => signerIndex === index ? { ...signer, ...patch } : signer),
     }))
   }
+  function updateMonthlyCharge(index: number, patch: Partial<MonthlyCharge>) {
+    setForm((current) => ({
+      ...current,
+      monthly_charges: current.monthly_charges.map((charge, chargeIndex) => chargeIndex === index ? { ...charge, ...patch } : charge),
+    }))
+  }
+  function addMonthlyCharge() {
+    const suffix = Date.now().toString(36)
+    setForm((current) => ({
+      ...current,
+      monthly_charges: [...current.monthly_charges, { key: `other_${suffix}`, kind: 'other', label: 'Outro encargo', amount: 0, active: true, payer: 'tenant', beneficiary: 'third_party', start_date: null, end_date: null }],
+    }))
+  }
 
   async function save(event: FormEvent) {
     event.preventDefault()
@@ -323,8 +384,8 @@ export function LeaseContractsPage({ permissions }: Props) {
       setEditing(null)
       setSuccess(
         editing
-          ? `${updated.code} ganhou a versão ${updated.current_version}. PDF e assinatura anteriores foram invalidados.`
-          : `${updated.code} criado como rascunho. Proprietários e locatários foram preparados como signatários da versão.`,
+          ? `${updated.code} ganhou a versão ${updated.current_version}. PDF, assinatura e composição mensal anteriores foram invalidados.`
+          : `${updated.code} criado com a composição mensal congelada na versão inicial.`,
       )
     } catch (cause) {
       setError(cause instanceof ApiError ? cause.detail : cause instanceof Error ? cause.message : 'Não foi possível salvar a locação.')
@@ -448,7 +509,7 @@ export function LeaseContractsPage({ permissions }: Props) {
       <div>
         <span className="eyebrow">Contratos · Locação</span>
         <h1>Contratos de locação</h1>
-        <p>Versão congelada, PDF com hash, Clicksign e retirada automática das vitrines somente após o PDF final arquivado.</p>
+        <p>Versão congelada, composição mensal, PDF com hash e assinatura eletrônica.</p>
       </div>
       {canCreate && <button className="button primary" type="button" onClick={openNew}><Plus size={15}/> Nova locação</button>}
     </div>
@@ -478,7 +539,7 @@ export function LeaseContractsPage({ permissions }: Props) {
             onChange={(event) => {
               const id = event.target.value
               const property = properties.find((value) => value.id === id)
-              setForm((current) => ({ ...current, property_id: id, rent_amount: property?.rent_amount ?? current.rent_amount }))
+              setForm((current) => ({ ...current, property_id: id, rent_amount: property?.rent_amount ?? current.rent_amount, monthly_charges: standardMonthlyCharges(property) }))
             }}
           >
             <option value="">Selecione...</option>
@@ -499,6 +560,26 @@ export function LeaseContractsPage({ permissions }: Props) {
         <label className="field"><span>Garantia</span><select value={form.guarantee_type} onChange={(event) => setForm((current) => ({ ...current, guarantee_type: event.target.value as GuaranteeType }))}>{Object.entries(guaranteeLabels).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
         <label className="field field-span-3"><span>Observações</span><textarea rows={3} value={form.notes} onChange={(event) => setForm((current) => ({ ...current, notes: event.target.value }))}/></label>
         {editing && <label className="field field-span-3"><span>Resumo desta nova versão</span><input required minLength={3} value={changeSummary} onChange={(event) => setChangeSummary(event.target.value)}/></label>}
+      </div>
+
+      <div className="lease-monthly-charges">
+        <div className="lease-monthly-heading">
+          <div><span className="eyebrow">Composição mensal</span><h3>Aluguel + encargos recorrentes</h3><p>IPTU, condomínio, seguro fiança, seguro incêndio e outros itens ficam congelados nesta versão do contrato.</p></div>
+          <div className="lease-monthly-total"><span>Cobrança mensal do locatário</span><strong>{money(tenantMonthlyTotal)}</strong><small>considerando itens ativos cobrados do locatário</small></div>
+        </div>
+        <div className="lease-monthly-table">
+          <div className="lease-monthly-table-head"><span>Ativo</span><span>Encargo</span><span>Valor</span><span>Responsável</span><span>Destino</span><span>Vigência</span><span/></div>
+          {form.monthly_charges.map((charge, index) => <div className={`lease-monthly-row ${charge.active ? '' : 'inactive'}`} key={charge.key}>
+            <label className="lease-charge-toggle"><input type="checkbox" checked={charge.active} onChange={(event) => updateMonthlyCharge(index, { active: event.target.checked })}/><span>{charge.active ? 'Sim' : 'Não'}</span></label>
+            <label className="field"><span>Descrição</span><input required value={charge.label} onChange={(event) => updateMonthlyCharge(index, { label: event.target.value })}/></label>
+            <label className="field"><span>Valor mensal</span><input min="0" step="0.01" type="number" value={charge.amount || ''} onChange={(event) => { const amount = event.target.value ? Number(event.target.value) : 0; updateMonthlyCharge(index, { amount, active: amount > 0 ? true : charge.active }) }}/></label>
+            <label className="field"><span>Responsável</span><select value={charge.payer} onChange={(event) => updateMonthlyCharge(index, { payer: event.target.value as MonthlyChargePayer })}>{Object.entries(payerLabels).map(([key, label]) => <option value={key} key={key}>{label}</option>)}</select></label>
+            <label className="field"><span>Destino</span><select value={charge.beneficiary} onChange={(event) => updateMonthlyCharge(index, { beneficiary: event.target.value as MonthlyChargeBeneficiary })}>{Object.entries(beneficiaryLabels).map(([key, label]) => <option value={key} key={key}>{label}</option>)}</select></label>
+            <div className="lease-charge-period"><label><span>De</span><input type="date" min={form.start_date || undefined} max={form.end_date || undefined} value={charge.start_date ?? ''} onChange={(event) => updateMonthlyCharge(index, { start_date: event.target.value || null })}/></label><label><span>Até</span><input type="date" min={form.start_date || undefined} max={form.end_date || undefined} value={charge.end_date ?? ''} onChange={(event) => updateMonthlyCharge(index, { end_date: event.target.value || null })}/></label></div>
+            {charge.kind === 'other' ? <button className="signer-remove" type="button" aria-label="Remover encargo" onClick={() => setForm((current) => ({ ...current, monthly_charges: current.monthly_charges.filter((_, chargeIndex) => chargeIndex !== index) }))}><Trash2 size={15}/></button> : <span className="lease-charge-fixed">padrão</span>}
+          </div>)}
+        </div>
+        <div className="lease-monthly-footer"><span>Somente itens com responsável “Locatário” entram na cobrança mensal. Destino “Proprietário” compõe o repasse; “Imobiliária” vira reembolso; “Terceiro” fica separado para condomínio/seguradora.</span><button className="button secondary" type="button" onClick={addMonthlyCharge}><Plus size={14}/> Outro encargo</button></div>
       </div>
 
       <div className="lease-tenants">
@@ -530,7 +611,7 @@ export function LeaseContractsPage({ permissions }: Props) {
           </div>)}
       </div>
 
-      <div className="contract-snapshot-note"><ShieldCheck size={16}/><span>Nova versão invalida PDF/hash e assinatura anteriores. O imóvel só sai da vitrine quando o PDF final assinado estiver arquivado.</span></div>
+      <div className="contract-snapshot-note"><ShieldCheck size={16}/><span>Nova versão invalida PDF/hash e assinatura anteriores. A composição mensal também fica versionada para preservar o histórico das cobranças.</span></div>
       <div className="form-actions">
         <button className="button secondary" type="button" onClick={() => { setShowForm(false); setEditing(null) }}>Cancelar</button>
         <button className="button primary" disabled={saving} type="submit">{saving ? 'Salvando...' : editing ? 'Salvar nova versão' : 'Criar rascunho'}</button>
@@ -560,7 +641,7 @@ export function LeaseContractsPage({ permissions }: Props) {
             <div className="contract-actions">
               <button className="contract-history-toggle" type="button" onClick={() => setExpanded(isExpanded ? null : item.id)}><History size={14}/> Detalhes {isExpanded ? <ChevronUp size={13}/> : <ChevronDown size={13}/>}</button>
               <div>
-                {(item.status === 'draft' || item.status === 'review') && canEdit && <button className="button secondary" type="button" onClick={() => openEdit(item)}>Nova versão</button>}
+                {(item.status === 'draft' || item.status === 'review') && canEdit && <button className="button secondary" type="button" onClick={() => void openEdit(item)}>Nova versão</button>}
                 {item.status === 'draft' && canEdit && <button className="button primary" disabled={saving} type="button" onClick={() => void workflow(item, 'submit_review')}><Send size={14}/> Revisão</button>}
                 {item.status === 'review' && canApprove && <button className="button primary" disabled={saving} type="button" onClick={() => void workflow(item, 'approve')}><CheckCircle2 size={14}/> Aprovar</button>}
                 {item.status === 'approved' && canSign && <button className="button primary" disabled={saving} type="button" onClick={() => void workflow(item, 'prepare_signature')}><FileSignature size={14}/> Preparar assinatura</button>}
@@ -594,6 +675,7 @@ export function LeaseContractsPage({ permissions }: Props) {
                 <div className="contract-document-detail"><span>Início / término</span><strong>{dateLabel(item.start_date)} · {dateLabel(item.end_date)}</strong></div>
                 <div className="contract-document-detail"><span>Reajuste</span><strong>{item.adjustment_index} · próximo {dateLabel(item.next_adjustment_date)}</strong></div>
                 <div className="contract-document-detail"><span>Vistoria</span><strong>{item.inspection_contest_days} dias para contestação</strong></div>
+                <div className="contract-document-detail"><span>Composição mensal</span><strong>Versionada junto ao contrato e aplicada na geração financeira</strong></div>
                 <div className="contract-document-detail"><span>Signatários</span><strong>{item.signers.map((signer) => signer.name).join(' / ') || 'não definidos'}</strong></div>
               </div>
               <SignatureTimeline contractId={item.id} contractType="lease"/>

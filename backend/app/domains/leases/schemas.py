@@ -11,6 +11,9 @@ LeaseStatus = Literal["draft", "review", "approved", "pending_signature", "signe
 LeaseWorkflowAction = Literal["submit_review", "approve", "prepare_signature", "return_draft", "cancel"]
 LeaseSignerRole = Literal["owner", "tenant", "agency", "witness", "other"]
 SignerCommunication = Literal["email", "sms", "whatsapp", "none"]
+MonthlyChargeKind = Literal["iptu", "condo", "guarantee_insurance", "fire_insurance", "other"]
+MonthlyChargePayer = Literal["tenant", "owner", "agency"]
+MonthlyChargeBeneficiary = Literal["owner", "agency", "third_party"]
 
 
 class LeaseSignerPayload(BaseModel):
@@ -23,6 +26,26 @@ class LeaseSignerPayload(BaseModel):
     phone: str | None = Field(default=None, max_length=40)
     sign_order: int = Field(default=1, ge=1, le=50)
     communication: SignerCommunication = "email"
+
+
+class LeaseMonthlyChargePayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    key: str = Field(min_length=2, max_length=60, pattern=r"^[a-z0-9][a-z0-9_-]*$")
+    kind: MonthlyChargeKind
+    label: str = Field(min_length=2, max_length=120)
+    amount: Decimal = Field(default=Decimal("0"), ge=0, le=Decimal("999999999999.99"))
+    active: bool = True
+    payer: MonthlyChargePayer = "tenant"
+    beneficiary: MonthlyChargeBeneficiary = "third_party"
+    start_date: date | None = None
+    end_date: date | None = None
+
+    @model_validator(mode="after")
+    def validate_period(self):
+        if self.start_date and self.end_date and self.end_date < self.start_date:
+            raise ValueError("A vigência final do encargo não pode ser anterior à inicial.")
+        return self
 
 
 class LeaseContractTerms(BaseModel):
@@ -41,6 +64,7 @@ class LeaseContractTerms(BaseModel):
     inspection_contest_days: int = Field(default=5, ge=1, le=30)
     guarantee_type: GuaranteeType = "insurance"
     guarantee_details: dict = Field(default_factory=dict)
+    monthly_charges: list[LeaseMonthlyChargePayload] = Field(default_factory=list, max_length=30)
     notes: str | None = Field(default=None, max_length=4000)
     signers: list[LeaseSignerPayload] = Field(default_factory=list, max_length=30)
 
@@ -53,6 +77,14 @@ class LeaseContractTerms(BaseModel):
         normalized_emails = [str(signer.email).strip().lower() for signer in self.signers]
         if len(normalized_emails) != len(set(normalized_emails)):
             raise ValueError("Não repita o mesmo e-mail na lista de signatários.")
+        charge_keys = [charge.key for charge in self.monthly_charges]
+        if len(charge_keys) != len(set(charge_keys)):
+            raise ValueError("Não repita a mesma chave na composição mensal da locação.")
+        for charge in self.monthly_charges:
+            if charge.start_date and charge.start_date < self.start_date:
+                raise ValueError(f"A vigência de {charge.label} não pode começar antes da locação.")
+            if charge.end_date and charge.end_date > self.end_date:
+                raise ValueError(f"A vigência de {charge.label} não pode terminar depois da locação.")
         return self
 
 

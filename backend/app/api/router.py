@@ -3,6 +3,7 @@ from fastapi import APIRouter
 from app.api.routes.branding import router as branding_router
 from app.api.routes.contracts import router as contracts_router
 from app.api.routes.finance import router as finance_router
+from app.api.routes.finance_contracts import router as finance_contracts_router
 from app.api.routes.foundation import router as foundation_router
 from app.api.routes.health import router as health_router
 from app.api.routes.inspections import router as inspections_router
@@ -21,6 +22,7 @@ api_router.include_router(contracts_router)
 api_router.include_router(leases_router)
 api_router.include_router(inspections_router)
 api_router.include_router(finance_router)
+api_router.include_router(finance_contracts_router)
 api_router.include_router(signature_events_router)
 api_router.include_router(integrations_router)
 api_router.include_router(publication_router)
