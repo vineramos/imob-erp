@@ -59,6 +59,11 @@ class GcsDocumentStorage:
         safe_filename = filename.replace("..", "-").lstrip("/")
         return f"{self.prefix}/{organization_id}/inspections/{safe_code}/{safe_filename}"
 
+    def property_photo_object_name(self, *, organization_id: str, property_code: str, photo_id: str, filename: str) -> str:
+        safe_code = property_code.replace("/", "-").replace(" ", "-")
+        safe_filename = filename.replace("..", "-").replace("/", "-").replace("\\", "-")
+        return f"{self.prefix}/{organization_id}/properties/{safe_code}/photos/{photo_id}-{safe_filename}"
+
     def upload_bytes(self, *, object_name: str, content: bytes, content_type: str) -> str:
         if not self.configured: raise DocumentStorageError("Bucket de documentos ainda não configurado.")
         try:
@@ -75,6 +80,18 @@ class GcsDocumentStorage:
         object_name = reference[len(prefix):]
         try: return storage.Client().bucket(self.bucket_name).blob(object_name).download_as_bytes()
         except Exception as exc: raise DocumentStorageError(f"Falha ao recuperar documento do storage: {exc.__class__.__name__}.") from exc
+
+    def delete_reference(self, reference: str) -> None:
+        if not self.configured: raise DocumentStorageError("Bucket de documentos ainda não configurado.")
+        prefix = f"gs://{self.bucket_name}/"
+        if not reference.startswith(prefix): raise DocumentStorageError("Referência de documento não pertence ao bucket configurado.")
+        object_name = reference[len(prefix):]
+        try:
+            storage.Client().bucket(self.bucket_name).blob(object_name).delete()
+        except NotFound:
+            return
+        except Exception as exc:
+            raise DocumentStorageError(f"Falha ao excluir documento do storage: {exc.__class__.__name__}.") from exc
 
 
 def get_document_storage() -> GcsDocumentStorage:

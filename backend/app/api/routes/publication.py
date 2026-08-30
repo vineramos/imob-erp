@@ -5,14 +5,14 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.database import get_db
 from app.domains.foundation.access import UserContext, require_permission
 from app.domains.foundation.audit import write_audit
 from app.domains.foundation.models import Organization, OrganizationSettings
-from app.domains.portfolio.models import Property, PropertyOwner
+from app.domains.portfolio.models import Property, PropertyOwner, PropertyPhoto
 from app.domains.portfolio.schemas import (
     PublicPropertyResponse,
     PublicationChecklistItem,
@@ -83,9 +83,13 @@ def _commercial_profile(item: Property) -> CommercialPropertyProfileResponse:
     )
 
 
-def _checklist(item: Property) -> list[PublicationChecklistItem]:
+def _checklist(db: Session, item: Property) -> list[PublicationChecklistItem]:
     address = item.address or {}
     ownership_total = sum((owner.ownership_percent for owner in item.owners), Decimal("0"))
+    photo_count = int(db.scalar(select(func.count(PropertyPhoto.id)).where(PropertyPhoto.property_id == item.id)) or 0)
+    cover_exists = db.scalar(
+        select(PropertyPhoto.id).where(PropertyPhoto.property_id == item.id, PropertyPhoto.is_cover.is_(True)).limit(1)
+    ) is not None
     checks = [
         ("status", "Imóvel disponível", item.status == "available", f"Status atual: {item.status}."),
         ("purpose", "Finalidade compatível", item.purpose in {"rent", "sale"}, f"Finalidade atual: {item.purpose}."),
@@ -114,12 +118,18 @@ def _checklist(item: Property) -> list[PublicationChecklistItem]:
             bool(item.owners) and ownership_total == Decimal("100"),
             "O imóvel precisa ter proprietário(s) totalizando 100%.",
         ),
+        (
+            "photos",
+            "Fotos do anúncio",
+            photo_count > 0 and cover_exists,
+            "Adicione pelo menos uma foto comercial e mantenha uma foto de capa definida.",
+        ),
     ]
     return [PublicationChecklistItem(key=key, label=label, ok=ok, detail=detail) for key, label, ok, detail in checks]
 
 
-def _readiness(item: Property) -> PublicationReadinessResponse:
-    checklist = _checklist(item)
+def _readiness(db: Session, item: Property) -> PublicationReadinessResponse:
+    checklist = _checklist(db, item)
     return PublicationReadinessResponse(
         property_id=item.id,
         code=f"{item.internal_number:06d}",
@@ -166,8 +176,6 @@ def update_commercial_property_profile(
     item.iptu_amount = payload.iptu_amount
     item.publication_updated_by_user_id = context.user.id
 
-    # Qualquer edição do conteúdo comercial publicado exige nova conferência humana.
-    # Mantemos o slug estável, mas retiramos temporariamente o anúncio do catálogo.
     if was_published:
         item.publication_enabled = False
 
@@ -204,7 +212,7 @@ def property_publication_readiness(
     context: UserContext = Depends(require_permission("properties.view")),
     db: Session = Depends(get_db),
 ) -> PublicationReadinessResponse:
-    return _readiness(_load_property(db, context.user.organization_id, property_id))
+    return _readiness(db, _load_property(db, context.user.organization_id, property_id))
 
 
 @router.post("/properties/{property_id}/publication", response_model=PublicationReadinessResponse)
@@ -217,7 +225,7 @@ def update_property_publication(
 ) -> PublicationReadinessResponse:
     item = _load_property(db, context.user.organization_id, property_id)
     before = {"publication_enabled": item.publication_enabled, "public_slug": item.public_slug}
-    readiness = _readiness(item)
+    readiness = _readiness(db, item)
     if payload.enabled and not readiness.ready:
         missing = [check.label for check in readiness.checklist if check.required and not check.ok]
         raise HTTPException(
@@ -250,7 +258,7 @@ def update_property_publication(
         user_agent=user_agent,
     )
     db.commit()
-    return _readiness(_load_property(db, context.user.organization_id, property_id))
+    return _readiness(db, _load_property(db, context.user.organization_id, property_id))
 
 
 def _public_site_settings(db: Session, organization_id: UUID) -> tuple[Organization, OrganizationSettings]:
@@ -276,7 +284,6 @@ def public_site_profile(organization_id: UUID, db: Session = Depends(get_db)) ->
 
 def _public_address(item: Property) -> dict[str, str]:
     address = item.address or {}
-    # Padrão conservador: localização útil para busca, sem divulgar a unidade/endereço exato.
     return {
         "street": "",
         "number": "",

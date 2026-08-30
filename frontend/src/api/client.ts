@@ -50,6 +50,13 @@ export async function publicApiRequest<T>(path: string, init: RequestInit = {}):
   return parseResponse<T>(await fetch(apiUrl(path), { ...init, headers }))
 }
 
+export async function publicBlobRequest(path: string, init: RequestInit = {}): Promise<Blob> {
+  const headers = new Headers(init.headers)
+  const response = await fetch(apiUrl(path), { ...init, headers })
+  if (!response.ok) throw new ApiError(response.status, await errorDetail(response))
+  return response.blob()
+}
+
 export async function apiRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = await getAccessToken()
   const headers = new Headers(init.headers)

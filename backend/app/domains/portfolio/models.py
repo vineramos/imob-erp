@@ -91,6 +91,24 @@ class PropertyOwner(Base):
     person: Mapped[Person] = relationship()
 
 
+class PropertyPhoto(Base):
+    __tablename__ = "property_photos"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organization_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("organizations.id"), nullable=False, index=True)
+    property_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("properties.id", ondelete="CASCADE"), nullable=False, index=True)
+    filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    content_type: Mapped[str] = mapped_column(String(80), nullable=False)
+    storage_reference: Mapped[str] = mapped_column(String(700), nullable=False)
+    size_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    caption: Mapped[str | None] = mapped_column(String(300))
+    position: Mapped[int] = mapped_column(Integer, nullable=False, default=0, index=True)
+    is_cover: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, index=True)
+    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("app_users.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+
 class Capture(Base):
     __tablename__ = "captures"
 
