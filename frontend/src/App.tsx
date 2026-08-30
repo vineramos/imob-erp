@@ -11,6 +11,7 @@ import { ContractsHub } from './modules/contracts/ContractsHub'
 import { DashboardPage } from './modules/dashboard/DashboardPage'
 import { FinancePage } from './modules/finance/FinancePage'
 import { InspectionsPage } from './modules/inspections/InspectionsPage'
+import { MaintenancePage } from './modules/maintenance/MaintenancePage'
 import { PropertiesPage } from './modules/properties/PropertiesPage'
 import { SettingsPage } from './modules/settings/SettingsPage'
 import { PublicSitePage } from './public/PublicSitePage'
@@ -33,7 +34,7 @@ const devUser: CurrentUser = {
     'properties.create', 'properties.edit', 'properties.publish',
     'captures.manage',
     'contracts.create', 'contracts.edit', 'contracts.approve', 'contracts.send_signature',
-    'inspections.manage',
+    'inspections.manage', 'maintenance.manage',
     'finance.charge.create', 'finance.reconcile', 'finance.payment.prepare', 'finance.payment.approve', 'finance.repasse.execute',
     'settings.company.manage', 'settings.appearance.manage',
     'users.manage', 'permissions.manage', 'approval_rules.manage', 'audit.view',
@@ -90,7 +91,7 @@ function ErpApp() {
   const initials = currentUser.name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join('') || 'AD'
   const primaryRole = currentUser.role_keys.includes('admin') ? 'Administrador' : (currentUser.role_keys[0] || 'Usuário')
   const brandInitials = theme.companyShortName.trim().slice(0, 2).toUpperCase() || 'IM'
-  const implemented = ['dashboard', 'people', 'properties', 'captures', 'crm', 'contracts', 'inspections', 'finance', 'settings']
+  const implemented = ['dashboard', 'people', 'properties', 'captures', 'crm', 'contracts', 'inspections', 'maintenance', 'finance', 'settings']
 
   return <div className={`app-shell ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
     <aside className="sidebar">
@@ -107,6 +108,7 @@ function ErpApp() {
       {activeModule === 'crm' && <CommercialPage permissions={currentUser.permissions} organizationId={currentUser.organization_id}/>}
       {activeModule === 'contracts' && <ContractsHub permissions={currentUser.permissions}/>}
       {activeModule === 'inspections' && <InspectionsPage permissions={currentUser.permissions}/>}
+      {activeModule === 'maintenance' && <MaintenancePage permissions={currentUser.permissions}/>}
       {activeModule === 'finance' && <FinancePage permissions={currentUser.permissions}/>}
       {activeModule === 'settings' && <SettingsPage permissions={currentUser.permissions}/>}
       {!implemented.includes(activeModule) && <ModulePlaceholder module={activeModule}/>} 
