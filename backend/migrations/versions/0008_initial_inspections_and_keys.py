@@ -1,6 +1,6 @@
 """initial inspections and key handover
 
-Revision ID: 0008_initial_inspections_and_keys
+Revision ID: 0008_initial_inspections_keys
 Revises: 0007_lease_documents_and_signing
 Create Date: 2026-08-30
 """
@@ -11,7 +11,7 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
 
-revision: str = "0008_initial_inspections_and_keys"
+revision: str = "0008_initial_inspections_keys"
 down_revision: str | None = "0007_lease_documents_and_signing"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
