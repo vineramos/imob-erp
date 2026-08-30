@@ -23,6 +23,7 @@ from app.integrations.document_storage import DocumentStorageError, get_document
 
 router = APIRouter(tags=["maintenance"])
 TERMINAL = {"completed", "cancelled"}
+QUOTE_LOCKED_STATUSES = {"approved", "scheduled", "in_progress", "completed", "cancelled"}
 ALLOWED_LOGO_TYPES = {"image/jpeg", "image/png", "image/webp"}
 MAX_LOGO_SIZE = 4 * 1024 * 1024
 
@@ -201,7 +202,7 @@ def update_maintenance(item_id: UUID, payload: MaintenanceUpdate, request: Reque
 @router.post("/maintenance/{item_id}/quotes", response_model=MaintenanceResponse)
 def add_quote(item_id: UUID, payload: MaintenanceQuoteCreate, request: Request, context: UserContext=Depends(require_permission("maintenance.manage")), db: Session=Depends(get_db)) -> MaintenanceResponse:
     item=_load(db,context.user.organization_id,item_id)
-    if item.status in TERMINAL: raise HTTPException(status_code=409,detail="Não é possível incluir orçamento em chamado encerrado.")
+    if item.status in QUOTE_LOCKED_STATUSES: raise HTTPException(status_code=409,detail="A execução já foi aprovada; os orçamentos deste chamado estão congelados.")
     partner=_partner(db,context.user.organization_id,payload.partner_id,active_only=True) if payload.partner_id else None; supplier=_person(db,context.user.organization_id,payload.supplier_person_id); supplier_name=partner.name if partner else supplier.name if supplier else (payload.supplier_name or "").strip(); quote_number=len(list(item.quotes or []))+1
     quote={"id":str(uuid.uuid4()),"quote_code":f"{maintenance_code(item)}-ORC-{quote_number:02d}","partner_id":str(partner.id) if partner else None,"partner_snapshot":_partner_snapshot(partner) if partner else None,"supplier_person_id":str(supplier.id) if supplier else None,"supplier_name":supplier_name,"amount":str(payload.amount),"description":_clean(payload.description),"valid_until":payload.valid_until.isoformat() if payload.valid_until else None,"payment_terms":_clean(payload.payment_terms),"notes":_clean(payload.notes),"status":"proposed","created_at":datetime.now(timezone.utc).isoformat()}
     item.quotes=[*list(item.quotes or []),quote]
@@ -226,14 +227,18 @@ def maintenance_quote_pdf(item_id: UUID, quote_id: str, context: UserContext=Dep
 @router.post("/maintenance/{item_id}/quotes/{quote_id}/select", response_model=MaintenanceResponse)
 def select_quote(item_id: UUID, quote_id: str, request: Request, context: UserContext=Depends(require_permission("maintenance.manage")), db: Session=Depends(get_db)) -> MaintenanceResponse:
     item=_load(db,context.user.organization_id,item_id)
-    if item.status in TERMINAL: raise HTTPException(status_code=409,detail="Chamado encerrado não aceita seleção de orçamento.")
+    if item.status in QUOTE_LOCKED_STATUSES: raise HTTPException(status_code=409,detail="A execução já foi aprovada; o orçamento aprovado não pode mais ser trocado.")
     quotes=deepcopy(list(item.quotes or [])); selected=None
     for quote in quotes:
         if quote.get("id")==quote_id: quote["status"]="selected"; selected=quote
-        elif quote.get("status")=="selected": quote["status"]="rejected"
+        elif quote.get("status") in {"selected", "approved"}: quote["status"]="rejected"
     if selected is None: raise HTTPException(status_code=404,detail="Orçamento não encontrado.")
     item.quotes=quotes; item.selected_quote_id=quote_id; item.approved_cost=_money(selected.get("amount")); item.supplier_person_id=UUID(selected["supplier_person_id"]) if selected.get("supplier_person_id") else None; item.status="awaiting_approval" if item.approval_required else "approved"
-    if item.status=="approved": item.approved_at=datetime.now(timezone.utc); item.approved_by_user_id=context.user.id
+    if item.status=="approved":
+        item.approved_at=datetime.now(timezone.utc); item.approved_by_user_id=context.user.id
+        for quote in quotes:
+            if quote.get("id")==quote_id: quote["status"]="approved"
+        item.quotes=quotes
     _append_history(item,context,"Orçamento selecionado",f"{selected.get('supplier_name')} · R$ {selected.get('amount')}"); _audit(db,request,context,item,"maintenance.quote_selected",after={"quote_id":quote_id,"partner_id":selected.get("partner_id"),"status":item.status,"approved_cost":str(item.approved_cost)}); db.commit(); db.refresh(item); return _response(db,item)
 
 
@@ -249,6 +254,11 @@ def workflow(item_id: UUID, payload: MaintenanceWorkflow, request: Request, cont
     elif action=="approve":
         if item.status not in {"triage","awaiting_quote","awaiting_approval"}: raise HTTPException(status_code=409,detail="O chamado não está em etapa de aprovação.")
         item.approved_cost=payload.approved_cost if payload.approved_cost is not None else item.approved_cost or item.estimated_cost; item.status="approved"; item.approved_at=now; item.approved_by_user_id=context.user.id
+        if item.selected_quote_id:
+            quotes=deepcopy(list(item.quotes or []))
+            for quote in quotes:
+                if quote.get("id")==item.selected_quote_id: quote["status"]="approved"
+            item.quotes=quotes
     elif action=="schedule":
         if item.status!="approved": raise HTTPException(status_code=409,detail="A execução precisa estar aprovada antes do agendamento.")
         item.scheduled_at=payload.scheduled_at or item.scheduled_at
@@ -267,5 +277,10 @@ def workflow(item_id: UUID, payload: MaintenanceWorkflow, request: Request, cont
     elif action=="return_triage":
         if item.status not in {"awaiting_quote","awaiting_approval","approved","scheduled"}: raise HTTPException(status_code=409,detail="Não é possível retornar este chamado para triagem.")
         item.status="triage"; item.approved_at=None; item.approved_by_user_id=None
+        if item.selected_quote_id:
+            quotes=deepcopy(list(item.quotes or []))
+            for quote in quotes:
+                if quote.get("id")==item.selected_quote_id and quote.get("status")=="approved": quote["status"]="selected"
+            item.quotes=quotes
     else: raise HTTPException(status_code=422,detail="Ação inválida.")
     labels={"triage":"Triagem iniciada","request_quotes":"Orçamentos solicitados","approve":"Execução aprovada","schedule":"Serviço agendado","start":"Execução iniciada","complete":"Manutenção concluída","cancel":"Chamado cancelado","return_triage":"Retornado para triagem"}; _append_history(item,context,labels[action],payload.reason); _audit(db,request,context,item,f"maintenance.{action}",before=before,after={"status":item.status,"approved_cost":str(item.approved_cost) if item.approved_cost is not None else None,"actual_cost":str(item.actual_cost) if item.actual_cost is not None else None},reason=payload.reason); db.commit(); db.refresh(item); return _response(db,item)
