@@ -13,11 +13,8 @@ import './commercial.css'
 import './lease.css'
 import './public-site.css'
 import './metric-cards.css'
+import './inspections.css'
 
 createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <ThemeProvider>
-      <App />
-    </ThemeProvider>
-  </StrictMode>,
+  <StrictMode><ThemeProvider><App /></ThemeProvider></StrictMode>,
 )

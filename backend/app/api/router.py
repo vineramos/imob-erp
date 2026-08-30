@@ -4,6 +4,7 @@ from app.api.routes.branding import router as branding_router
 from app.api.routes.contracts import router as contracts_router
 from app.api.routes.foundation import router as foundation_router
 from app.api.routes.health import router as health_router
+from app.api.routes.inspections import router as inspections_router
 from app.api.routes.integrations import router as integrations_router
 from app.api.routes.leases import router as leases_router
 from app.api.routes.portfolio import router as portfolio_router
@@ -17,6 +18,7 @@ api_router.include_router(foundation_router)
 api_router.include_router(portfolio_router)
 api_router.include_router(contracts_router)
 api_router.include_router(leases_router)
+api_router.include_router(inspections_router)
 api_router.include_router(signature_events_router)
 api_router.include_router(integrations_router)
 api_router.include_router(publication_router)
