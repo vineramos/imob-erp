@@ -6,7 +6,9 @@ from sqlalchemy import engine_from_config, pool
 from app.core.config import get_settings
 from app.core.database import Base
 from app.domains.contracts import models as contracts_models  # noqa: F401
+from app.domains.finance import models as finance_models  # noqa: F401
 from app.domains.foundation import models as foundation_models  # noqa: F401
+from app.domains.inspections import models as inspection_models  # noqa: F401
 from app.domains.leases import models as lease_models  # noqa: F401
 from app.domains.portfolio import models as portfolio_models  # noqa: F401
 
@@ -34,7 +36,6 @@ def run_migrations_offline() -> None:
         dialect_opts={"paramstyle": "named"},
         compare_type=True,
     )
-
     with context.begin_transaction():
         context.run_migrations()
 
@@ -45,10 +46,8 @@ def run_migrations_online() -> None:
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
     )
-
     with connectable.connect() as connection:
         context.configure(connection=connection, target_metadata=target_metadata, compare_type=True)
-
         with context.begin_transaction():
             context.run_migrations()
 

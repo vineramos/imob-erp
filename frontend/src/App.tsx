@@ -9,6 +9,7 @@ import { CapturesPage } from './modules/captures/CapturesPage'
 import { CommercialPage } from './modules/commercial/CommercialPage'
 import { ContractsHub } from './modules/contracts/ContractsHub'
 import { DashboardPage } from './modules/dashboard/DashboardPage'
+import { FinancePage } from './modules/finance/FinancePage'
 import { InspectionsPage } from './modules/inspections/InspectionsPage'
 import { PropertiesPage } from './modules/properties/PropertiesPage'
 import { SettingsPage } from './modules/settings/SettingsPage'
@@ -20,10 +21,23 @@ type ModuleKey = (typeof navigation)[number]['module']
 type AuthState = 'loading' | 'authenticated' | 'unauthenticated' | 'error'
 
 const devBypass = import.meta.env.DEV && !authConfigured
-
 const devUser: CurrentUser = {
-  id: 'dev-admin', name: 'Administrador', email: 'dev@local', organization_id: 'dev-organization', organization_name: 'Imobiliária', role_keys: ['admin'],
-  permissions: [...navigation.map((item) => item.permission), 'properties.create', 'properties.edit', 'properties.publish', 'captures.manage', 'contracts.create', 'contracts.edit', 'contracts.approve', 'contracts.send_signature', 'inspections.manage', 'settings.company.manage', 'settings.appearance.manage', 'users.manage', 'permissions.manage', 'approval_rules.manage', 'audit.view'],
+  id: 'dev-admin',
+  name: 'Administrador',
+  email: 'dev@local',
+  organization_id: 'dev-organization',
+  organization_name: 'Imobiliária',
+  role_keys: ['admin'],
+  permissions: [
+    ...navigation.map((item) => item.permission),
+    'properties.create', 'properties.edit', 'properties.publish',
+    'captures.manage',
+    'contracts.create', 'contracts.edit', 'contracts.approve', 'contracts.send_signature',
+    'inspections.manage',
+    'finance.charge.create', 'finance.reconcile', 'finance.payment.prepare', 'finance.payment.approve', 'finance.repasse.execute',
+    'settings.company.manage', 'settings.appearance.manage',
+    'users.manage', 'permissions.manage', 'approval_rules.manage', 'audit.view',
+  ],
 }
 
 function ModulePlaceholder({ module }: { module: ModuleKey }) {
@@ -41,17 +55,67 @@ function ErpApp() {
   const [authState, setAuthState] = useState<AuthState>(devBypass ? 'authenticated' : 'loading')
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(devBypass ? devUser : null)
   const [authError, setAuthError] = useState('')
-  const refreshUser = useCallback(async () => { if (devBypass) { setCurrentUser(devUser); setAuthState('authenticated'); return } setAuthState('loading'); setAuthError(''); try { const user = await apiRequest<CurrentUser>('/me'); setCurrentUser(user); try { setTheme(await apiRequest<ThemeConfig>('/theme/erp')) } catch { /* mantém tema padrão */ } setAuthState('authenticated') } catch (error) { setCurrentUser(null); if (error instanceof ApiError && error.status === 401) { setAuthState('unauthenticated'); return } setAuthError(error instanceof ApiError ? error.detail : error instanceof Error ? error.message : 'Falha inesperada ao iniciar o sistema.'); setAuthState('error') } }, [setTheme])
+
+  const refreshUser = useCallback(async () => {
+    if (devBypass) { setCurrentUser(devUser); setAuthState('authenticated'); return }
+    setAuthState('loading'); setAuthError('')
+    try {
+      const user = await apiRequest<CurrentUser>('/me')
+      setCurrentUser(user)
+      try { setTheme(await apiRequest<ThemeConfig>('/theme/erp')) } catch { /* mantém tema padrão */ }
+      setAuthState('authenticated')
+    } catch (error) {
+      setCurrentUser(null)
+      if (error instanceof ApiError && error.status === 401) { setAuthState('unauthenticated'); return }
+      setAuthError(error instanceof ApiError ? error.detail : error instanceof Error ? error.message : 'Falha inesperada ao iniciar o sistema.')
+      setAuthState('error')
+    }
+  }, [setTheme])
+
   useEffect(() => { if (!devBypass) void refreshUser() }, [refreshUser])
-  const visibleNavigation = useMemo(() => { if (!currentUser) return []; const granted = new Set(currentUser.permissions); return navigation.filter((item) => granted.has(item.permission)) }, [currentUser])
-  useEffect(() => { if (visibleNavigation.length > 0 && !visibleNavigation.some((item) => item.module === activeModule)) setActiveModule(visibleNavigation[0].module) }, [activeModule, visibleNavigation])
+  const visibleNavigation = useMemo(() => {
+    if (!currentUser) return []
+    const granted = new Set(currentUser.permissions)
+    return navigation.filter((item) => granted.has(item.permission))
+  }, [currentUser])
+  useEffect(() => {
+    if (visibleNavigation.length > 0 && !visibleNavigation.some((item) => item.module === activeModule)) setActiveModule(visibleNavigation[0].module)
+  }, [activeModule, visibleNavigation])
+
   if (authState === 'loading') return <BootScreen />
   if (authState === 'unauthenticated') return <LoginPage onAuthenticated={() => void refreshUser()} />
   if (authState === 'error') return <AccessError message={authError} onRetry={() => void refreshUser()} />
   if (!currentUser) return <BootScreen message="Carregando usuário..." />
+
   const initials = currentUser.name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join('') || 'AD'
   const primaryRole = currentUser.role_keys.includes('admin') ? 'Administrador' : (currentUser.role_keys[0] || 'Usuário')
   const brandInitials = theme.companyShortName.trim().slice(0, 2).toUpperCase() || 'IM'
-  return <div className={`app-shell ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}><aside className="sidebar"><div className="brand"><BrandMark logoUrl={theme.logoUrl} initials={brandInitials}/><div className="brand-copy"><strong>{theme.companyShortName || theme.companyName}</strong><span>ERP Imobiliário</span></div></div><nav className="nav-list" aria-label="Menu principal">{visibleNavigation.map(({ label, icon: Icon, module }) => <button className={`nav-item ${activeModule === module ? 'active' : ''}`} type="button" key={label} title={sidebarCollapsed ? label : undefined} onClick={() => setActiveModule(module)}><Icon size={18} strokeWidth={1.75}/><span>{label}</span></button>)}</nav><div className="sidebar-footer"><span className="sidebar-label">Empresa</span><button type="button" className="company-switcher"><div className="avatar">{currentUser.organization_name.trim().slice(0, 2).toUpperCase() || brandInitials}</div><div className="company-copy"><strong>{currentUser.organization_name}</strong><span>Ambiente principal</span></div><ChevronDown className="company-chevron" size={15}/></button></div></aside><main className="main-area"><header className="topbar"><div className="topbar-left"><button className="sidebar-toggle" type="button" aria-label={sidebarCollapsed ? 'Expandir menu lateral' : 'Recolher menu lateral'} onClick={() => setSidebarCollapsed((value) => !value)}><Menu size={20}/></button><label className="global-search"><Search size={17}/><input aria-label="Busca global" placeholder="Buscar imóveis, contratos, pessoas, cobranças..."/><kbd>Ctrl K</kbd></label></div><div className="topbar-actions">{!authConfigured && <span className="dev-badge">DEV · Auth pendente</span>}<button className="topbar-icon" type="button" aria-label="Notificações"><Bell size={18}/></button><button className="topbar-icon topbar-secondary-action" type="button" aria-label="Mensagens"><Mail size={18}/></button><button className="topbar-icon topbar-secondary-action" type="button" aria-label="Ajuda"><CircleHelp size={18}/></button><span className="topbar-divider"/><div className="user-summary"><div className="avatar avatar-user">{initials}</div><div><strong>{currentUser.name}</strong><span>{primaryRole}</span></div><ChevronDown size={15}/></div></div></header>{activeModule === 'dashboard' && <DashboardPage/>}{activeModule === 'people' && <PropertiesPage permissions={currentUser.permissions} initialTab="people"/>}{activeModule === 'properties' && <PropertiesPage permissions={currentUser.permissions} initialTab="properties"/>} {activeModule === 'captures' && <CapturesPage permissions={currentUser.permissions}/>} {activeModule === 'crm' && <CommercialPage permissions={currentUser.permissions} organizationId={currentUser.organization_id}/>} {activeModule === 'contracts' && <ContractsHub permissions={currentUser.permissions}/>} {activeModule === 'inspections' && <InspectionsPage permissions={currentUser.permissions}/>} {activeModule === 'settings' && <SettingsPage permissions={currentUser.permissions}/>} {!['dashboard', 'people', 'properties', 'captures', 'crm', 'contracts', 'inspections', 'settings'].includes(activeModule) && <ModulePlaceholder module={activeModule}/>} </main></div>
+  const implemented = ['dashboard', 'people', 'properties', 'captures', 'crm', 'contracts', 'inspections', 'finance', 'settings']
+
+  return <div className={`app-shell ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
+    <aside className="sidebar">
+      <div className="brand"><BrandMark logoUrl={theme.logoUrl} initials={brandInitials}/><div className="brand-copy"><strong>{theme.companyShortName || theme.companyName}</strong><span>ERP Imobiliário</span></div></div>
+      <nav className="nav-list" aria-label="Menu principal">{visibleNavigation.map(({ label, icon: Icon, module }) => <button className={`nav-item ${activeModule === module ? 'active' : ''}`} type="button" key={label} title={sidebarCollapsed ? label : undefined} onClick={() => setActiveModule(module)}><Icon size={18} strokeWidth={1.75}/><span>{label}</span></button>)}</nav>
+      <div className="sidebar-footer"><span className="sidebar-label">Empresa</span><button type="button" className="company-switcher"><div className="avatar">{currentUser.organization_name.trim().slice(0, 2).toUpperCase() || brandInitials}</div><div className="company-copy"><strong>{currentUser.organization_name}</strong><span>Ambiente principal</span></div><ChevronDown className="company-chevron" size={15}/></button></div>
+    </aside>
+    <main className="main-area">
+      <header className="topbar"><div className="topbar-left"><button className="sidebar-toggle" type="button" aria-label={sidebarCollapsed ? 'Expandir menu lateral' : 'Recolher menu lateral'} onClick={() => setSidebarCollapsed((value) => !value)}><Menu size={20}/></button><label className="global-search"><Search size={17}/><input aria-label="Busca global" placeholder="Buscar imóveis, contratos, pessoas, cobranças..."/><kbd>Ctrl K</kbd></label></div><div className="topbar-actions">{!authConfigured && <span className="dev-badge">DEV · Auth pendente</span>}<button className="topbar-icon" type="button" aria-label="Notificações"><Bell size={18}/></button><button className="topbar-icon topbar-secondary-action" type="button" aria-label="Mensagens"><Mail size={18}/></button><button className="topbar-icon topbar-secondary-action" type="button" aria-label="Ajuda"><CircleHelp size={18}/></button><span className="topbar-divider"/><div className="user-summary"><div className="avatar avatar-user">{initials}</div><div><strong>{currentUser.name}</strong><span>{primaryRole}</span></div><ChevronDown size={15}/></div></div></header>
+      {activeModule === 'dashboard' && <DashboardPage/>}
+      {activeModule === 'people' && <PropertiesPage permissions={currentUser.permissions} initialTab="people"/>}
+      {activeModule === 'properties' && <PropertiesPage permissions={currentUser.permissions} initialTab="properties"/>}
+      {activeModule === 'captures' && <CapturesPage permissions={currentUser.permissions}/>}
+      {activeModule === 'crm' && <CommercialPage permissions={currentUser.permissions} organizationId={currentUser.organization_id}/>}
+      {activeModule === 'contracts' && <ContractsHub permissions={currentUser.permissions}/>}
+      {activeModule === 'inspections' && <InspectionsPage permissions={currentUser.permissions}/>}
+      {activeModule === 'finance' && <FinancePage permissions={currentUser.permissions}/>}
+      {activeModule === 'settings' && <SettingsPage permissions={currentUser.permissions}/>}
+      {!implemented.includes(activeModule) && <ModulePlaceholder module={activeModule}/>} 
+    </main>
+  </div>
 }
-export default function App() { const match = window.location.pathname.match(/^\/site\/([^/]+)(?:\/imoveis\/([^/]+))?\/?$/); if (match) return <PublicSitePage organizationId={decodeURIComponent(match[1])} slug={match[2] ? decodeURIComponent(match[2]) : null}/>; return <ErpApp/> }
+
+export default function App() {
+  const match = window.location.pathname.match(/^\/site\/([^/]+)(?:\/imoveis\/([^/]+))?\/?$/)
+  if (match) return <PublicSitePage organizationId={decodeURIComponent(match[1])} slug={match[2] ? decodeURIComponent(match[2]) : null}/>
+  return <ErpApp/>
+}
