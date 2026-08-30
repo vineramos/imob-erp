@@ -96,6 +96,36 @@ jobs:
             --image "$IMAGE" \
             --quiet
 
+      - name: Show failed Cloud Run startup logs
+        if: failure()
+        env:
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          REGION: ${{ vars.GCP_REGION }}
+          SERVICE: ${{ vars.GCP_SERVICE }}
+        shell: bash
+        run: |
+          set +e
+          echo "--- Cloud Run startup diagnostics (last 15 minutes) ---"
+          REVISION="$(gcloud run revisions list \
+            --project "$PROJECT_ID" \
+            --region "$REGION" \
+            --service "$SERVICE" \
+            --sort-by='~metadata.creationTimestamp' \
+            --limit=1 \
+            --format='value(metadata.name)' 2>/dev/null)"
+          echo "Revision: ${REVISION:-unknown}"
+          FILTER="resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"${SERVICE}\""
+          if [[ -n "$REVISION" ]]; then
+            FILTER="${FILTER} AND resource.labels.revision_name=\"${REVISION}\""
+          fi
+          gcloud logging read "$FILTER" \
+            --project "$PROJECT_ID" \
+            --freshness=15m \
+            --limit=120 \
+            --order=asc \
+            --format='value(timestamp,severity,textPayload,jsonPayload.message)' || true
+          echo "--- end Cloud Run startup diagnostics ---"
+
       - name: Smoke test Clicksign configuration
         env:
           PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
