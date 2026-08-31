@@ -4,6 +4,7 @@ from app.api.routes.branding import router as branding_router
 from app.api.routes.contracts import router as contracts_router
 from app.api.routes.finance import router as finance_router
 from app.api.routes.finance_banking import router as finance_banking_router
+from app.api.routes.finance_cashflow import router as finance_cashflow_router
 from app.api.routes.finance_contracts import router as finance_contracts_router
 from app.api.routes.finance_core import router as finance_core_router
 from app.api.routes.finance_maintenance import router as finance_maintenance_router
@@ -33,6 +34,7 @@ api_router.include_router(maintenance_router)
 api_router.include_router(maintenance_v2_router)
 api_router.include_router(finance_router)
 api_router.include_router(finance_banking_router)
+api_router.include_router(finance_cashflow_router)
 api_router.include_router(finance_contracts_router)
 api_router.include_router(finance_core_router)
 api_router.include_router(finance_maintenance_router)
