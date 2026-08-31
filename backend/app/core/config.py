@@ -19,6 +19,17 @@ class Settings(BaseSettings):
     clicksign_environment: str = "sandbox"
     clicksign_webhook_secret: str = ""
 
+    # Banco Inter Empresas. As credenciais e o certificado mTLS ficam apenas
+    # no ambiente/Secret Manager. O ERP persiste somente IDs e respostas
+    # operacionais necessárias para rastrear cobranças e movimentações.
+    inter_environment: str = "sandbox"
+    inter_client_id: str = ""
+    inter_client_secret: str = ""
+    inter_cert_path: str = ""
+    inter_key_path: str = ""
+    inter_account_number: str = ""
+    inter_webhook_secret: str = ""
+
     # Storage próprio para documentos finais/contratuais. Em Cloud Run, a
     # autenticação usa a service account do runtime; nenhuma chave JSON é
     # necessária nem permitida pela aplicação.
@@ -53,6 +64,16 @@ class Settings(BaseSettings):
         if self.clicksign_environment.strip().lower() == "production":
             return "https://app.clicksign.com/api/v3"
         return "https://sandbox.clicksign.com/api/v3"
+
+    @property
+    def inter_base_url(self) -> str:
+        if self.inter_environment.strip().lower() == "production":
+            return "https://cdpj.partners.bancointer.com.br"
+        return "https://cdpj-sandbox.partners.uatinter.co"
+
+    @property
+    def inter_configured(self) -> bool:
+        return all((self.inter_client_id, self.inter_client_secret, self.inter_cert_path, self.inter_key_path))
 
 
 @lru_cache
