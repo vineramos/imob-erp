@@ -55,10 +55,10 @@ class FinanceCoreItem(BaseModel):
     lease_contract_id: UUID | None
     competence: date
     due_date: date | None
-    amount: Decimal
-    settled_amount: Decimal
-    remaining_amount: Decimal
-    margin_amount: Decimal
+    amount: float
+    settled_amount: float
+    remaining_amount: float
+    margin_amount: float
     status: str
     overdue: bool
     settled_at: datetime | None
@@ -69,14 +69,14 @@ class FinanceCoreItem(BaseModel):
 
 class FinanceCoreOverview(BaseModel):
     competence: date
-    receivable_open_amount: Decimal
-    payable_open_amount: Decimal
-    overdue_receivable_amount: Decimal
-    overdue_payable_amount: Decimal
-    received_amount: Decimal
-    paid_amount: Decimal
-    operating_open_amount: Decimal
-    third_party_open_amount: Decimal
+    receivable_open_amount: float
+    payable_open_amount: float
+    overdue_receivable_amount: float
+    overdue_payable_amount: float
+    received_amount: float
+    paid_amount: float
+    operating_open_amount: float
+    third_party_open_amount: float
     receivable_open_count: int
     payable_open_count: int
     overdue_count: int

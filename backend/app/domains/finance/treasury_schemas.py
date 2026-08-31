@@ -17,7 +17,7 @@ class PaymentCandidate(BaseModel):
     counterparty_name: str
     due_date: date | None
     fund_scope: FundScope
-    remaining_amount: Decimal
+    remaining_amount: float
     overdue: bool
 
 
@@ -44,7 +44,7 @@ class PaymentBatchItemResponse(BaseModel):
     counterparty_name: str
     due_date: date | None
     fund_scope: FundScope
-    amount: Decimal
+    amount: float
     status: str
     bank_transaction_id: UUID | None
 
@@ -59,7 +59,7 @@ class PaymentBatchResponse(BaseModel):
     fund_scope: FundScope
     payment_method: str
     status: str
-    total_amount: Decimal
+    total_amount: float
     item_count: int
     notes: str | None
     provider_batch_id: str | None
@@ -80,10 +80,10 @@ class PaymentBatchExecutionRequest(BaseModel):
 
 class CashFlowDay(BaseModel):
     date: date
-    receivables: Decimal
-    payables: Decimal
-    net: Decimal
-    projected_balance: Decimal
+    receivables: float
+    payables: float
+    net: float
+    projected_balance: float
     receivable_count: int
     payable_count: int
 
@@ -92,12 +92,12 @@ class CashFlowOverview(BaseModel):
     fund_scope: FundScope
     start_date: date
     end_date: date
-    current_bank_balance: Decimal
-    projected_receivables: Decimal
-    projected_payables: Decimal
-    projected_end_balance: Decimal
-    lowest_projected_balance: Decimal
+    current_bank_balance: float
+    projected_receivables: float
+    projected_payables: float
+    projected_end_balance: float
+    lowest_projected_balance: float
     lowest_balance_date: date
-    overdue_receivables: Decimal
-    overdue_payables: Decimal
+    overdue_receivables: float
+    overdue_payables: float
     days: list[CashFlowDay]
