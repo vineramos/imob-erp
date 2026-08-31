@@ -3,6 +3,9 @@ from fastapi import APIRouter
 from app.api.routes.branding import router as branding_router
 from app.api.routes.contracts import router as contracts_router
 from app.api.routes.finance import router as finance_router
+from app.api.routes.finance_advanced import public_router as portal_router
+from app.api.routes.finance_advanced import router as finance_advanced_router
+from app.api.routes.finance_advanced import webhook_router as inter_webhook_router
 from app.api.routes.finance_banking import router as finance_banking_router
 from app.api.routes.finance_cashflow import router as finance_cashflow_router
 from app.api.routes.finance_contracts import router as finance_contracts_router
@@ -39,6 +42,9 @@ api_router.include_router(finance_contracts_router)
 api_router.include_router(finance_core_router)
 api_router.include_router(finance_maintenance_router)
 api_router.include_router(finance_treasury_router)
+api_router.include_router(finance_advanced_router)
+api_router.include_router(portal_router)
+api_router.include_router(inter_webhook_router)
 api_router.include_router(signature_events_router)
 api_router.include_router(integrations_router)
 api_router.include_router(publication_router)
