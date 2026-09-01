@@ -1,0 +1,17 @@
+.cashflow-daily-matrix{overflow:hidden;padding:0}
+.cashflow-daily-caption{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;padding:12px 14px;border-bottom:1px solid var(--border)}
+.cashflow-daily-caption>div{display:grid;gap:3px}.cashflow-daily-caption strong{font-size:11px}.cashflow-daily-caption span,.cashflow-daily-caption small{font-size:8.8px;color:var(--text-muted)}
+.cashflow-daily-scroll{overflow:auto;max-width:100%}
+.cashflow-daily-table{border-collapse:separate;border-spacing:0;min-width:max-content;width:100%;font-size:9px}
+.cashflow-daily-table th,.cashflow-daily-table td{min-width:104px;padding:9px 10px;text-align:right;white-space:nowrap;border-right:1px solid var(--border);border-bottom:1px solid var(--border);background:var(--surface)}
+.cashflow-daily-table thead th{position:sticky;top:0;z-index:3;text-align:center;background:var(--surface-soft)}
+.cashflow-daily-table .daily-label{position:sticky;left:0;z-index:2;min-width:225px;text-align:left;background:var(--surface)}
+.cashflow-daily-table thead .daily-label{z-index:4;background:var(--surface-soft)}
+.cashflow-daily-table thead th strong,.cashflow-daily-table thead th span{display:block}.cashflow-daily-table thead th strong{font-size:10px}.cashflow-daily-table thead th span{margin-top:2px;font-size:8px;color:var(--text-muted)}
+.cashflow-daily-table thead th.today{background:var(--primary-soft);color:var(--primary-strong)}
+.cashflow-daily-group th,.cashflow-daily-group td{background:var(--surface-soft)!important;color:var(--text-muted);font-size:8px;font-weight:800;letter-spacing:.08em;text-transform:uppercase}
+.cashflow-daily-row .daily-label{font-weight:650}.cashflow-daily-row.muted th,.cashflow-daily-row.muted td{color:var(--text-muted)}
+.cashflow-daily-total th,.cashflow-daily-total td{font-weight:800;background:color-mix(in srgb,var(--surface-soft) 80%,var(--surface))}.cashflow-daily-total .daily-label{background:var(--surface-soft)}
+.cashflow-daily-balance th,.cashflow-daily-balance td{font-weight:800}.cashflow-daily-balance.accumulated th,.cashflow-daily-balance.accumulated td{background:var(--primary-soft)}.cashflow-daily-balance.accumulated .daily-label{background:var(--primary-soft)}
+.cashflow-daily-zero{color:var(--text-muted)}
+@media(max-width:760px){.cashflow-daily-caption{align-items:flex-start;flex-direction:column}.cashflow-daily-table .daily-label{min-width:180px}.cashflow-daily-table th,.cashflow-daily-table td{min-width:94px;padding:8px}}

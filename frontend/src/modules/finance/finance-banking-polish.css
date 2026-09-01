@@ -1,0 +1,9 @@
+.finance-bank-account-modal{width:min(680px,calc(100vw - 32px))}
+.finance-bank-account-modal .finance-modal-header{padding-bottom:18px;border-bottom:1px solid var(--border)}
+.finance-bank-account-form{padding:20px 0 4px;gap:16px 18px}
+.finance-bank-account-form .field{display:grid;gap:7px}.finance-bank-account-form .field>span{font-size:10px;font-weight:750;color:var(--text-muted)}
+.finance-bank-account-form input,.finance-bank-account-form select{width:100%;min-height:42px;border-radius:8px}
+.finance-bank-account-form .full{grid-column:1/-1;max-width:calc(50% - 9px)}
+.finance-bank-account-number{display:grid;grid-template-columns:minmax(0,1fr) 72px;gap:8px}
+.finance-bank-account-modal .form-actions{margin-top:14px;padding-top:16px;border-top:1px solid var(--border)}
+@media(max-width:640px){.finance-bank-account-form{grid-template-columns:1fr}.finance-bank-account-form .full{grid-column:auto;max-width:none}}
