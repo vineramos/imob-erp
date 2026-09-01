@@ -12,7 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.database import get_db
-from app.domains.finance.bank_models import BankAccount, BankTransaction
+from app.domains.finance.bank_models import BankAccount, BankReconciliation, BankTransaction
 from app.domains.finance.cashflow_schemas import (
     CashFlowPeriodDay,
     CashFlowPeriodMovement,
@@ -114,22 +114,27 @@ def _actual_movements(
     *,
     organization_id: UUID,
     account_ids: list[UUID],
+    fund_scope: str,
     start: date,
     today: date,
 ) -> tuple[list[BankTransaction], dict[date, list[CashFlowPeriodMovement]]]:
-    if not account_ids or start > today:
+    if start > today:
         return [], {}
-    transactions = db.scalars(
-        select(BankTransaction)
-        .options(selectinload(BankTransaction.reconciliations))
-        .where(
-            BankTransaction.organization_id == organization_id,
-            BankTransaction.bank_account_id.in_(account_ids),
-            BankTransaction.transaction_date >= start,
-            BankTransaction.transaction_date <= today,
-        )
-        .order_by(BankTransaction.transaction_date, BankTransaction.posted_at, BankTransaction.created_at)
-    ).all()
+
+    transactions: list[BankTransaction] = []
+    if account_ids:
+        transactions = db.scalars(
+            select(BankTransaction)
+            .options(selectinload(BankTransaction.reconciliations))
+            .where(
+                BankTransaction.organization_id == organization_id,
+                BankTransaction.bank_account_id.in_(account_ids),
+                BankTransaction.transaction_date >= start,
+                BankTransaction.transaction_date <= today,
+            )
+            .order_by(BankTransaction.transaction_date, BankTransaction.posted_at, BankTransaction.created_at)
+        ).all()
+
     grouped: dict[date, list[CashFlowPeriodMovement]] = defaultdict(list)
     for item in transactions:
         reconciliations = list(item.reconciliations or [])
@@ -148,6 +153,145 @@ def _actual_movements(
                 state="realized",
             )
         )
+
+    reconciled_keys: set[tuple[str, UUID]] = set()
+    if account_ids:
+        reconciled_keys = {
+            (str(row[0]), row[1])
+            for row in db.execute(
+                select(BankReconciliation.target_type, BankReconciliation.target_id)
+                .join(BankTransaction, BankTransaction.id == BankReconciliation.bank_transaction_id)
+                .where(
+                    BankTransaction.organization_id == organization_id,
+                    BankTransaction.bank_account_id.in_(account_ids),
+                )
+            ).all()
+        }
+
+    def add_source(
+        target_type: str,
+        target_id: UUID,
+        *,
+        settled_at: datetime | None,
+        scope: str,
+        direction: str,
+        amount: Decimal,
+        code: str | None,
+        description: str,
+        counterparty: str | None,
+        category: str,
+    ) -> None:
+        if scope != fund_scope or settled_at is None or (target_type, target_id) in reconciled_keys:
+            return
+        settled_date = settled_at.astimezone(SAO_PAULO).date() if settled_at.tzinfo else settled_at.date()
+        amount = money(amount)
+        if settled_date < start or settled_date > today or amount <= 0:
+            return
+        grouped[settled_date].append(
+            CashFlowPeriodMovement(
+                id=f"source:{target_type}:{target_id}",
+                source_type=target_type,
+                source_code=code,
+                description=description,
+                counterparty_name=counterparty,
+                category=category,
+                direction=direction,
+                amount=float(amount),
+                state="realized",
+            )
+        )
+
+    charges = db.scalars(
+        select(RentCharge).where(
+            RentCharge.organization_id == organization_id,
+            RentCharge.status == "paid",
+            RentCharge.paid_at.is_not(None),
+        )
+    ).all()
+    for item in charges:
+        tenants = item.tenant_snapshot or []
+        tenant_name = next((str(person.get("name")) for person in tenants if isinstance(person, dict) and person.get("name")), None)
+        snapshot = item.property_snapshot or {}
+        property_label = snapshot.get("code") or snapshot.get("title") or snapshot.get("name") or "Imóvel"
+        add_source(
+            "rent",
+            item.id,
+            settled_at=item.paid_at,
+            scope="third_party",
+            direction="receivable",
+            amount=money(item.paid_amount or item.gross_amount),
+            code=f"COB-{item.internal_number:06d}",
+            description=f"Aluguel recebido · {property_label}",
+            counterparty=tenant_name,
+            category="Locação",
+        )
+
+    repasses = db.scalars(
+        select(OwnerRepasse).where(
+            OwnerRepasse.organization_id == organization_id,
+            OwnerRepasse.status == "paid",
+            OwnerRepasse.paid_at.is_not(None),
+        )
+    ).all()
+    for item in repasses:
+        add_source(
+            "owner_repasse",
+            item.id,
+            settled_at=item.paid_at,
+            scope="third_party",
+            direction="payable",
+            amount=money(item.amount),
+            code=f"REP-{str(item.id)[:8].upper()}",
+            description=f"Repasse pago · {item.owner_name}",
+            counterparty=item.owner_name,
+            category="Repasse",
+        )
+
+    maintenance = db.scalars(
+        select(MaintenanceFinancialEntry).where(
+            MaintenanceFinancialEntry.organization_id == organization_id,
+            MaintenanceFinancialEntry.settled_at.is_not(None),
+            MaintenanceFinancialEntry.settled_amount > 0,
+        )
+    ).all()
+    for item in maintenance:
+        if item.direction == "receivable" and item.collection_method == "owner_repasse_deduction":
+            continue
+        add_source(
+            "maintenance",
+            item.id,
+            settled_at=item.settled_at,
+            scope="operating",
+            direction=item.direction,
+            amount=money(item.settled_amount),
+            code=f"MFIN-{item.internal_number:06d}",
+            description=f"Manutenção · {item.counterparty_name}",
+            counterparty=item.counterparty_name,
+            category="Manutenção",
+        )
+
+    manual = db.scalars(
+        select(FinancialTitle).where(
+            FinancialTitle.organization_id == organization_id,
+            FinancialTitle.settled_at.is_not(None),
+            FinancialTitle.settled_amount > 0,
+            FinancialTitle.status.in_(("partial", "settled")),
+        )
+    ).all()
+    for item in manual:
+        add_source(
+            "manual",
+            item.id,
+            settled_at=item.settled_at,
+            scope=item.fund_scope,
+            direction=item.direction,
+            amount=money(item.settled_amount),
+            code=f"FIN-{item.internal_number:06d}",
+            description=item.description,
+            counterparty=item.counterparty_name,
+            category=item.category,
+        )
+
     return transactions, dict(grouped)
 
 
@@ -330,6 +474,7 @@ def cash_flow_period(
         db,
         organization_id=organization_id,
         account_ids=account_ids,
+        fund_scope=fund_scope,
         start=start_date,
         today=today,
     )

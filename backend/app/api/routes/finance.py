@@ -29,6 +29,7 @@ from app.domains.foundation.access import UserContext, require_permission
 from app.domains.foundation.audit import write_audit
 from app.domains.foundation.models import Organization
 from app.domains.leases.models import LeaseContract
+from app.domains.portfolio.models import Person
 
 router = APIRouter(prefix="/finance", tags=["finance"])
 
@@ -384,7 +385,14 @@ def _owner_statement(db: Session, organization_id: UUID, owner_id: UUID, compete
     if property_id:
         stmt = stmt.where(OwnerRepasse.property_id == property_id)
     rows = db.execute(stmt).all()
-    owner_name = rows[0][0].owner_name if rows else "Proprietário"
+    owner = db.scalar(
+        select(Person).where(
+            Person.id == owner_id,
+            Person.organization_id == organization_id,
+            Person.is_active.is_(True),
+        )
+    )
+    owner_name = rows[0][0].owner_name if rows else (owner.name if owner else "Proprietário não identificado")
     lines: list[OwnerStatementLine] = []
     for repasse, charge, settlement in rows:
         lines.append(OwnerStatementLine(
