@@ -1,0 +1,11 @@
+.finance-manual-title-modal{width:min(920px,calc(100vw - 28px));max-height:92vh;overflow:auto}
+.finance-manual-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;padding:18px 20px}
+.finance-manual-grid label{display:grid;gap:6px}.finance-manual-grid label>span{font-size:9px;font-weight:750;color:var(--text-muted);text-transform:uppercase;letter-spacing:.03em}.finance-manual-grid .full{grid-column:1/-1}
+.finance-manual-grid input,.finance-manual-grid select,.finance-manual-grid textarea{width:100%}
+.finance-manual-inline{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center}
+.finance-manual-quick{display:grid;grid-template-columns:minmax(180px,1fr) minmax(170px,.7fr) minmax(150px,.55fr) auto;gap:8px;align-items:center;padding:10px;border:1px dashed var(--border);border-radius:9px;background:var(--surface-soft)}
+.finance-manual-quick>div{display:grid;gap:2px}.finance-manual-quick strong{font-size:10px}.finance-manual-quick small{font-size:8.5px;color:var(--text-muted)}
+.finance-manual-file{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:10px;align-items:center;padding:10px 12px;border:1px solid var(--border);border-radius:9px;background:var(--surface-soft);position:relative}.finance-manual-file input{position:absolute;inset:0;opacity:0;cursor:pointer}.finance-manual-file>div{display:grid;gap:2px;pointer-events:none}.finance-manual-file strong{font-size:10px}.finance-manual-file small{font-size:8.5px;color:var(--text-muted)}
+.finance-manual-warning{display:block;margin-top:4px;color:var(--warning);font-size:8.5px}
+.finance-manual-scope-warning{margin:0 20px 14px;padding:9px 11px;border:1px solid color-mix(in srgb,var(--warning) 28%,var(--border));border-radius:8px;background:color-mix(in srgb,var(--warning) 7%,var(--surface));font-size:9px;color:var(--text-muted)}
+@media(max-width:760px){.finance-manual-grid{grid-template-columns:1fr}.finance-manual-grid .full{grid-column:auto}.finance-manual-quick{grid-template-columns:1fr}.finance-manual-inline{grid-template-columns:1fr}}
