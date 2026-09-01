@@ -24,15 +24,7 @@ jobs:
       - name: Set up Google Cloud SDK
         uses: google-github-actions/setup-gcloud@v3
 
-      - name: Ensure Cloud Resource Manager API
-        env:
-          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
-        run: |
-          gcloud services enable cloudresourcemanager.googleapis.com \
-            --project "$PROJECT_ID" \
-            --quiet
-
-      - name: Clone current Cloud Run service to Sao Paulo
+      - name: Deploy parallel Cloud Run service in Sao Paulo
         env:
           PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
           SOURCE_REGION: us-east1
@@ -42,52 +34,97 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          EXPORT_FILE="$(mktemp)"
-          trap 'rm -f "$EXPORT_FILE"' EXIT
+          SOURCE_JSON="$(mktemp)"
+          ENV_FILE="$(mktemp)"
+          META_FILE="$(mktemp)"
+          trap 'rm -f "$SOURCE_JSON" "$ENV_FILE" "$META_FILE"' EXIT
 
           gcloud run services describe "$SOURCE_SERVICE" \
             --project "$PROJECT_ID" \
             --region "$SOURCE_REGION" \
-            --format=export > "$EXPORT_FILE"
+            --format=json > "$SOURCE_JSON"
 
-          python - "$EXPORT_FILE" "$SOURCE_SERVICE" "$TARGET_SERVICE" <<'PY'
-          import re
+          python - "$SOURCE_JSON" "$ENV_FILE" "$META_FILE" <<'PY'
+          import json
           import sys
 
-          path, source, target = sys.argv[1:]
-          text = open(path, encoding="utf-8").read()
-          text, count = re.subn(
-              rf"(?m)^(\s*name:\s*){re.escape(source)}\s*$",
-              rf"\1{target}",
-              text,
-              count=1,
-          )
-          if count != 1:
-              raise SystemExit("Could not rewrite Cloud Run service name")
+          source_path, env_path, meta_path = sys.argv[1:]
+          data = json.load(open(source_path, encoding="utf-8"))
+          spec = (data.get("spec") or {}).get("template", {}).get("spec", {})
+          containers = spec.get("containers") or []
+          if not containers:
+              raise SystemExit("Cloud Run source has no container")
+          container = containers[0]
+          image = str(container.get("image") or "").strip()
+          if not image:
+              raise SystemExit("Cloud Run source image not found")
 
-          drop_markers = (
-              "run.googleapis.com/urls:",
-              "run.googleapis.com/operation-id:",
-              "run.googleapis.com/client-name:",
-              "run.googleapis.com/client-version:",
-              "serving.knative.dev/creator:",
-              "serving.knative.dev/lastModifier:",
-          )
-          lines = [line for line in text.splitlines() if not any(marker in line for marker in drop_markers)]
-          open(path, "w", encoding="utf-8").write("\n".join(lines) + "\n")
+          plain_env = {}
+          secret_refs = []
+          for item in container.get("env") or []:
+              name = str(item.get("name") or "").strip()
+              if not name:
+                  continue
+              if "value" in item:
+                  plain_env[name] = str(item.get("value") or "")
+                  continue
+              ref = (item.get("valueFrom") or {}).get("secretKeyRef") or {}
+              secret = str(ref.get("name") or "").strip()
+              version = str(ref.get("key") or "latest").strip() or "latest"
+              if secret:
+                  secret_refs.append(f"{name}={secret}:{version}")
+
+          with open(env_path, "w", encoding="utf-8") as fh:
+              json.dump(plain_env, fh)
+
+          service_account = str(spec.get("serviceAccountName") or "").strip()
+          with open(meta_path, "w", encoding="utf-8") as fh:
+              fh.write(f"IMAGE={image}\n")
+              fh.write(f"SERVICE_ACCOUNT={service_account}\n")
+              fh.write(f"SECRETS={','.join(secret_refs)}\n")
           PY
 
-          gcloud run services replace "$EXPORT_FILE" \
-            --project "$PROJECT_ID" \
-            --region "$TARGET_REGION" \
+          # shellcheck disable=SC1090
+          source "$META_FILE"
+          ARGS=(
+            run deploy "$TARGET_SERVICE"
+            --project "$PROJECT_ID"
+            --region "$TARGET_REGION"
+            --image "$IMAGE"
             --quiet
+            --allow-unauthenticated
+          )
+          if [[ -s "$ENV_FILE" ]]; then
+            ARGS+=(--env-vars-file "$ENV_FILE")
+          fi
+          if [[ -n "${SECRETS:-}" ]]; then
+            ARGS+=(--set-secrets "$SECRETS")
+          fi
+          if [[ -n "${SERVICE_ACCOUNT:-}" ]]; then
+            ARGS+=(--service-account "$SERVICE_ACCOUNT")
+          fi
 
-          gcloud run services add-iam-policy-binding "$TARGET_SERVICE" \
-            --project "$PROJECT_ID" \
-            --region "$TARGET_REGION" \
-            --member="allUsers" \
-            --role="roles/run.invoker" \
-            --quiet >/dev/null
+          if ! gcloud "${ARGS[@]}"; then
+            echo "Public IAM binding was not available; retrying with Cloud Run invoker IAM check disabled."
+            FALLBACK=(
+              run deploy "$TARGET_SERVICE"
+              --project "$PROJECT_ID"
+              --region "$TARGET_REGION"
+              --image "$IMAGE"
+              --quiet
+              --no-invoker-iam-check
+            )
+            if [[ -s "$ENV_FILE" ]]; then
+              FALLBACK+=(--env-vars-file "$ENV_FILE")
+            fi
+            if [[ -n "${SECRETS:-}" ]]; then
+              FALLBACK+=(--set-secrets "$SECRETS")
+            fi
+            if [[ -n "${SERVICE_ACCOUNT:-}" ]]; then
+              FALLBACK+=(--service-account "$SERVICE_ACCOUNT")
+            fi
+            gcloud "${FALLBACK[@]}"
+          fi
 
       - name: Smoke test Brazil service
         env:
