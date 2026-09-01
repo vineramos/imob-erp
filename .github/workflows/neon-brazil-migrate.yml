@@ -1,0 +1,285 @@
+name: Neon Brazil Migration
+
+on:
+  push:
+    branches: [sprint-1-foundation]
+
+jobs:
+  migrate-neon-to-brazil:
+    if: contains(github.event.head_commit.message, '[neon-br-migrate]')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v3
+        with:
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_WIF_SERVICE_ACCOUNT }}
+
+      - name: Set up Google Cloud SDK
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Resolve source database securely
+        env:
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          SOURCE_REGION: us-east1
+          SOURCE_SERVICE: ${{ vars.GCP_SERVICE }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          SERVICE_JSON="$(mktemp)"
+          SOURCE_URL_FILE="$(mktemp)"
+          META_FILE="$(mktemp)"
+          trap 'rm -f "$SERVICE_JSON" "$SOURCE_URL_FILE" "$META_FILE"' EXIT
+          chmod 600 "$SOURCE_URL_FILE"
+
+          gcloud run services describe "$SOURCE_SERVICE" \
+            --project "$PROJECT_ID" \
+            --region "$SOURCE_REGION" \
+            --format=json > "$SERVICE_JSON"
+
+          python - "$SERVICE_JSON" "$META_FILE" <<'PY'
+          import json
+          import sys
+
+          service_path, meta_path = sys.argv[1:]
+          data = json.load(open(service_path, encoding="utf-8"))
+          spec = (data.get("spec") or {}).get("template", {}).get("spec", {})
+          containers = spec.get("containers") or []
+          if not containers:
+              raise SystemExit("Cloud Run source has no container")
+          entries = {str(item.get("name") or ""): item for item in containers[0].get("env") or []}
+          item = entries.get("DATABASE_URL") or {}
+          direct = str(item.get("value") or "").strip()
+          ref = (item.get("valueFrom") or {}).get("secretKeyRef") or {}
+          secret = str(ref.get("name") or "").strip()
+          version = str(ref.get("key") or "latest").strip() or "latest"
+          with open(meta_path, "w", encoding="utf-8") as fh:
+              if direct:
+                  fh.write("SOURCE_KIND=direct\n")
+              elif secret:
+                  fh.write("SOURCE_KIND=secret\n")
+                  fh.write(f"SOURCE_SECRET={secret}\n")
+                  fh.write(f"SOURCE_VERSION={version}\n")
+              else:
+                  fh.write("SOURCE_KIND=missing\n")
+          if direct:
+              open("/tmp/imob-source-db-url", "w", encoding="utf-8").write(direct)
+          PY
+
+          # shellcheck disable=SC1090
+          source "$META_FILE"
+          if [[ "$SOURCE_KIND" == "direct" ]]; then
+            mv /tmp/imob-source-db-url "$SOURCE_URL_FILE"
+          elif [[ "$SOURCE_KIND" == "secret" ]]; then
+            gcloud secrets versions access "$SOURCE_VERSION" \
+              --secret "$SOURCE_SECRET" \
+              --project "$PROJECT_ID" > "$SOURCE_URL_FILE"
+          else
+            echo "DATABASE_URL not found on source Cloud Run service"
+            exit 1
+          fi
+
+          SOURCE_URL="$(cat "$SOURCE_URL_FILE")"
+          echo "::add-mask::$SOURCE_URL"
+          {
+            echo 'SOURCE_DATABASE_URL<<IMOB_DB_EOF'
+            printf '%s\n' "$SOURCE_URL"
+            echo 'IMOB_DB_EOF'
+          } >> "$GITHUB_ENV"
+          echo "Source database resolved without exposing credentials."
+
+      - name: Validate Brazil destination secret
+        env:
+          TARGET_DATABASE_URL: ${{ secrets.NEON_BR_DATABASE_URL }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "${TARGET_DATABASE_URL:-}" ]]; then
+            echo "GitHub Actions secret NEON_BR_DATABASE_URL is not configured."
+            exit 1
+          fi
+          echo "::add-mask::$TARGET_DATABASE_URL"
+          python - <<'PY'
+          import os
+          from urllib.parse import urlparse
+
+          source = urlparse(os.environ["SOURCE_DATABASE_URL"])
+          target = urlparse(os.environ["TARGET_DATABASE_URL"])
+          if not source.hostname or not target.hostname:
+              raise SystemExit("Invalid source or target database URL")
+          if source.hostname == target.hostname and source.path == target.path:
+              raise SystemExit("Source and target database cannot be the same")
+          if "sa-east-1" not in target.hostname:
+              raise SystemExit("Destination does not look like the Sao Paulo Neon project")
+          print("Destination validated as Sao Paulo without exposing credentials.")
+          PY
+
+      - name: Require Managed Auth on Brazil branch
+        env:
+          TARGET_DATABASE_URL: ${{ secrets.NEON_BR_DATABASE_URL }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --rm \
+            -e PGPASSWORD='' \
+            postgres:18 \
+            psql "$TARGET_DATABASE_URL" -v ON_ERROR_STOP=1 -Atc \
+            "SELECT CASE WHEN to_regclass('neon_auth.\"user\"') IS NOT NULL AND to_regclass('neon_auth.account') IS NOT NULL THEN 'ready' ELSE 'missing' END" \
+            | grep -qx ready || {
+              echo "Managed Neon Auth is not provisioned on the Brazil branch yet."
+              exit 1
+            }
+          echo "Brazil Managed Auth schema is ready."
+
+      - name: Dump active US database
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/imob-neon-migration"
+          chmod 700 "$RUNNER_TEMP/imob-neon-migration"
+          docker run --rm \
+            -e SOURCE_DATABASE_URL \
+            -v "$RUNNER_TEMP/imob-neon-migration:/work" \
+            postgres:18 bash -euo pipefail -c '
+              pg_dump "$SOURCE_DATABASE_URL" \
+                --format=custom \
+                --no-owner \
+                --no-acl \
+                --schema=public \
+                --file=/work/public.dump
+              pg_dump "$SOURCE_DATABASE_URL" \
+                --format=custom \
+                --no-owner \
+                --no-acl \
+                --data-only \
+                --table='"'"'neon_auth."user"'"'"' \
+                --table='"'"'neon_auth.account'"'"' \
+                --table='"'"'neon_auth.organization'"'"' \
+                --table='"'"'neon_auth.member'"'"' \
+                --table='"'"'neon_auth.invitation'"'"' \
+                --file=/work/auth-data.dump
+            '
+          test -s "$RUNNER_TEMP/imob-neon-migration/public.dump"
+          test -s "$RUNNER_TEMP/imob-neon-migration/auth-data.dump"
+          echo "Source dump completed."
+
+      - name: Restore public application data to Brazil
+        env:
+          TARGET_DATABASE_URL: ${{ secrets.NEON_BR_DATABASE_URL }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "::add-mask::$TARGET_DATABASE_URL"
+          docker run --rm \
+            -e TARGET_DATABASE_URL \
+            -v "$RUNNER_TEMP/imob-neon-migration:/work" \
+            postgres:18 bash -euo pipefail -c '
+              pg_restore \
+                --dbname="$TARGET_DATABASE_URL" \
+                --clean \
+                --if-exists \
+                --no-owner \
+                --no-acl \
+                --exit-on-error \
+                /work/public.dump
+            '
+          echo "Public schema and data restored to Brazil."
+
+      - name: Restore Auth identity data without regional config
+        env:
+          TARGET_DATABASE_URL: ${{ secrets.NEON_BR_DATABASE_URL }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "::add-mask::$TARGET_DATABASE_URL"
+          docker run --rm \
+            -e TARGET_DATABASE_URL \
+            -v "$RUNNER_TEMP/imob-neon-migration:/work" \
+            postgres:18 bash -euo pipefail -c '
+              psql "$TARGET_DATABASE_URL" -v ON_ERROR_STOP=1 -c \
+                "TRUNCATE TABLE neon_auth.invitation, neon_auth.member, neon_auth.organization, neon_auth.account, neon_auth.\"user\" CASCADE;"
+              pg_restore \
+                --dbname="$TARGET_DATABASE_URL" \
+                --data-only \
+                --no-owner \
+                --no-acl \
+                --exit-on-error \
+                /work/auth-data.dump
+            '
+          echo "Auth users/credentials restored; regional config/JWKS/sessions were intentionally preserved from Brazil."
+
+      - name: Compare source and Brazil row counts
+        env:
+          TARGET_DATABASE_URL: ${{ secrets.NEON_BR_DATABASE_URL }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "::add-mask::$TARGET_DATABASE_URL"
+          docker run --rm \
+            -e SOURCE_DATABASE_URL \
+            -e TARGET_DATABASE_URL \
+            postgres:18 bash -euo pipefail -c '
+              function snapshot() {
+                local url="$1"
+                psql "$url" -v ON_ERROR_STOP=1 -At <<'"'"'SQL'"'"'
+                SELECT table_name || '=' || (xpath('/row/c/text()', query_to_xml(format('SELECT count(*) AS c FROM public.%I', table_name), false, true, '')))[1]::text
+                FROM information_schema.tables
+                WHERE table_schema='public' AND table_type='BASE TABLE'
+                ORDER BY table_name;
+SQL
+              }
+              snapshot "$SOURCE_DATABASE_URL" > /tmp/source-counts
+              snapshot "$TARGET_DATABASE_URL" > /tmp/target-counts
+              if ! diff -u /tmp/source-counts /tmp/target-counts; then
+                echo "Public table row counts differ after migration."
+                exit 1
+              fi
+              SRC_AUTH=$(psql "$SOURCE_DATABASE_URL" -v ON_ERROR_STOP=1 -Atc '"'"'SELECT count(*) FROM neon_auth."user"'"'"')
+              DST_AUTH=$(psql "$TARGET_DATABASE_URL" -v ON_ERROR_STOP=1 -Atc '"'"'SELECT count(*) FROM neon_auth."user"'"'"')
+              [[ "$SRC_AUTH" == "$DST_AUTH" ]] || { echo "Auth user count differs"; exit 1; }
+              echo "Row counts match for all public tables and Auth users."
+            '
+
+      - name: Point Brazil Cloud Run to Brazil Neon
+        env:
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          TARGET_REGION: southamerica-east1
+          TARGET_SERVICE: imob-erp-br
+          TARGET_DATABASE_URL: ${{ secrets.NEON_BR_DATABASE_URL }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "::add-mask::$TARGET_DATABASE_URL"
+          gcloud run services update "$TARGET_SERVICE" \
+            --project "$PROJECT_ID" \
+            --region "$TARGET_REGION" \
+            --update-env-vars="DATABASE_URL=${TARGET_DATABASE_URL}" \
+            --quiet
+
+      - name: Smoke test migrated Brazil stack
+        env:
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          TARGET_REGION: southamerica-east1
+          TARGET_SERVICE: imob-erp-br
+        shell: bash
+        run: |
+          set -euo pipefail
+          SERVICE_URL="$(gcloud run services describe "$TARGET_SERVICE" --project "$PROJECT_ID" --region "$TARGET_REGION" --format='value(status.url)')"
+          curl --silent --show-error --fail --max-time 20 "${SERVICE_URL}/runtime-config.js" >/dev/null
+          CODE="$(curl --silent --show-error --output /tmp/imob-br-auth.json --write-out '%{http_code}' --max-time 25 \
+            -X POST "${SERVICE_URL}/api/auth/sign-in" \
+            -H 'Content-Type: application/json' \
+            --data '{"email":"imob-auth-smoke@example.invalid","password":"invalid-smoke-password-123"}' || true)"
+          [[ "$CODE" == "401" ]] || { echo "Brazil auth proxy smoke failed (HTTP ${CODE})"; exit 1; }
+          echo "Migrated Brazil stack is healthy: ${SERVICE_URL}"
+
+      - name: Remove migration dump
+        if: always()
+        shell: bash
+        run: rm -rf "$RUNNER_TEMP/imob-neon-migration"
