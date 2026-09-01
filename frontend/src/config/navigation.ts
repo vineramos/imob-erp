@@ -10,6 +10,7 @@ import {
   House,
   Settings,
   UserRound,
+  UserRoundCheck,
   Users,
   Wrench,
 } from 'lucide-react'
@@ -18,6 +19,7 @@ export const navigation = [
   { label: 'Dashboard', icon: Gauge, module: 'dashboard', permission: 'dashboard.view' },
   { label: 'Pessoas', icon: UserRound, module: 'people', permission: 'properties.view' },
   { label: 'Imóveis', icon: House, module: 'properties', permission: 'properties.view' },
+  { label: 'Corretores', icon: UserRoundCheck, module: 'brokers', permission: 'properties.view' },
   { label: 'Captações', icon: Handshake, module: 'captures', permission: 'captures.view' },
   { label: 'Comercial / CRM', icon: Users, module: 'crm', permission: 'crm.view' },
   { label: 'Contratos', icon: FileText, module: 'contracts', permission: 'contracts.view' },
