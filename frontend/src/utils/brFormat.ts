@@ -73,7 +73,7 @@ export function formatCurrency(value: number | string | null | undefined): strin
   })
 }
 
-const documentKeys = new Set(['document_number', 'documentNumber', 'cpf_cnpj', 'cpfCnpj', 'cpf', 'cnpj'])
+const documentKeys = new Set(['document_number', 'documentNumber', 'cpf_cnpj', 'cpfCnpj', 'cpf', 'cnpj', 'account_holder_document'])
 const phoneKeys = new Set(['phone', 'contact_phone', 'contactPhone', 'whatsapp', 'telefone', 'celular'])
 const cepKeys = new Set(['postal_code', 'postalCode', 'cep'])
 
