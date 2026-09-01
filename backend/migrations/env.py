@@ -15,7 +15,9 @@ from app.domains.foundation import models as foundation_models  # noqa: F401
 from app.domains.inspections import models as inspection_models  # noqa: F401
 from app.domains.leases import models as lease_models  # noqa: F401
 from app.domains.maintenance import models as maintenance_models  # noqa: F401
+from app.domains.portfolio import bank_models as portfolio_bank_models  # noqa: F401
 from app.domains.portfolio import models as portfolio_models  # noqa: F401
+from app.domains.portfolio import profile_models as portfolio_profile_models  # noqa: F401
 
 config = context.config
 settings = get_settings()

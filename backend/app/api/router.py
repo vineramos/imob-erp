@@ -22,6 +22,7 @@ from app.api.routes.leases import router as leases_router
 from app.api.routes.maintenance import router as maintenance_router
 from app.api.routes.maintenance_v2 import router as maintenance_v2_router
 from app.api.routes.person_bank_details import router as person_bank_details_router
+from app.api.routes.person_profile import router as person_profile_router
 from app.api.routes.portfolio import router as portfolio_router
 from app.api.routes.property_media import router as property_media_router
 from app.api.routes.publication import router as publication_router
@@ -33,6 +34,7 @@ api_router.include_router(branding_router)
 api_router.include_router(foundation_router)
 api_router.include_router(portfolio_router)
 api_router.include_router(person_bank_details_router)
+api_router.include_router(person_profile_router)
 api_router.include_router(property_media_router)
 api_router.include_router(contracts_router)
 api_router.include_router(leases_router)
