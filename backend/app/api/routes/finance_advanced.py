@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 
 from app.api.routes.finance_billing import router as billing_router
+from app.api.routes.finance_classifications import router as classifications_router
 from app.api.routes.finance_commissions import router as commissions_router
 from app.api.routes.finance_delinquency import router as delinquency_router
 from app.api.routes.finance_inter import router as inter_router, webhook_router
@@ -12,6 +13,7 @@ router.include_router(billing_router)
 router.include_router(delinquency_router)
 router.include_router(reports_router)
 router.include_router(commissions_router)
+router.include_router(classifications_router)
 router.include_router(portal_admin_router)
 router.include_router(inter_router)
 
