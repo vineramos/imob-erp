@@ -109,7 +109,9 @@ jobs:
           CONFIG_FILE="$(mktemp)"
           AUTH_FILE="$(mktemp)"
           HEADER_FILE="$(mktemp)"
-          trap 'rm -f "$CONFIG_FILE" "$AUTH_FILE" "$HEADER_FILE" /tmp/imob-auth-body.json' EXIT
+          POST_HEADER_FILE="$(mktemp)"
+          POST_BODY_FILE="$(mktemp)"
+          trap 'rm -f "$CONFIG_FILE" "$AUTH_FILE" "$HEADER_FILE" "$POST_HEADER_FILE" "$POST_BODY_FILE" /tmp/imob-auth-body.json' EXIT
 
           curl --silent --show-error --fail --max-time 15 "${SERVICE_URL}/runtime-config.js" > "$CONFIG_FILE"
           python - "$CONFIG_FILE" "$AUTH_FILE" <<'PY'
@@ -143,6 +145,7 @@ jobs:
             -H 'Access-Control-Request-Method: POST' \
             -H 'Access-Control-Request-Headers: content-type' || true)"
           ALLOW_ORIGIN="$(awk 'BEGIN{IGNORECASE=1} /^access-control-allow-origin:/ {sub(/\r$/, "", $2); print $2}' "$HEADER_FILE" | tail -n 1)"
+          ALLOW_CREDENTIALS="$(awk 'BEGIN{IGNORECASE=1} /^access-control-allow-credentials:/ {sub(/\r$/, "", $2); print tolower($2)}' "$HEADER_FILE" | tail -n 1)"
 
           if [[ "$PREFLIGHT_CODE" == "000" || -z "$PREFLIGHT_CODE" ]]; then
             echo "Neon Auth CORS preflight: FAILED (network/DNS/timeout)"
@@ -152,7 +155,37 @@ jobs:
             echo "Neon Auth CORS preflight: FAILED (Cloud Run origin is not allowed; HTTP ${PREFLIGHT_CODE})"
             exit 1
           fi
-          echo "Neon Auth CORS preflight: SUCCESS (HTTP ${PREFLIGHT_CODE})"
+          if [[ "$ALLOW_CREDENTIALS" != "true" ]]; then
+            echo "Neon Auth CORS credentials: FAILED (Access-Control-Allow-Credentials missing)"
+            exit 1
+          fi
+          echo "Neon Auth CORS preflight: SUCCESS (HTTP ${PREFLIGHT_CODE}, credentials allowed)"
+
+          SIGNIN_CODE="$(curl --silent --show-error --output "$POST_BODY_FILE" --dump-header "$POST_HEADER_FILE" --write-out '%{http_code}' --max-time 15 \
+            -X POST "${AUTH_URL}/sign-in/email" \
+            -H "Origin: ${SERVICE_URL}" \
+            -H 'Content-Type: application/json' \
+            --data '{"email":"imob-auth-smoke@example.invalid","password":"invalid-smoke-password-123"}' || true)"
+          POST_ALLOW_ORIGIN="$(awk 'BEGIN{IGNORECASE=1} /^access-control-allow-origin:/ {sub(/\r$/, "", $2); print $2}' "$POST_HEADER_FILE" | tail -n 1)"
+          POST_ALLOW_CREDENTIALS="$(awk 'BEGIN{IGNORECASE=1} /^access-control-allow-credentials:/ {sub(/\r$/, "", $2); print tolower($2)}' "$POST_HEADER_FILE" | tail -n 1)"
+
+          if [[ -z "$SIGNIN_CODE" || "$SIGNIN_CODE" == "000" ]]; then
+            echo "Neon Auth sign-in endpoint: FAILED (network/DNS/timeout)"
+            exit 1
+          fi
+          if [[ "$SIGNIN_CODE" -ge 500 ]]; then
+            echo "Neon Auth sign-in endpoint: FAILED (HTTP ${SIGNIN_CODE})"
+            exit 1
+          fi
+          if [[ "$POST_ALLOW_ORIGIN" != "$SERVICE_URL" && "$POST_ALLOW_ORIGIN" != "*" ]]; then
+            echo "Neon Auth sign-in response CORS: FAILED"
+            exit 1
+          fi
+          if [[ "$POST_ALLOW_CREDENTIALS" != "true" ]]; then
+            echo "Neon Auth sign-in response credentials: FAILED"
+            exit 1
+          fi
+          echo "Neon Auth sign-in endpoint: SUCCESS (expected auth rejection HTTP ${SIGNIN_CODE})"
 
       - name: Smoke test Clicksign configuration
         env:
