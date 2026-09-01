@@ -8,7 +8,7 @@ type LoginPageProps = {
   onAuthenticated: () => void
 }
 
-type AccessMode = 'login' | 'bootstrap'
+type AccessMode = 'login' | 'bootstrap' | 'forgot' | 'reset'
 
 type BootstrapStatus = {
   bootstrap_open: boolean
@@ -22,19 +22,34 @@ export function LoginPage({ onAuthenticated }: LoginPageProps) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [passwordConfirmation, setPasswordConfirmation] = useState('')
+  const [resetToken, setResetToken] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [success, setSuccess] = useState('')
 
   useEffect(() => {
     publicApiRequest<BootstrapStatus>('/bootstrap/status')
       .then((result) => setBootstrapOpen(result.bootstrap_open))
       .catch(() => setBootstrapOpen(false))
+
+    const params = new URLSearchParams(window.location.search)
+    const token = params.get('token') || ''
+    const resetError = params.get('error')
+
+    if (token) {
+      setResetToken(token)
+      setMode('reset')
+    } else if (resetError) {
+      setError('Este link de recuperação é inválido ou expirou. Solicite um novo link.')
+      window.history.replaceState({}, '', window.location.pathname)
+    }
   }, [])
 
   function switchMode(nextMode: AccessMode) {
     setMode(nextMode)
     setError('')
+    setSuccess('')
     setPassword('')
     setPasswordConfirmation('')
   }
@@ -42,9 +57,68 @@ export function LoginPage({ onAuthenticated }: LoginPageProps) {
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
     setError('')
+    setSuccess('')
 
     if (!authConfigured || !authClient) {
       setError('Neon Auth ainda não foi provisionado neste ambiente.')
+      return
+    }
+
+    if (mode === 'forgot') {
+      setLoading(true)
+      try {
+        const result = await authClient.requestPasswordReset({
+          email: email.trim().toLowerCase(),
+          redirectTo: `${window.location.origin}/`,
+        })
+        if (result.error) {
+          setError('Não foi possível solicitar a recuperação agora. Tente novamente em alguns instantes.')
+          return
+        }
+        setSuccess('Se houver uma conta cadastrada com este e-mail, enviaremos um link para redefinir a senha. Confira também a pasta de spam.')
+      } catch {
+        setError('Não foi possível solicitar a recuperação agora. Tente novamente em alguns instantes.')
+      } finally {
+        setLoading(false)
+      }
+      return
+    }
+
+    if (mode === 'reset') {
+      if (!resetToken) {
+        setError('Este link de recuperação é inválido ou expirou. Solicite um novo link.')
+        return
+      }
+      if (password.length < 12) {
+        setError('Use uma senha com pelo menos 12 caracteres.')
+        return
+      }
+      if (password !== passwordConfirmation) {
+        setError('As senhas não conferem.')
+        return
+      }
+
+      setLoading(true)
+      try {
+        const result = await authClient.resetPassword({
+          newPassword: password,
+          token: resetToken,
+        })
+        if (result.error) {
+          setError('Não foi possível redefinir a senha. O link pode ter expirado; solicite um novo.')
+          return
+        }
+        window.history.replaceState({}, '', window.location.pathname)
+        setResetToken('')
+        setMode('login')
+        setPassword('')
+        setPasswordConfirmation('')
+        setSuccess('Senha redefinida com sucesso. Agora você já pode entrar com a nova senha.')
+      } catch {
+        setError('Não foi possível redefinir a senha. O link pode ter expirado; solicite um novo.')
+      } finally {
+        setLoading(false)
+      }
       return
     }
 
@@ -67,37 +141,59 @@ export function LoginPage({ onAuthenticated }: LoginPageProps) {
       }
 
       setLoading(true)
-      const result = await authClient.signUp.email({
-        name: name.trim(),
-        email: email.trim().toLowerCase(),
-        password,
-      })
-      setLoading(false)
-
-      if (result.error) {
-        setError(result.error.message || 'Não foi possível concluir o primeiro acesso.')
-        return
+      try {
+        const result = await authClient.signUp.email({
+          name: name.trim(),
+          email: email.trim().toLowerCase(),
+          password,
+        })
+        if (result.error) {
+          setError(result.error.message || 'Não foi possível concluir o primeiro acesso.')
+          return
+        }
+        onAuthenticated()
+      } finally {
+        setLoading(false)
       }
-
-      onAuthenticated()
       return
     }
 
     setLoading(true)
-    const result = await authClient.signIn.email({ email: email.trim().toLowerCase(), password })
-    setLoading(false)
-
-    if (result.error) {
-      setError('Não foi possível entrar. Confira e-mail e senha.')
-      return
+    try {
+      const result = await authClient.signIn.email({ email: email.trim().toLowerCase(), password })
+      if (result.error) {
+        setError('Não foi possível entrar. Confira e-mail e senha.')
+        return
+      }
+      onAuthenticated()
+    } catch {
+      setError('Não foi possível entrar agora. Tente novamente em alguns instantes.')
+    } finally {
+      setLoading(false)
     }
-
-    onAuthenticated()
   }
 
   const isBootstrap = mode === 'bootstrap'
+  const isForgot = mode === 'forgot'
+  const isReset = mode === 'reset'
   const brandName = theme.companyShortName || theme.companyName || 'Imob'
   const brandInitials = brandName.trim().slice(0, 2).toUpperCase() || 'IM'
+
+  const heading = isBootstrap
+    ? 'Criar Administrador'
+    : isForgot
+      ? 'Recuperar acesso'
+      : isReset
+        ? 'Definir nova senha'
+        : `Entrar no ${brandName}`
+
+  const description = isBootstrap
+    ? 'Este cadastro existe apenas para inicializar o primeiro Administrador do ERP.'
+    : isForgot
+      ? 'Informe o e-mail utilizado no Imob. Se houver uma conta vinculada, você receberá um link de recuperação.'
+      : isReset
+        ? 'Crie uma nova senha para voltar a acessar o ERP.'
+        : 'Use suas credenciais para acessar o ambiente da imobiliária.'
 
   return (
     <main className="login-page">
@@ -128,13 +224,9 @@ export function LoginPage({ onAuthenticated }: LoginPageProps) {
 
           <form className="login-card" onSubmit={handleSubmit}>
             <div className="login-card-heading">
-              <span className="eyebrow">{isBootstrap ? 'Configuração inicial' : 'Acesso restrito'}</span>
-              <h2>{isBootstrap ? 'Criar Administrador' : `Entrar no ${brandName}`}</h2>
-              <p>
-                {isBootstrap
-                  ? 'Este cadastro existe apenas para inicializar o primeiro Administrador do ERP.'
-                  : 'Use suas credenciais para acessar o ambiente da imobiliária.'}
-              </p>
+              <span className="eyebrow">{isBootstrap ? 'Configuração inicial' : isForgot || isReset ? 'Recuperação de acesso' : 'Acesso restrito'}</span>
+              <h2>{heading}</h2>
+              <p>{description}</p>
             </div>
 
             {isBootstrap && (
@@ -154,42 +246,46 @@ export function LoginPage({ onAuthenticated }: LoginPageProps) {
               </label>
             )}
 
-            <label className="field login-field">
-              <span>E-mail</span>
-              <div className="input-with-icon">
-                <Mail size={17} />
-                <input
-                  autoComplete="email"
-                  inputMode="email"
-                  placeholder="nome@empresa.com.br"
-                  required
-                  type="email"
-                  value={email}
-                  onChange={(event) => setEmail(event.target.value)}
-                />
-              </div>
-            </label>
+            {!isReset && (
+              <label className="field login-field">
+                <span>E-mail</span>
+                <div className="input-with-icon">
+                  <Mail size={17} />
+                  <input
+                    autoComplete="email"
+                    inputMode="email"
+                    placeholder="nome@empresa.com.br"
+                    required
+                    type="email"
+                    value={email}
+                    onChange={(event) => setEmail(event.target.value)}
+                  />
+                </div>
+              </label>
+            )}
 
-            <label className="field login-field">
-              <span>Senha</span>
-              <div className="input-with-icon">
-                <LockKeyhole size={17} />
-                <input
-                  autoComplete={isBootstrap ? 'new-password' : 'current-password'}
-                  minLength={isBootstrap ? 12 : undefined}
-                  placeholder={isBootstrap ? 'Crie uma senha segura' : 'Sua senha'}
-                  required
-                  type={showPassword ? 'text' : 'password'}
-                  value={password}
-                  onChange={(event) => setPassword(event.target.value)}
-                />
-                <button className="password-toggle" type="button" onClick={() => setShowPassword((value) => !value)} aria-label="Mostrar ou ocultar senha">
-                  {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
-                </button>
-              </div>
-            </label>
+            {!isForgot && (
+              <label className="field login-field">
+                <span>{isReset ? 'Nova senha' : 'Senha'}</span>
+                <div className="input-with-icon">
+                  <LockKeyhole size={17} />
+                  <input
+                    autoComplete={isBootstrap || isReset ? 'new-password' : 'current-password'}
+                    minLength={isBootstrap || isReset ? 12 : undefined}
+                    placeholder={isReset ? 'Crie a nova senha' : isBootstrap ? 'Crie uma senha segura' : 'Sua senha'}
+                    required
+                    type={showPassword ? 'text' : 'password'}
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
+                  />
+                  <button className="password-toggle" type="button" onClick={() => setShowPassword((value) => !value)} aria-label="Mostrar ou ocultar senha">
+                    {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
+                  </button>
+                </div>
+              </label>
+            )}
 
-            {isBootstrap && (
+            {(isBootstrap || isReset) && (
               <label className="field login-field">
                 <span>Confirmar senha</span>
                 <div className="input-with-icon">
@@ -208,21 +304,56 @@ export function LoginPage({ onAuthenticated }: LoginPageProps) {
             )}
 
             {error && <div className="form-alert danger-alert">{error}</div>}
+            {success && <div className="form-alert">{success}</div>}
 
             <button className="button primary login-submit" disabled={loading} type="submit">
-              {loading ? (isBootstrap ? 'Criando acesso...' : 'Entrando...') : (isBootstrap ? 'Criar Administrador' : 'Entrar')}
+              {loading
+                ? isForgot
+                  ? 'Enviando...'
+                  : isReset
+                    ? 'Redefinindo...'
+                    : isBootstrap
+                      ? 'Criando acesso...'
+                      : 'Entrando...'
+                : isForgot
+                  ? 'Enviar link de recuperação'
+                  : isReset
+                    ? 'Salvar nova senha'
+                    : isBootstrap
+                      ? 'Criar Administrador'
+                      : 'Entrar'}
             </button>
 
-            {bootstrapOpen && (
+            {mode === 'login' && (
+              <button className="text-button" type="button" onClick={() => switchMode('forgot')}>
+                Esqueci minha senha
+              </button>
+            )}
+
+            {(isForgot || isReset) && (
+              <button className="text-button" type="button" onClick={() => {
+                window.history.replaceState({}, '', window.location.pathname)
+                setResetToken('')
+                switchMode('login')
+              }}>
+                Voltar para o login
+              </button>
+            )}
+
+            {bootstrapOpen && !isForgot && !isReset && (
               <button className="text-button" type="button" onClick={() => switchMode(isBootstrap ? 'login' : 'bootstrap')}>
                 {isBootstrap ? 'Já tenho acesso' : 'Configurar primeiro acesso'}
               </button>
             )}
 
             <small className="login-security-note">
-              {bootstrapOpen
-                ? 'Após a criação do primeiro Administrador, esta opção é encerrada automaticamente.'
-                : 'Novos usuários são liberados internamente por um Administrador.'}
+              {isForgot
+                ? 'Por segurança, a tela não informa se o e-mail está ou não cadastrado.'
+                : isReset
+                  ? 'A nova senha deve ter pelo menos 12 caracteres.'
+                  : bootstrapOpen
+                    ? 'Após a criação do primeiro Administrador, esta opção é encerrada automaticamente.'
+                    : 'Novos usuários são liberados internamente por um Administrador.'}
             </small>
           </form>
         </div>
