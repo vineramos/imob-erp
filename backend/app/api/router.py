@@ -1,5 +1,6 @@
 from fastapi import APIRouter
 
+from app.api.routes.auth_diagnostic import router as auth_diagnostic_router
 from app.api.routes.auth_proxy import router as auth_proxy_router
 from app.api.routes.branding import router as branding_router
 from app.api.routes.contracts import router as contracts_router
@@ -32,6 +33,7 @@ from app.api.routes.signature_events import router as signature_events_router
 api_router = APIRouter()
 api_router.include_router(health_router)
 api_router.include_router(auth_proxy_router)
+api_router.include_router(auth_diagnostic_router)
 api_router.include_router(branding_router)
 api_router.include_router(foundation_router)
 api_router.include_router(portfolio_router)
