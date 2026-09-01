@@ -24,6 +24,14 @@ jobs:
       - name: Set up Google Cloud SDK
         uses: google-github-actions/setup-gcloud@v3
 
+      - name: Ensure Cloud Resource Manager API
+        env:
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+        run: |
+          gcloud services enable cloudresourcemanager.googleapis.com \
+            --project "$PROJECT_ID" \
+            --quiet
+
       - name: Clone current Cloud Run service to Sao Paulo
         env:
           PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
