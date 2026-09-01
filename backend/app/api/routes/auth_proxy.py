@@ -1,13 +1,17 @@
 from __future__ import annotations
 
 from typing import Any
+from urllib.parse import urlsplit
 
 import httpx
-from fastapi import APIRouter, Request, status
+from fastapi import APIRouter, Depends, Request, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy import text
+from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
+from app.core.database import get_db
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -56,6 +60,63 @@ def _auth_endpoint(path: str) -> str:
     if not base:
         raise RuntimeError("Neon Auth não configurado")
     return f"{base}{path if path.startswith('/') else f'/{path}'}"
+
+
+def _normalized_origin(value: str) -> str:
+    source = (value or "").strip()
+    if not source:
+        return ""
+    try:
+        parsed = urlsplit(source)
+    except ValueError:
+        return ""
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        return ""
+    return f"{parsed.scheme}://{parsed.netloc}".rstrip("/")
+
+
+def _trusted_password_reset_redirect(db: Session, requested_redirect: str) -> str:
+    """Resolve password-reset redirects from Neon Auth's own trusted origins.
+
+    Cloud Run can expose more than one public hostname for the same service.
+    Managed Better Auth validates redirectTo separately from CORS, so using the
+    hostname visible in the browser can be rejected even when sign-in works.
+    The database-backed Auth config is the source of truth for safe redirects.
+    """
+    requested_origin = _normalized_origin(requested_redirect)
+    trusted: list[str] = []
+    try:
+        raw = db.execute(
+            text(
+                "SELECT trusted_origins FROM neon_auth.project_config "
+                "ORDER BY updated_at DESC NULLS LAST LIMIT 1"
+            )
+        ).scalar_one_or_none()
+    except Exception:
+        raw = None
+
+    if isinstance(raw, list):
+        for item in raw:
+            candidate = item.get("domain") if isinstance(item, dict) else item
+            if isinstance(candidate, str):
+                origin = _normalized_origin(candidate)
+                if origin and origin not in trusted:
+                    trusted.append(origin)
+
+    if requested_origin and requested_origin in trusted:
+        return f"{requested_origin}/"
+
+    # Em produção, prioriza HTTPS. localhost/http permanece disponível para
+    # desenvolvimento somente quando for o único origin configurado.
+    secure = [origin for origin in trusted if origin.startswith("https://")]
+    if secure:
+        return f"{secure[0]}/"
+    if trusted:
+        return f"{trusted[0]}/"
+
+    # Se a configuração não puder ser lida, deixa o próprio Managed Better
+    # Auth validar a URL em vez de inventar um destino de recuperação.
+    return requested_redirect
 
 
 async def _upstream_request(
@@ -253,19 +314,36 @@ async def sign_up(payload: SignUpPayload, request: Request) -> JSONResponse:
 
 
 @router.post("/request-password-reset")
-async def request_password_reset(payload: PasswordResetRequestPayload, request: Request) -> JSONResponse:
+async def request_password_reset(
+    payload: PasswordResetRequestPayload,
+    request: Request,
+    db: Session = Depends(get_db),
+) -> JSONResponse:
+    trusted_redirect = _trusted_password_reset_redirect(db, payload.redirect_to)
     try:
         upstream = await _upstream_request(
             "POST",
             "/request-password-reset",
             request=request,
-            payload={"email": payload.email.strip().lower(), "redirectTo": payload.redirect_to},
+            payload={
+                "email": payload.email.strip().lower(),
+                "redirectTo": trusted_redirect,
+            },
         )
     except RuntimeError:
         return _response({"detail": "Serviço de autenticação temporariamente indisponível"}, status.HTTP_503_SERVICE_UNAVAILABLE)
 
     if upstream.status_code >= 500:
         return _response({"detail": "Serviço de autenticação temporariamente indisponível"}, status.HTTP_503_SERVICE_UNAVAILABLE)
+    if upstream.status_code >= 400:
+        # O Managed Better Auth já usa resposta genérica quando o e-mail não
+        # existe. Portanto um 4xx aqui é erro real de configuração/solicitação
+        # e não deve ser mascarado como se o envio tivesse acontecido.
+        return _response(
+            {"detail": "Não foi possível iniciar a recuperação de senha neste ambiente"},
+            status.HTTP_502_BAD_GATEWAY,
+        )
+
     # Não revela se o endereço existe ou não.
     return _response({"ok": True})
 
