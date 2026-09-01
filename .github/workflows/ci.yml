@@ -97,6 +97,63 @@ jobs:
             --image "$IMAGE" \
             --quiet
 
+      - name: Smoke test Neon Auth
+        env:
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          REGION: ${{ vars.GCP_REGION }}
+          SERVICE: ${{ vars.GCP_SERVICE }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          SERVICE_URL="$(gcloud run services describe "$SERVICE" --project "$PROJECT_ID" --region "$REGION" --format='value(status.url)')"
+          CONFIG_FILE="$(mktemp)"
+          AUTH_FILE="$(mktemp)"
+          HEADER_FILE="$(mktemp)"
+          trap 'rm -f "$CONFIG_FILE" "$AUTH_FILE" "$HEADER_FILE" /tmp/imob-auth-body.json' EXIT
+
+          curl --silent --show-error --fail --max-time 15 "${SERVICE_URL}/runtime-config.js" > "$CONFIG_FILE"
+          python - "$CONFIG_FILE" "$AUTH_FILE" <<'PY'
+          import json
+          import sys
+
+          config_path, auth_path = sys.argv[1:]
+          raw = open(config_path, encoding="utf-8").read().strip()
+          prefix = "window.__IMOB_CONFIG__ = "
+          if not raw.startswith(prefix):
+              raise SystemExit("runtime-config.js inválido")
+          payload = raw[len(prefix):].rstrip(";\n ")
+          config = json.loads(payload)
+          auth_url = str(config.get("neonAuthUrl") or "").strip().rstrip("/")
+          if not auth_url:
+              raise SystemExit("NEON_AUTH_URL não está configurado no Cloud Run")
+          open(auth_path, "w", encoding="utf-8").write(auth_url)
+          PY
+
+          AUTH_URL="$(cat "$AUTH_FILE")"
+          SESSION_CODE="$(curl --silent --show-error --output /tmp/imob-auth-body.json --write-out '%{http_code}' --max-time 15 "${AUTH_URL}/get-session" || true)"
+          if [[ -z "$SESSION_CODE" || "$SESSION_CODE" == "000" ]]; then
+            echo "Neon Auth reachability: FAILED (network/DNS/timeout)"
+            exit 1
+          fi
+          echo "Neon Auth reachability: SUCCESS (HTTP ${SESSION_CODE})"
+
+          PREFLIGHT_CODE="$(curl --silent --show-error --output /dev/null --dump-header "$HEADER_FILE" --write-out '%{http_code}' --max-time 15 -X OPTIONS \
+            "${AUTH_URL}/sign-in/email" \
+            -H "Origin: ${SERVICE_URL}" \
+            -H 'Access-Control-Request-Method: POST' \
+            -H 'Access-Control-Request-Headers: content-type' || true)"
+          ALLOW_ORIGIN="$(awk 'BEGIN{IGNORECASE=1} /^access-control-allow-origin:/ {sub(/\r$/, "", $2); print $2}' "$HEADER_FILE" | tail -n 1)"
+
+          if [[ "$PREFLIGHT_CODE" == "000" || -z "$PREFLIGHT_CODE" ]]; then
+            echo "Neon Auth CORS preflight: FAILED (network/DNS/timeout)"
+            exit 1
+          fi
+          if [[ "$ALLOW_ORIGIN" != "$SERVICE_URL" && "$ALLOW_ORIGIN" != "*" ]]; then
+            echo "Neon Auth CORS preflight: FAILED (Cloud Run origin is not allowed; HTTP ${PREFLIGHT_CODE})"
+            exit 1
+          fi
+          echo "Neon Auth CORS preflight: SUCCESS (HTTP ${PREFLIGHT_CODE})"
+
       - name: Smoke test Clicksign configuration
         env:
           PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
