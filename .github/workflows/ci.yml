@@ -111,7 +111,8 @@ jobs:
           HEADER_FILE="$(mktemp)"
           POST_HEADER_FILE="$(mktemp)"
           POST_BODY_FILE="$(mktemp)"
-          trap 'rm -f "$CONFIG_FILE" "$AUTH_FILE" "$HEADER_FILE" "$POST_HEADER_FILE" "$POST_BODY_FILE" /tmp/imob-auth-body.json' EXIT
+          PROXY_BODY_FILE="$(mktemp)"
+          trap 'rm -f "$CONFIG_FILE" "$AUTH_FILE" "$HEADER_FILE" "$POST_HEADER_FILE" "$POST_BODY_FILE" "$PROXY_BODY_FILE" /tmp/imob-auth-body.json' EXIT
 
           curl --silent --show-error --fail --max-time 15 "${SERVICE_URL}/runtime-config.js" > "$CONFIG_FILE"
           python - "$CONFIG_FILE" "$AUTH_FILE" <<'PY'
@@ -132,7 +133,7 @@ jobs:
           PY
 
           AUTH_URL="$(cat "$AUTH_FILE")"
-          SESSION_CODE="$(curl --silent --show-error --output /tmp/imob-auth-body.json --write-out '%{http_code}' --max-time 15 "${AUTH_URL}/get-session" || true)"
+          SESSION_CODE="$(curl --silent --show-error --output /tmp/imob-auth-body.json --write-out '%{http_code}' --max-time 20 "${AUTH_URL}/get-session" || true)"
           if [[ -z "$SESSION_CODE" || "$SESSION_CODE" == "000" ]]; then
             echo "Neon Auth reachability: FAILED (network/DNS/timeout)"
             exit 1
@@ -186,6 +187,16 @@ jobs:
             exit 1
           fi
           echo "Neon Auth sign-in endpoint: SUCCESS (expected auth rejection HTTP ${SIGNIN_CODE})"
+
+          PROXY_CODE="$(curl --silent --show-error --output "$PROXY_BODY_FILE" --write-out '%{http_code}' --max-time 25 \
+            -X POST "${SERVICE_URL}/api/auth/sign-in" \
+            -H 'Content-Type: application/json' \
+            --data '{"email":"imob-auth-smoke@example.invalid","password":"invalid-smoke-password-123"}' || true)"
+          if [[ "$PROXY_CODE" != "401" ]]; then
+            echo "Imob same-origin Auth proxy: FAILED (HTTP ${PROXY_CODE})"
+            exit 1
+          fi
+          echo "Imob same-origin Auth proxy: SUCCESS (expected auth rejection HTTP 401)"
 
       - name: Smoke test Clicksign configuration
         env:
