@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import App from './App'
 import { ThemeProvider } from './theme/ThemeProvider'
 import { installBrazilianInputFormatting } from './utils/brFormat'
+import { installGlobalModalEscape } from './utils/modalEscape'
 import './styles.css'
 import './settings.css'
 import './foundation.css'
@@ -20,6 +21,7 @@ import './modules/maintenance/maintenance-v2-polish.css'
 import './modules/properties/property-list-actions.css'
 
 installBrazilianInputFormatting()
+installGlobalModalEscape()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode><ThemeProvider><App /></ThemeProvider></StrictMode>,
