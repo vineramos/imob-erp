@@ -1,5 +1,6 @@
 import { authClient, authConfigured } from '../auth/client'
 import { runtimeConfig } from '../config/runtime'
+import { formatApiPayload, normalizeJsonRequest } from '../utils/brFormat'
 
 const API_URL = runtimeConfig.apiUrl
 
@@ -36,7 +37,7 @@ async function errorDetail(response: Response): Promise<string> {
 async function parseResponse<T>(response: Response): Promise<T> {
   if (!response.ok) throw new ApiError(response.status, await errorDetail(response))
   if (response.status === 204) return undefined as T
-  return (await response.json()) as T
+  return formatApiPayload((await response.json()) as T)
 }
 
 function apiUrl(path: string): string { return `${API_URL}${path.startsWith('/') ? path : `/${path}`}` }
@@ -45,31 +46,35 @@ function applyBodyContentType(headers: Headers, body: BodyInit | null | undefine
 }
 
 export async function publicApiRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const headers = new Headers(init.headers)
-  applyBodyContentType(headers, init.body)
-  return parseResponse<T>(await fetch(apiUrl(path), { ...init, headers }))
+  const normalized = normalizeJsonRequest(init)
+  const headers = new Headers(normalized.headers)
+  applyBodyContentType(headers, normalized.body)
+  return parseResponse<T>(await fetch(apiUrl(path), { ...normalized, headers }))
 }
 
 export async function publicBlobRequest(path: string, init: RequestInit = {}): Promise<Blob> {
-  const headers = new Headers(init.headers)
-  const response = await fetch(apiUrl(path), { ...init, headers })
+  const normalized = normalizeJsonRequest(init)
+  const headers = new Headers(normalized.headers)
+  const response = await fetch(apiUrl(path), { ...normalized, headers })
   if (!response.ok) throw new ApiError(response.status, await errorDetail(response))
   return response.blob()
 }
 
 export async function apiRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = await getAccessToken()
-  const headers = new Headers(init.headers)
-  applyBodyContentType(headers, init.body)
+  const normalized = normalizeJsonRequest(init)
+  const headers = new Headers(normalized.headers)
+  applyBodyContentType(headers, normalized.body)
   if (token) headers.set('Authorization', `Bearer ${token}`)
-  return parseResponse<T>(await fetch(apiUrl(path), { ...init, headers }))
+  return parseResponse<T>(await fetch(apiUrl(path), { ...normalized, headers }))
 }
 
 export async function apiBlobRequest(path: string, init: RequestInit = {}): Promise<Blob> {
   const token = await getAccessToken()
-  const headers = new Headers(init.headers)
+  const normalized = normalizeJsonRequest(init)
+  const headers = new Headers(normalized.headers)
   if (token) headers.set('Authorization', `Bearer ${token}`)
-  const response = await fetch(apiUrl(path), { ...init, headers })
+  const response = await fetch(apiUrl(path), { ...normalized, headers })
   if (!response.ok) throw new ApiError(response.status, await errorDetail(response))
   return response.blob()
 }
