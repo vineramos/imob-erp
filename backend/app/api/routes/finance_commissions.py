@@ -106,6 +106,16 @@ def _person(db: Session, organization_id: UUID, person_id: UUID) -> Person:
     return item
 
 
+def _treasury_category(item: CommissionEntry) -> str:
+    if item.beneficiary_type == "broker":
+        return "Comissões · corretores"
+    if item.beneficiary_type == "referrer":
+        return "Angariações"
+    if item.beneficiary_type == "supplier":
+        return "Comissões · fornecedores"
+    return "Comissões"
+
+
 @router.get("/rules", response_model=list[CommissionRuleResponse])
 def list_rules(
     context: UserContext = Depends(require_permission("finance.view")),
@@ -292,12 +302,17 @@ def approve_entry(
     if title.status == "cancelled":
         raise HTTPException(status_code=409, detail="A obrigação financeira desta comissão está cancelada.")
 
-    # O motor de Tesouraria trabalha com títulos elegíveis do tipo `manual`.
-    # A origem real continua preservada em source_id/source_snapshot e na
-    # própria CommissionEntry. Antes da aprovação, source_type=`commission`
-    # impede a comissão de aparecer como candidata de pagamento.
+    # O motor atual de Tesouraria reutiliza o fluxo genérico de FinancialTitle.
+    # A CommissionEntry e o source_snapshot preservam a origem para relatórios/DRE;
+    # a categoria identifica corretamente corretor, angariador ou outro beneficiário.
+    title.category = _treasury_category(item)
     title.source_type = "manual"
     title.status = "pending" if title.settled_amount < title.amount else "settled"
+    snapshot = dict(title.source_snapshot or {})
+    snapshot["financial_origin"] = "commission"
+    snapshot["commission_entry_id"] = str(item.id)
+    snapshot["beneficiary_type"] = item.beneficiary_type
+    title.source_snapshot = snapshot
     item.status = "approved"
     item.approved_by_user_id = context.user.id
     item.approved_at = datetime.now(timezone.utc)
@@ -311,6 +326,7 @@ def approve_entry(
         {
             "amount": str(item.amount),
             "beneficiary": item.beneficiary_name,
+            "category": title.category,
             "financial_title_id": str(title.id),
             "treasury_eligible": True,
         },
