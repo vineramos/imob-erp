@@ -10,6 +10,7 @@ from app.api.routes.finance_banking import router as finance_banking_router
 from app.api.routes.finance_cashflow import router as finance_cashflow_router
 from app.api.routes.finance_contracts import router as finance_contracts_router
 from app.api.routes.finance_core import router as finance_core_router
+from app.api.routes.finance_manual import router as finance_manual_router
 from app.api.routes.finance_maintenance import router as finance_maintenance_router
 from app.api.routes.finance_overdue import router as finance_overdue_router
 from app.api.routes.finance_treasury import router as finance_treasury_router
@@ -41,6 +42,7 @@ api_router.include_router(finance_banking_router)
 api_router.include_router(finance_cashflow_router)
 api_router.include_router(finance_contracts_router)
 api_router.include_router(finance_core_router)
+api_router.include_router(finance_manual_router)
 api_router.include_router(finance_overdue_router)
 api_router.include_router(finance_maintenance_router)
 api_router.include_router(finance_treasury_router)
