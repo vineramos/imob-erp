@@ -12,6 +12,7 @@ AdministrationContractStatus = Literal[
 AdministrationPlan = Literal["essential", "complete", "custom"]
 FeeType = Literal["percent", "fixed"]
 OperationalPayer = Literal["tenant", "owner", "agency"]
+EndOfTermAction = Literal["end_contract", "renew_indefinite"]
 WorkflowAction = Literal["submit_review", "approve", "prepare_signature", "return_draft", "cancel"]
 SignerRole = Literal["owner", "tenant", "agency", "witness", "other"]
 SignerCommunication = Literal["email", "sms", "whatsapp", "none"]
@@ -47,6 +48,7 @@ class AdministrationContractTerms(BaseModel):
     emergency_limit_amount: Decimal | None = Field(default=None, ge=0)
     start_date: date | None = None
     end_date: date | None = None
+    end_of_term_action: EndOfTermAction = "renew_indefinite"
     notes: str | None = Field(default=None, max_length=4000)
     signers: list[ContractSignerPayload] = Field(default_factory=list, max_length=20)
 
@@ -128,6 +130,7 @@ class AdministrationContractResponse(BaseModel):
     emergency_limit_amount: Decimal | None = None
     start_date: date | None = None
     end_date: date | None = None
+    end_of_term_action: EndOfTermAction = "renew_indefinite"
     notes: str | None = None
     signers: list[dict]
     current_version: int
