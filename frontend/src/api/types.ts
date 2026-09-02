@@ -258,6 +258,7 @@ export type AdministrationContractStatus = 'draft' | 'review' | 'approved' | 'pe
 export type AdministrationPlan = 'essential' | 'complete' | 'custom'
 export type ContractFeeType = 'percent' | 'fixed'
 export type OperationalPayer = 'tenant' | 'owner' | 'agency'
+export type ContractEndOfTermAction = 'end_contract' | 'renew_indefinite'
 export type ContractSignerRole = 'owner' | 'tenant' | 'agency' | 'witness' | 'other'
 export type ContractSignerCommunication = 'email' | 'sms' | 'whatsapp' | 'none'
 
@@ -287,6 +288,7 @@ export type AdministrationContractTerms = {
   emergency_limit_amount: number | null
   start_date: string | null
   end_date: string | null
+  end_of_term_action: ContractEndOfTermAction
   notes: string | null
   signers: ContractSigner[]
 }
