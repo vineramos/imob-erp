@@ -47,7 +47,8 @@ const defaultTerms = (defaults?: OperationalDefaults): AdministrationContractTer
   plan: 'essential', admin_fee_type: 'percent', admin_fee_percent: defaults?.default_admin_fee_percent ?? 10, admin_fee_amount: null,
   intermediation_percent: 100, intermediation_installments: 1, owner_repasse_business_days: defaults?.owner_repasse_business_days ?? 2,
   condo_operational_payer: 'tenant', iptu_operational_payer: 'tenant', publication_requires_owner_approval: false,
-  maintenance_limit_amount: null, emergency_limit_amount: null, start_date: null, end_date: null, notes: '', signers: [],
+  maintenance_limit_amount: null, emergency_limit_amount: null, start_date: null, end_date: null,
+  end_of_term_action: 'renew_indefinite', notes: '', signers: [],
 })
 const blankSigner = (): ContractSigner => ({ role: 'owner', person_id: null, name: '', email: '', document_number: null, phone: null, sign_order: 1, communication: 'email' })
 
@@ -176,7 +177,8 @@ export function ContractsPage({ permissions }: Props) {
       owner_repasse_business_days: item.owner_repasse_business_days, condo_operational_payer: item.condo_operational_payer,
       iptu_operational_payer: item.iptu_operational_payer, publication_requires_owner_approval: item.publication_requires_owner_approval,
       maintenance_limit_amount: null, emergency_limit_amount: null,
-      start_date: item.start_date, end_date: item.end_date, notes: item.notes ?? '',
+      start_date: item.start_date, end_date: item.end_date,
+      end_of_term_action: item.end_of_term_action ?? 'renew_indefinite', notes: item.notes ?? '',
       signers: item.signers.map((signer) => ({ ...signer, person_id: resolveSignerPersonId(signer) })),
     })
     setChangeSummary(''); setShowForm(true); setError(''); setSuccess('')
@@ -308,6 +310,19 @@ export function ContractsPage({ permissions }: Props) {
         <label className="field"><span>Condomínio · pagador</span><select value={terms.condo_operational_payer} onChange={(e) => setTerms((current) => ({ ...current, condo_operational_payer: e.target.value as AdministrationContractTerms['condo_operational_payer'] }))}>{Object.entries(payerLabel).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
         <label className="field"><span>IPTU · pagador</span><select value={terms.iptu_operational_payer} onChange={(e) => setTerms((current) => ({ ...current, iptu_operational_payer: e.target.value as AdministrationContractTerms['iptu_operational_payer'] }))}>{Object.entries(payerLabel).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
         <label className="field checkbox-field contract-checkbox"><input type="checkbox" checked={terms.publication_requires_owner_approval} onChange={(e) => setTerms((current) => ({ ...current, publication_requires_owner_approval: e.target.checked }))}/><span>Exigir aprovação para publicação</span></label>
+        <fieldset className="contract-end-action field-span-3">
+          <legend>Ao fim do período do contrato, o que será feito?</legend>
+          <div className="contract-end-action-options">
+            <label className={`contract-end-action-option ${terms.end_of_term_action === 'end_contract' ? 'active' : ''}`}>
+              <input type="radio" name="end_of_term_action" value="end_contract" checked={terms.end_of_term_action === 'end_contract'} onChange={() => setTerms((current) => ({ ...current, end_of_term_action: 'end_contract' }))}/>
+              <span><strong>Fim do contrato</strong><small>O contrato se encerra ao término do prazo determinado.</small></span>
+            </label>
+            <label className={`contract-end-action-option ${terms.end_of_term_action === 'renew_indefinite' ? 'active' : ''}`}>
+              <input type="radio" name="end_of_term_action" value="renew_indefinite" checked={terms.end_of_term_action === 'renew_indefinite'} onChange={() => setTerms((current) => ({ ...current, end_of_term_action: 'renew_indefinite' }))}/>
+              <span><strong>Renovação por prazo indeterminado</strong><small>Após o prazo determinado, a locação continua por prazo indeterminado.</small></span>
+            </label>
+          </div>
+        </fieldset>
         <label className="field field-span-3"><span>Observações / condições especiais</span><textarea rows={3} value={terms.notes ?? ''} onChange={(e) => setTerms((current) => ({ ...current, notes: e.target.value }))}/></label>
         {editing && <label className="field field-span-3"><span>Resumo desta nova versão</span><input required minLength={3} value={changeSummary} onChange={(e) => setChangeSummary(e.target.value)}/></label>}
       </div>
