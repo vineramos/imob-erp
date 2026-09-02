@@ -145,6 +145,7 @@ def _version_snapshot(contract: AdministrationContract) -> dict:
 
 def _contract_response(contract: AdministrationContract) -> AdministrationContractResponse:
     property_snapshot = contract.property_snapshot or {}
+    rules_snapshot = contract.rules_snapshot or {}
     return AdministrationContractResponse(
         id=contract.id,
         internal_number=contract.internal_number,
@@ -168,6 +169,7 @@ def _contract_response(contract: AdministrationContract) -> AdministrationContra
         emergency_limit_amount=contract.emergency_limit_amount,
         start_date=contract.start_date,
         end_date=contract.end_date,
+        end_of_term_action=str(rules_snapshot.get("end_of_term_action") or "renew_indefinite"),
         notes=contract.notes,
         signers=list(contract.signers_snapshot or []),
         current_version=contract.current_version,
