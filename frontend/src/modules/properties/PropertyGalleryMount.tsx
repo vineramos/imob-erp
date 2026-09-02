@@ -23,6 +23,7 @@ export function PropertyGalleryMount({ permissions }: Props) {
     let hiddenPanel: HTMLElement | null = null
     let host: HTMLElement | null = null
     let mountedCode: string | null = null
+    let mountedMode: 'summary' | 'commercial' | null = null
     let resolving = false
 
     function cleanupMount() {
@@ -31,15 +32,18 @@ export function PropertyGalleryMount({ permissions }: Props) {
       host?.remove()
       host = null
       mountedCode = null
+      mountedMode = null
       if (active) setMount(null)
     }
 
     async function sync() {
       if (resolving) return
-      const panel = document.querySelector<HTMLElement>('.property-detail-workspace .property-media-panel')
+      const summaryGrid = document.querySelector<HTMLElement>('.property-detail-workspace .property-summary-grid')
+      const commercialPanel = document.querySelector<HTMLElement>('.property-detail-workspace .property-media-panel')
       const code = propertyCodeFromDetail()
-      if (!panel || !code) { if (host) cleanupMount(); return }
-      if (hiddenPanel === panel && host?.isConnected && mountedCode === code) return
+      const mode: 'summary' | 'commercial' | null = summaryGrid ? 'summary' : commercialPanel ? 'commercial' : null
+      if (!mode || !code) { if (host) cleanupMount(); return }
+      if (host?.isConnected && mountedCode === code && mountedMode === mode) return
 
       resolving = true
       try {
@@ -47,14 +51,21 @@ export function PropertyGalleryMount({ permissions }: Props) {
         const property = properties.find((item) => item.code === code)
         if (!active || !property) return
         cleanupMount()
-        hiddenPanel = panel
         mountedCode = code
-        panel.style.display = 'none'
+        mountedMode = mode
         host = document.createElement('div')
-        host.className = 'property-gallery-mount'
+        host.className = `property-gallery-mount property-gallery-${mode}-mount`
         host.style.display = 'contents'
-        panel.parentElement?.insertBefore(host, panel.nextSibling)
-        if (active && host) setMount({ host, propertyId: property.id })
+
+        if (mode === 'summary' && summaryGrid) {
+          summaryGrid.parentElement?.insertBefore(host, summaryGrid)
+        } else if (commercialPanel) {
+          hiddenPanel = commercialPanel
+          commercialPanel.style.display = 'none'
+          commercialPanel.parentElement?.insertBefore(host, commercialPanel.nextSibling)
+        }
+
+        if (active && host?.isConnected) setMount({ host, propertyId: property.id })
       } finally { resolving = false }
     }
 
