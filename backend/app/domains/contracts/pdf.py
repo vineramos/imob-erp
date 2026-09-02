@@ -108,8 +108,8 @@ def build_administration_contract_pdf(*, contract: Any, organization: Any) -> by
     story.append(Paragraph("4. Condições econômicas e operacionais", heading))
     rules = [
         ["Plano", str(contract.plan).title()],
-        ["Taxa de administração", fee],
-        ["Intermediação", f"{_percent(contract.intermediation_percent)} em {contract.intermediation_installments} parcela(s)"],
+        ["Administração após intermediação", fee],
+        ["Intermediação inicial", f"{_percent(contract.intermediation_percent)} do aluguel em {contract.intermediation_installments} parcela(s) inicial(is)"],
         ["Repasse ao proprietário", f"D+{contract.owner_repasse_business_days} dias úteis após liquidação confirmada"],
         ["Condomínio · pagador operacional", str(contract.condo_operational_payer)],
         ["IPTU · pagador operacional", str(contract.iptu_operational_payer)],
@@ -128,6 +128,11 @@ def build_administration_contract_pdf(*, contract: Any, organization: Any) -> by
         ("PADDING", (0, 0), (-1, -1), 5),
     ]))
     story.append(rules_table)
+    story.append(Spacer(1, 5))
+    story.append(Paragraph(
+        "A intermediação substitui a taxa de administração durante as parcelas iniciais acima. Encerrada a intermediação, passa a incidir a taxa de administração nas competências seguintes. Quando a intermediação for de 100% em uma única parcela, o primeiro aluguel pertence integralmente à administradora e a administração começa no segundo aluguel.",
+        small,
+    ))
 
     if contract.notes:
         story.extend([Paragraph("5. Condições especiais", heading), Paragraph(str(contract.notes), body)])
