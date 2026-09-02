@@ -112,6 +112,9 @@ def build_administration_contract_pdf(*, contract: Any, organization: Any) -> by
     story.append(owner_table)
 
     fee = _percent(contract.admin_fee_percent) if contract.admin_fee_type == "percent" else _money(contract.admin_fee_amount)
+    rules_snapshot = dict(contract.rules_snapshot or {})
+    end_action = str(rules_snapshot.get("end_of_term_action") or "renew_indefinite")
+    end_action_label = "Fim do contrato" if end_action == "end_contract" else "Renovação por prazo indeterminado"
     story.append(Paragraph("4. Condições econômicas e operacionais", heading))
     rules = [
         ["Plano", str(contract.plan).title()],
@@ -121,6 +124,7 @@ def build_administration_contract_pdf(*, contract: Any, organization: Any) -> by
         ["Condomínio · pagador operacional", str(contract.condo_operational_payer)],
         ["IPTU · pagador operacional", str(contract.iptu_operational_payer)],
         ["Prazo previsto da locação", _lease_months(contract.start_date, contract.end_date)],
+        ["Ao fim do prazo", end_action_label],
         ["Aprovação para publicação", "Obrigatória" if contract.publication_requires_owner_approval else "Dispensada"],
         ["Início", str(contract.start_date or "—")],
         ["Fim previsto", str(contract.end_date or "—")],
