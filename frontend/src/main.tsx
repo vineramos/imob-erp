@@ -5,6 +5,7 @@ import { ThemeProvider } from './theme/ThemeProvider'
 import { installBrazilianInputFormatting } from './utils/brFormat'
 import { installGlobalModalEscape } from './utils/modalEscape'
 import { installPublicSiteLinkEnhancer } from './utils/publicSiteLinks'
+import { installAuthenticatedPdfLinkHandler } from './utils/authenticatedPdfLinks'
 import './styles.css'
 import './settings.css'
 import './foundation.css'
@@ -28,6 +29,7 @@ import './imob-sprint-polish.css'
 installBrazilianInputFormatting()
 installGlobalModalEscape()
 installPublicSiteLinkEnhancer()
+installAuthenticatedPdfLinkHandler()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode><ThemeProvider><App /></ThemeProvider></StrictMode>,
