@@ -44,6 +44,13 @@ def _address(address: dict[str, Any]) -> str:
     return ", ".join(str(item) for item in parts if item)
 
 
+def _lease_months(start: Any, end: Any) -> str:
+    if not start or not end:
+        return "—"
+    months = (end.year - start.year) * 12 + end.month - start.month
+    return f"{months} meses" if months > 0 else "—"
+
+
 def build_administration_contract_pdf(*, contract: Any, organization: Any) -> bytes:
     """Gera a representação PDF da versão corrente já congelada no contrato.
 
@@ -113,8 +120,7 @@ def build_administration_contract_pdf(*, contract: Any, organization: Any) -> by
         ["Repasse ao proprietário", f"D+{contract.owner_repasse_business_days} dias úteis após liquidação confirmada"],
         ["Condomínio · pagador operacional", str(contract.condo_operational_payer)],
         ["IPTU · pagador operacional", str(contract.iptu_operational_payer)],
-        ["Autonomia de manutenção", _money(contract.maintenance_limit_amount)],
-        ["Limite emergencial", _money(contract.emergency_limit_amount)],
+        ["Prazo previsto da locação", _lease_months(contract.start_date, contract.end_date)],
         ["Aprovação para publicação", "Obrigatória" if contract.publication_requires_owner_approval else "Dispensada"],
         ["Início", str(contract.start_date or "—")],
         ["Fim previsto", str(contract.end_date or "—")],
@@ -139,10 +145,12 @@ def build_administration_contract_pdf(*, contract: Any, organization: Any) -> by
 
     story.append(Paragraph("6. Signatários desta versão", heading))
     signers = list(contract.signers_snapshot or [])
+    role_labels = {"owner": "Proprietário", "tenant": "Locatário", "agency": "Imobiliária", "witness": "Testemunha", "other": "Outro"}
     if signers:
         rows = [["Papel", "Nome", "E-mail", "Ordem"]]
         for signer in signers:
-            rows.append([signer.get("role") or "—", signer.get("name") or "—", signer.get("email") or "—", str(signer.get("sign_order") or 1)])
+            role = str(signer.get("role") or "—")
+            rows.append([role_labels.get(role, role), signer.get("name") or "—", signer.get("email") or "—", str(signer.get("sign_order") or 1)])
         table = Table(rows, colWidths=[30 * mm, 57 * mm, 68 * mm, 17 * mm], repeatRows=1)
         table.setStyle(TableStyle([
             ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#f1f4f7")),
