@@ -25,6 +25,7 @@ import './modules/properties/property-list-actions.css'
 import './imob-ux-refresh.css'
 import './imob-modal-overrides.css'
 import './imob-sprint-polish.css'
+import './public-site-compact-hero.css'
 
 installBrazilianInputFormatting()
 installGlobalModalEscape()
