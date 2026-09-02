@@ -13,7 +13,7 @@ AdministrationPlan = Literal["essential", "complete", "custom"]
 FeeType = Literal["percent", "fixed"]
 OperationalPayer = Literal["tenant", "owner", "agency"]
 WorkflowAction = Literal["submit_review", "approve", "prepare_signature", "return_draft", "cancel"]
-SignerRole = Literal["owner", "agency", "witness", "other"]
+SignerRole = Literal["owner", "tenant", "agency", "witness", "other"]
 SignerCommunication = Literal["email", "sms", "whatsapp", "none"]
 
 
@@ -21,6 +21,7 @@ class ContractSignerPayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     role: SignerRole = "owner"
+    person_id: UUID | None = None
     name: str = Field(min_length=3, max_length=180)
     email: EmailStr
     document_number: str | None = Field(default=None, max_length=24)
