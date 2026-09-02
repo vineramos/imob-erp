@@ -30,11 +30,17 @@
 .property-gallery-caption input { width: 100%; height: 34px; border: 1px solid var(--border); border-radius: 7px; padding: 0 10px; outline: 0; background: var(--surface); color: var(--text); font-size: 10.5px; }
 .property-gallery-caption input:focus { border-color: #b9c8d9; box-shadow: 0 0 0 3px rgba(18,58,107,.06); }
 
-/* No Resumo, a galeria deve dar contexto visual sem dominar a ficha do imóvel. */
+/* No Resumo, a galeria dá contexto visual sem dominar a ficha e sempre mostra a foto inteira. */
 .property-gallery-summary-mount .property-gallery-main {
   height: clamp(260px, 28vw, 320px);
   min-height: 0;
   aspect-ratio: auto;
+  background: #f4f6f9;
+}
+.property-gallery-summary-mount .property-gallery-main img {
+  object-fit: contain;
+  object-position: center;
+  background: #f4f6f9;
 }
 .property-gallery-summary-mount .property-gallery-thumbs {
   grid-auto-columns: 68px;
