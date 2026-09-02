@@ -3,6 +3,7 @@ from fastapi import APIRouter
 from app.api.routes.auth_proxy import router as auth_proxy_router
 from app.api.routes.branding import router as branding_router
 from app.api.routes.contracts import router as contracts_router
+from app.api.routes.economic_indices import router as economic_indices_router
 from app.api.routes.finance import router as finance_router
 from app.api.routes.finance_advanced import public_router as portal_router
 from app.api.routes.finance_advanced import router as finance_advanced_router
@@ -35,6 +36,7 @@ api_router.include_router(auth_proxy_router)
 api_router.include_router(branding_router)
 api_router.include_router(foundation_router)
 api_router.include_router(portfolio_router)
+api_router.include_router(economic_indices_router)
 api_router.include_router(person_bank_details_router)
 api_router.include_router(person_profile_router)
 api_router.include_router(property_media_router)

@@ -21,6 +21,8 @@ import './inspections.css'
 import './modules/finance/finance.css'
 import './modules/maintenance/maintenance-v2-polish.css'
 import './modules/properties/property-list-actions.css'
+import './imob-ux-refresh.css'
+import './imob-modal-overrides.css'
 
 installBrazilianInputFormatting()
 installGlobalModalEscape()

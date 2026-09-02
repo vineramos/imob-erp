@@ -26,6 +26,8 @@ INDEX_DEFINITIONS: dict[str, IndexDefinition] = {
     "IPC-FIPE": IndexDefinition("IPC-FIPE", "Índice de Preços ao Consumidor - FIPE", 193),
 }
 
+HISTORY_FLOOR = date(2025, 1, 1)
+
 
 class BcbSgsIndexProvider:
     base_url = "https://api.bcb.gov.br/dados/serie/bcdata.sgs.{series}/dados"
@@ -54,17 +56,7 @@ class BcbSgsIndexProvider:
         return rows
 
 
-def _months_ago(reference: date, months: int) -> date:
-    year = reference.year
-    month = reference.month - months
-    while month <= 0:
-        month += 12
-        year -= 1
-    return date(year, month, 1)
-
-
 def _retry_at(now: datetime, retry_count: int) -> datetime:
-    # Primeiras tentativas no mesmo dia; depois reduzimos para uma tentativa diária.
     if retry_count <= 3:
         return now + timedelta(hours=4)
     return now + timedelta(hours=20)
@@ -84,7 +76,7 @@ def sync_index(db: Session, index_code: str, provider: BcbSgsIndexProvider | Non
         db.flush()
 
     state.last_attempt_at = now
-    start = _months_ago(now.date().replace(day=1), 18)
+    start = HISTORY_FLOOR
     end = now.date()
 
     try:
@@ -132,7 +124,7 @@ def sync_index(db: Session, index_code: str, provider: BcbSgsIndexProvider | Non
             existing.fetched_at = now
 
     previous_success = state.last_success_competence
-    if latest_competence and (previous_success is None or latest_competence > previous_success):
+    if latest_competence and (previous_success is None or latest_competence > previous_success or imported > 0):
         state.last_success_competence = latest_competence
         state.retry_count = 0
         state.status = "synced"

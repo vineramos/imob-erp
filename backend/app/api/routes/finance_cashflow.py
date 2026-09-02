@@ -27,6 +27,7 @@ router = APIRouter(prefix="/finance/treasury", tags=["finance-cashflow"])
 
 ZERO = Decimal("0.00")
 SAO_PAULO = ZoneInfo("America/Sao_Paulo")
+HISTORY_START = date(2000, 1, 1)
 
 
 def money(value: Decimal | int | float | str | None) -> Decimal:
@@ -62,6 +63,14 @@ def _day_mode(day: date, today: date) -> str:
     if day > today:
         return "projected"
     return "mixed"
+
+
+def _movement_net(movements: list[CashFlowPeriodMovement]) -> Decimal:
+    total = ZERO
+    for movement in movements:
+        amount = money(movement.amount)
+        total += amount if movement.direction == "receivable" else -amount
+    return money(total)
 
 
 def _scheduled_target_dates(db: Session, organization_id: UUID) -> dict[tuple[str, UUID], date]:
@@ -470,37 +479,45 @@ def cash_flow_period(
         today=today,
     )
 
-    actual_transactions, actual_by_day = _actual_movements(
+    # O fluxo gerencial precisa carregar também liquidações ainda não conciliadas
+    # no banco (ex.: manutenção marcada como paga/recebida). Por isso o saldo de
+    # abertura é reconstruído do livro-caixa completo, e não só do extrato.
+    _, actual_history_by_day = _actual_movements(
         db,
         organization_id=organization_id,
         account_ids=account_ids,
         fund_scope=fund_scope,
-        start=start_date,
+        start=HISTORY_START,
         today=today,
     )
+    actual_by_day = {
+        day: movements
+        for day, movements in actual_history_by_day.items()
+        if start_date <= day <= min(end_date, today)
+    }
+
     projection_by_day, overdue_receivables, overdue_payables = _projection_movements(
         db,
         organization_id=organization_id,
         fund_scope=fund_scope,
         today=today,
-        end_date=max(end_date, today),
+        end_date=max(end_date, start_date, today),
     )
 
+    opening_balance = account_opening
     if start_date <= today:
-        actual_net_since_start = ZERO
-        for item in actual_transactions:
-            amount = money(item.amount)
-            actual_net_since_start += amount if item.direction == "credit" else -amount
-        opening_balance = money(current_bank_balance - actual_net_since_start)
+        for day in sorted(actual_history_by_day):
+            if day >= start_date:
+                break
+            opening_balance += _movement_net(actual_history_by_day[day])
     else:
-        opening_balance = current_bank_balance
+        for day in sorted(actual_history_by_day):
+            opening_balance += _movement_net(actual_history_by_day[day])
         cursor = today
         while cursor < start_date:
-            for movement in projection_by_day.get(cursor, []):
-                amount = money(movement.amount)
-                opening_balance += amount if movement.direction == "receivable" else -amount
+            opening_balance += _movement_net(projection_by_day.get(cursor, []))
             cursor += timedelta(days=1)
-        opening_balance = money(opening_balance)
+    opening_balance = money(opening_balance)
 
     running = opening_balance
     realized_receivables = ZERO
