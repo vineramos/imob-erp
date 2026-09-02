@@ -29,6 +29,9 @@ from app.api.routes.portfolio import router as portfolio_router
 from app.api.routes.property_media import router as property_media_router
 from app.api.routes.publication import router as publication_router
 from app.api.routes.signature_events import router as signature_events_router
+from app.domains.finance.settlement_rules import install_settlement_rule
+
+install_settlement_rule()
 
 api_router = APIRouter()
 api_router.include_router(health_router)
