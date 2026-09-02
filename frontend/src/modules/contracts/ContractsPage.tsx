@@ -25,6 +25,8 @@ import type {
   ContractDocument,
   ContractSigner,
   OperationalDefaults,
+  OrganizationProfile,
+  Person,
   Property,
 } from '../../api/types'
 import { SignatureTimeline } from './SignatureTimeline'
@@ -34,7 +36,12 @@ const statusLabel: Record<AdministrationContractStatus, string> = {
 }
 const planLabel: Record<string, string> = { essential: 'Essencial', complete: 'Completo', custom: 'Personalizado' }
 const payerLabel: Record<string, string> = { tenant: 'Locatário', owner: 'Proprietário', agency: 'Imobiliária' }
-const signerRoleLabel: Record<string, string> = { owner: 'Proprietário', agency: 'Imobiliária', witness: 'Testemunha', other: 'Outro' }
+const signerRoleLabel: Record<string, string> = { owner: 'Proprietário', tenant: 'Locatário', agency: 'Imobiliária', witness: 'Testemunha', other: 'Outro' }
+const signerRoleOptions: Array<{ value: 'owner' | 'tenant' | 'agency'; label: string }> = [
+  { value: 'owner', label: 'Proprietário' },
+  { value: 'tenant', label: 'Locatário' },
+  { value: 'agency', label: 'Imobiliária' },
+]
 
 const defaultTerms = (defaults?: OperationalDefaults): AdministrationContractTerms => ({
   plan: 'essential', admin_fee_type: 'percent', admin_fee_percent: defaults?.default_admin_fee_percent ?? 10, admin_fee_amount: null,
@@ -42,7 +49,7 @@ const defaultTerms = (defaults?: OperationalDefaults): AdministrationContractTer
   condo_operational_payer: 'tenant', iptu_operational_payer: 'tenant', publication_requires_owner_approval: false,
   maintenance_limit_amount: null, emergency_limit_amount: null, start_date: null, end_date: null, notes: '', signers: [],
 })
-const blankSigner = (): ContractSigner => ({ role: 'owner', name: '', email: '', document_number: null, phone: null, sign_order: 1, communication: 'email' })
+const blankSigner = (): ContractSigner => ({ role: 'owner', person_id: null, name: '', email: '', document_number: null, phone: null, sign_order: 1, communication: 'email' })
 
 function addressLine(address: Record<string, string>) {
   return [address.street, address.number, address.neighborhood, address.city].filter(Boolean).join(', ') || 'Endereço não informado'
@@ -69,6 +76,24 @@ function signingLabel(item: AdministrationContract) {
   }
   return map[item.signing_status] ?? item.signing_status.replaceAll('_', ' ')
 }
+function addMonthsIso(value: string | null, months: number) {
+  if (!value) return null
+  const [year, month, day] = value.split('-').map(Number)
+  if (!year || !month || !day) return null
+  const totalMonths = year * 12 + (month - 1) + Math.max(1, Math.trunc(months || 1))
+  const targetYear = Math.floor(totalMonths / 12)
+  const targetMonthIndex = totalMonths % 12
+  const lastDay = new Date(Date.UTC(targetYear, targetMonthIndex + 1, 0)).getUTCDate()
+  const targetDay = Math.min(day, lastDay)
+  return `${targetYear}-${String(targetMonthIndex + 1).padStart(2, '0')}-${String(targetDay).padStart(2, '0')}`
+}
+function monthsBetweenIso(start: string | null, end: string | null, fallback: number) {
+  if (!start || !end) return fallback
+  const [startYear, startMonth] = start.split('-').map(Number)
+  const [endYear, endMonth] = end.split('-').map(Number)
+  const diff = (endYear - startYear) * 12 + endMonth - startMonth
+  return diff > 0 ? diff : fallback
+}
 
 type Props = { permissions: string[] }
 
@@ -81,6 +106,8 @@ export function ContractsPage({ permissions }: Props) {
 
   const [contracts, setContracts] = useState<AdministrationContract[]>([])
   const [properties, setProperties] = useState<Property[]>([])
+  const [people, setPeople] = useState<Person[]>([])
+  const [company, setCompany] = useState<OrganizationProfile | null>(null)
   const [defaults, setDefaults] = useState<OperationalDefaults | undefined>()
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -92,17 +119,20 @@ export function ContractsPage({ permissions }: Props) {
   const [expanded, setExpanded] = useState<string | null>(null)
   const [propertyId, setPropertyId] = useState('')
   const [terms, setTerms] = useState<AdministrationContractTerms>(() => defaultTerms())
+  const [leaseMonths, setLeaseMonths] = useState(30)
   const [changeSummary, setChangeSummary] = useState('')
 
   const load = useCallback(async () => {
     setLoading(true); setError('')
     try {
-      const [loadedContracts, loadedProperties, loadedDefaults] = await Promise.all([
+      const [loadedContracts, loadedProperties, loadedDefaults, loadedPeople, loadedCompany] = await Promise.all([
         apiRequest<AdministrationContract[]>('/administration-contracts'),
         apiRequest<Property[]>('/properties'),
         apiRequest<OperationalDefaults>('/settings/operations'),
+        apiRequest<Person[]>('/people'),
+        apiRequest<OrganizationProfile>('/settings/company'),
       ])
-      setContracts(loadedContracts); setProperties(loadedProperties); setDefaults(loadedDefaults)
+      setContracts(loadedContracts); setProperties(loadedProperties); setDefaults(loadedDefaults); setPeople(loadedPeople); setCompany(loadedCompany)
     } catch (cause) {
       setError(cause instanceof ApiError ? cause.detail : 'Não foi possível carregar os contratos de administração.')
     } finally { setLoading(false) }
@@ -119,11 +149,25 @@ export function ContractsPage({ permissions }: Props) {
     signed: contracts.filter((item) => item.status === 'signed').length,
   }), [contracts])
 
+  function resolveSignerPersonId(signer: ContractSigner) {
+    if (signer.person_id) return signer.person_id
+    if (signer.role !== 'owner' && signer.role !== 'tenant') return null
+    const email = signer.email.trim().toLowerCase()
+    const document = (signer.document_number ?? '').replace(/\D/g, '')
+    const match = people.find((person) => person.role_keys.includes(signer.role) && (
+      (document && (person.document_number ?? '').replace(/\D/g, '') === document)
+      || (email && (person.email ?? '').trim().toLowerCase() === email)
+      || person.name.trim().toLowerCase() === signer.name.trim().toLowerCase()
+    ))
+    return match?.id ?? null
+  }
   function openNew() {
-    setEditing(null); setPropertyId(''); setTerms(defaultTerms(defaults)); setChangeSummary(''); setShowForm(true); setError(''); setSuccess('')
+    const months = defaults?.residential_lease_months ?? 30
+    setEditing(null); setPropertyId(''); setLeaseMonths(months); setTerms(defaultTerms(defaults)); setChangeSummary(''); setShowForm(true); setError(''); setSuccess('')
   }
   function openEdit(item: AdministrationContract) {
-    setEditing(item); setPropertyId(item.property_id)
+    const fallbackMonths = defaults?.residential_lease_months ?? 30
+    setEditing(item); setPropertyId(item.property_id); setLeaseMonths(monthsBetweenIso(item.start_date, item.end_date, fallbackMonths))
     setTerms({
       plan: item.plan, admin_fee_type: item.admin_fee_type,
       admin_fee_percent: item.admin_fee_percent == null ? null : Number(item.admin_fee_percent),
@@ -131,25 +175,54 @@ export function ContractsPage({ permissions }: Props) {
       intermediation_percent: Number(item.intermediation_percent), intermediation_installments: item.intermediation_installments,
       owner_repasse_business_days: item.owner_repasse_business_days, condo_operational_payer: item.condo_operational_payer,
       iptu_operational_payer: item.iptu_operational_payer, publication_requires_owner_approval: item.publication_requires_owner_approval,
-      maintenance_limit_amount: item.maintenance_limit_amount == null ? null : Number(item.maintenance_limit_amount),
-      emergency_limit_amount: item.emergency_limit_amount == null ? null : Number(item.emergency_limit_amount),
-      start_date: item.start_date, end_date: item.end_date, notes: item.notes ?? '', signers: item.signers.map((signer) => ({ ...signer })),
+      maintenance_limit_amount: null, emergency_limit_amount: null,
+      start_date: item.start_date, end_date: item.end_date, notes: item.notes ?? '',
+      signers: item.signers.map((signer) => ({ ...signer, person_id: resolveSignerPersonId(signer) })),
     })
     setChangeSummary(''); setShowForm(true); setError(''); setSuccess('')
   }
   function updateSigner(index: number, patch: Partial<ContractSigner>) {
     setTerms((current) => ({ ...current, signers: current.signers.map((signer, i) => i === index ? { ...signer, ...patch } : signer) }))
   }
+  function updateSignerRole(index: number, role: ContractSigner['role']) {
+    if (role === 'agency') {
+      updateSigner(index, {
+        role,
+        person_id: null,
+        name: company?.display_name || company?.legal_name || 'Imobiliária',
+        email: company?.contact_email || '',
+        document_number: company?.document_number || null,
+        phone: company?.contact_phone || null,
+      })
+      return
+    }
+    updateSigner(index, { role, person_id: null, name: '', email: '', document_number: null, phone: null })
+  }
+  function selectSignerPerson(index: number, personId: string) {
+    const person = people.find((item) => item.id === personId)
+    if (!person) {
+      updateSigner(index, { person_id: null, name: '', email: '', document_number: null, phone: null })
+      return
+    }
+    updateSigner(index, {
+      person_id: person.id,
+      name: person.name,
+      email: person.email || '',
+      document_number: person.document_number,
+      phone: person.phone,
+    })
+  }
 
   async function save(event: FormEvent) {
     event.preventDefault(); setSaving(true); setError(''); setSuccess('')
     try {
+      const payloadTerms = { ...terms, maintenance_limit_amount: null, emergency_limit_amount: null }
       let updated: AdministrationContract
       if (editing) {
-        updated = await apiRequest<AdministrationContract>(`/administration-contracts/${editing.id}`, { method: 'PUT', body: JSON.stringify({ ...terms, change_summary: changeSummary }) })
+        updated = await apiRequest<AdministrationContract>(`/administration-contracts/${editing.id}`, { method: 'PUT', body: JSON.stringify({ ...payloadTerms, change_summary: changeSummary }) })
         setSuccess(`${updated.code} ganhou a versão ${updated.current_version}. O PDF e o fluxo de assinatura da versão anterior foram invalidados.`)
       } else {
-        const payload: AdministrationContractCreate = { ...terms, property_id: propertyId }
+        const payload: AdministrationContractCreate = { ...payloadTerms, property_id: propertyId }
         updated = await apiRequest<AdministrationContract>('/administration-contracts', { method: 'POST', body: JSON.stringify(payload) })
         setSuccess(`${updated.code} criado como rascunho.`)
       }
@@ -229,12 +302,11 @@ export function ContractsPage({ permissions }: Props) {
         <label className="field"><span>Repasse D+</span><input type="number" min="0" max="30" value={terms.owner_repasse_business_days} onChange={(e) => setTerms((current) => ({ ...current, owner_repasse_business_days: Number(e.target.value) }))}/></label>
         <label className="field"><span>1º aluguel · Intermediação (%)</span><input type="number" min="0" max="500" step="0.01" value={terms.intermediation_percent} onChange={(e) => setTerms((current) => ({ ...current, intermediation_percent: Number(e.target.value) }))}/></label>
         <label className="field"><span>Parcelas da intermediação</span><input type="number" min="1" max="24" value={terms.intermediation_installments} onChange={(e) => setTerms((current) => ({ ...current, intermediation_installments: Number(e.target.value) }))}/></label>
-        <label className="field"><span>Início</span><input type="date" value={terms.start_date ?? ''} onChange={(e) => setTerms((current) => ({ ...current, start_date: e.target.value || null }))}/></label>
+        <label className="field"><span>Início</span><input type="date" value={terms.start_date ?? ''} onChange={(e) => { const start = e.target.value || null; setTerms((current) => ({ ...current, start_date: start, end_date: addMonthsIso(start, leaseMonths) })) }}/></label>
+        <label className="field"><span>Prazo da locação (meses)</span><input type="number" min="1" max="120" value={leaseMonths} onChange={(e) => { const months = Math.max(1, Number(e.target.value) || 1); setLeaseMonths(months); setTerms((current) => ({ ...current, end_date: addMonthsIso(current.start_date, months) })) }}/></label>
+        <label className="field"><span>Fim previsto</span><input disabled type="date" value={terms.end_date ?? ''}/></label>
         <label className="field"><span>Condomínio · pagador</span><select value={terms.condo_operational_payer} onChange={(e) => setTerms((current) => ({ ...current, condo_operational_payer: e.target.value as AdministrationContractTerms['condo_operational_payer'] }))}>{Object.entries(payerLabel).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
         <label className="field"><span>IPTU · pagador</span><select value={terms.iptu_operational_payer} onChange={(e) => setTerms((current) => ({ ...current, iptu_operational_payer: e.target.value as AdministrationContractTerms['iptu_operational_payer'] }))}>{Object.entries(payerLabel).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
-        <label className="field"><span>Fim previsto</span><input type="date" value={terms.end_date ?? ''} onChange={(e) => setTerms((current) => ({ ...current, end_date: e.target.value || null }))}/></label>
-        <label className="field"><span>Autonomia manutenção</span><input type="number" min="0" step="0.01" value={terms.maintenance_limit_amount ?? ''} onChange={(e) => setTerms((current) => ({ ...current, maintenance_limit_amount: e.target.value ? Number(e.target.value) : null }))}/></label>
-        <label className="field"><span>Limite emergencial</span><input type="number" min="0" step="0.01" value={terms.emergency_limit_amount ?? ''} onChange={(e) => setTerms((current) => ({ ...current, emergency_limit_amount: e.target.value ? Number(e.target.value) : null }))}/></label>
         <label className="field checkbox-field contract-checkbox"><input type="checkbox" checked={terms.publication_requires_owner_approval} onChange={(e) => setTerms((current) => ({ ...current, publication_requires_owner_approval: e.target.checked }))}/><span>Exigir aprovação para publicação</span></label>
         <label className="field field-span-3"><span>Observações / condições especiais</span><textarea rows={3} value={terms.notes ?? ''} onChange={(e) => setTerms((current) => ({ ...current, notes: e.target.value }))}/></label>
         {editing && <label className="field field-span-3"><span>Resumo desta nova versão</span><input required minLength={3} value={changeSummary} onChange={(e) => setChangeSummary(e.target.value)}/></label>}
@@ -242,16 +314,21 @@ export function ContractsPage({ permissions }: Props) {
 
       <div className="contract-snapshot-note"><ShieldCheck size={16}/><span><strong>Regra financeira:</strong> a intermediação substitui a administração nas parcelas iniciais definidas. Com 100% em 1 parcela, o 1º aluguel fica integralmente com a imobiliária e a administração passa a incidir a partir do 2º aluguel.</span></div>
 
-      <div className="contract-signers-editor"><div className="contract-signers-heading"><div><span className="eyebrow">Assinatura</span><h3>Signatários desta versão</h3><p>Os signatários também ficam congelados com a versão.</p></div><button className="button secondary" type="button" onClick={() => setTerms((current) => ({ ...current, signers: [...current.signers, blankSigner()] }))}><UserRoundPlus size={14}/> Adicionar</button></div>
-        {terms.signers.length === 0 ? <div className="contract-signers-empty">Sem signatários manuais. Proprietários com e-mail serão sugeridos automaticamente na criação.</div> : terms.signers.map((signer, index) => <div className="contract-signer-row" key={`${index}-${signer.email}`}>
-          <label className="field"><span>Papel</span><select value={signer.role} onChange={(e) => updateSigner(index, { role: e.target.value as ContractSigner['role'] })}>{Object.entries(signerRoleLabel).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
-          <label className="field"><span>Nome</span><input required value={signer.name} onChange={(e) => updateSigner(index, { name: e.target.value })}/></label>
-          <label className="field"><span>E-mail</span><input required type="email" value={signer.email} onChange={(e) => updateSigner(index, { email: e.target.value })}/></label>
-          <label className="field"><span>CPF/CNPJ</span><input value={signer.document_number ?? ''} onChange={(e) => updateSigner(index, { document_number: e.target.value || null })}/></label>
-          <label className="field"><span>Comunicação</span><select value={signer.communication} onChange={(e) => updateSigner(index, { communication: e.target.value as ContractSigner['communication'] })}><option value="email">E-mail</option><option value="sms">SMS</option><option value="whatsapp">WhatsApp</option><option value="none">Nenhuma</option></select></label>
-          <label className="field signer-order"><span>Ordem</span><input type="number" min="1" max="50" value={signer.sign_order} onChange={(e) => updateSigner(index, { sign_order: Number(e.target.value) })}/></label>
-          <button className="signer-remove" type="button" aria-label="Remover" onClick={() => setTerms((current) => ({ ...current, signers: current.signers.filter((_, i) => i !== index) }))}><Trash2 size={15}/></button>
-        </div>)}
+      <div className="contract-signers-editor"><div className="contract-signers-heading"><div><span className="eyebrow">Assinatura</span><h3>Signatários desta versão</h3><p>Escolha o papel e selecione a pessoa já cadastrada no ERP. Proprietários e locatários são filtrados pelo respectivo papel no cadastro de Pessoas.</p></div><button className="button secondary" type="button" onClick={() => setTerms((current) => ({ ...current, signers: [...current.signers, blankSigner()] }))}><UserRoundPlus size={14}/> Adicionar</button></div>
+        {terms.signers.length === 0 ? <div className="contract-signers-empty">Nenhum signatário selecionado. Se nenhum for informado, os proprietários com e-mail continuam sendo sugeridos automaticamente na criação.</div> : terms.signers.map((signer, index) => {
+          const isPersonRole = signer.role === 'owner' || signer.role === 'tenant'
+          const eligiblePeople = isPersonRole ? people.filter((person) => person.role_keys.includes(signer.role)) : []
+          const isLegacyRole = !signerRoleOptions.some((option) => option.value === signer.role)
+          return <div className="contract-signer-row" key={`${index}-${signer.person_id ?? signer.email}`}>
+            <label className="field"><span>Papel</span><select value={signer.role} onChange={(e) => updateSignerRole(index, e.target.value as ContractSigner['role'])}>{isLegacyRole && <option value={signer.role}>{signerRoleLabel[signer.role] ?? signer.role} · legado</option>}{signerRoleOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
+            <label className="field"><span>Nome</span>{isPersonRole ? <select required value={signer.person_id ?? ''} onChange={(e) => selectSignerPerson(index, e.target.value)}><option value="">Selecione...</option>{eligiblePeople.map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}</select> : signer.role === 'agency' ? <input required readOnly value={signer.name}/> : <input required value={signer.name} onChange={(e) => updateSigner(index, { name: e.target.value })}/>}</label>
+            <label className="field"><span>E-mail</span><input required type="email" value={signer.email} onChange={(e) => updateSigner(index, { email: e.target.value })}/></label>
+            <label className="field"><span>CPF/CNPJ</span><input data-format="cpf-cnpj" value={signer.document_number ?? ''} onChange={(e) => updateSigner(index, { document_number: e.target.value || null })}/></label>
+            <label className="field"><span>Comunicação</span><select value={signer.communication} onChange={(e) => updateSigner(index, { communication: e.target.value as ContractSigner['communication'] })}><option value="email">E-mail</option><option value="sms">SMS</option><option value="whatsapp">WhatsApp</option><option value="none">Nenhuma</option></select></label>
+            <label className="field signer-order"><span>Ordem</span><input type="number" min="1" max="50" value={signer.sign_order} onChange={(e) => updateSigner(index, { sign_order: Number(e.target.value) })}/></label>
+            <button className="signer-remove" type="button" aria-label="Remover" onClick={() => setTerms((current) => ({ ...current, signers: current.signers.filter((_, i) => i !== index) }))}><Trash2 size={15}/></button>
+          </div>
+        })}
       </div>
       <div className="contract-snapshot-note"><ShieldCheck size={16}/><span>Nova versão invalida os artefatos de assinatura anteriores e exige novo PDF/hash.</span></div>
       <div className="form-actions"><button className="button secondary" type="button" onClick={() => { setShowForm(false); setEditing(null) }}>Cancelar</button><button className="button primary" disabled={saving} type="submit">{saving ? 'Salvando...' : editing ? 'Salvar nova versão' : 'Criar rascunho'}</button></div>
