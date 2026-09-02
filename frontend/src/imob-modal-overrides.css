@@ -10,4 +10,36 @@
 .contract-form .field,.inspection-form .field{min-width:0}.contract-form textarea,.inspection-form textarea{resize:vertical}
 .contract-form .contract-signer-row{grid-template-columns:minmax(105px,.7fr) minmax(150px,1.1fr) minmax(180px,1.25fr) minmax(130px,.9fr) minmax(115px,.8fr) 75px 34px!important;gap:8px!important;align-items:end}
 .inspection-form .inspection-item-editor{grid-template-columns:minmax(170px,1fr) 130px minmax(220px,1.5fr) auto 34px!important;gap:8px!important;align-items:center}
-@media(max-width:900px){.contract-form .contract-signer-row,.inspection-form .inspection-item-editor{grid-template-columns:1fr!important}.contracts-workspace:has(.contract-form)>.form-alert.danger-alert,.inspection-workspace:has(.inspection-form)>.form-alert.danger-alert{top:74px;width:calc(100vw - 44px)}}
+
+/*
+ * Todos os dialogs respeitam a área útil abaixo da topbar.
+ * A camada anterior centralizava os modais em 100vh e, nos dialogs altos,
+ * o cabeçalho acabava subindo por baixo da barra superior do ERP.
+ */
+:root{
+  --imob-topbar-height:66px;
+  --imob-modal-gap:18px;
+}
+.portfolio-modal-backdrop,.finance-modal-backdrop{
+  top:var(--imob-topbar-height)!important;
+  right:0!important;
+  bottom:0!important;
+  left:0!important;
+  padding:var(--imob-modal-gap) 24px 24px!important;
+  place-items:center!important;
+}
+.portfolio-modal,.finance-modal,.finance-advanced-modal,.broker-modal{
+  max-height:calc(100dvh - var(--imob-topbar-height) - 42px)!important;
+}
+.contract-form,.inspection-form{
+  top:calc(var(--imob-topbar-height) + ((100dvh - var(--imob-topbar-height)) / 2))!important;
+  max-height:calc(100dvh - var(--imob-topbar-height) - 36px)!important;
+}
+
+@media(max-width:900px){
+  .contract-form .contract-signer-row,.inspection-form .inspection-item-editor{grid-template-columns:1fr!important}
+  .contracts-workspace:has(.contract-form)>.form-alert.danger-alert,.inspection-workspace:has(.inspection-form)>.form-alert.danger-alert{top:74px;width:calc(100vw - 44px)}
+  .portfolio-modal-backdrop,.finance-modal-backdrop{padding:10px 10px 14px!important}
+  .portfolio-modal,.finance-modal,.finance-advanced-modal,.broker-modal{max-height:calc(100dvh - var(--imob-topbar-height) - 24px)!important}
+  .contract-form,.inspection-form{max-height:calc(100dvh - var(--imob-topbar-height) - 24px)!important}
+}
