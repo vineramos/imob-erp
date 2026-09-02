@@ -119,6 +119,54 @@
 .contract-provider-note h2 { margin: 3px 0 4px; font-size: 12px; }
 .contract-provider-note p { margin: 0; color: var(--text-muted); font-size: 9.5px; line-height: 1.55; }
 
+.contract-end-action {
+  min-width: 0;
+  margin: 2px 0 0;
+  padding: 0;
+  border: 0;
+}
+.contract-end-action legend {
+  margin-bottom: 8px;
+  color: var(--text);
+  font-size: 9px;
+  font-weight: 800;
+}
+.contract-end-action-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.contract-end-action-option {
+  min-height: 66px;
+  padding: 11px 12px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface);
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  cursor: pointer;
+  transition: border-color .16s ease, background .16s ease, box-shadow .16s ease;
+}
+.contract-end-action-option:hover {
+  border-color: color-mix(in srgb, var(--brand-primary) 32%, var(--border));
+}
+.contract-end-action-option.active {
+  border-color: color-mix(in srgb, var(--brand-primary) 48%, var(--border));
+  background: color-mix(in srgb, var(--brand-primary-soft) 55%, var(--surface));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--brand-primary) 8%, transparent);
+}
+.contract-end-action-option input {
+  width: 15px;
+  height: 15px;
+  margin: 2px 0 0;
+  accent-color: var(--brand-primary);
+  flex: 0 0 auto;
+}
+.contract-end-action-option > span { display: grid; gap: 3px; }
+.contract-end-action-option strong { font-size: 10.5px; line-height: 1.3; }
+.contract-end-action-option small { color: var(--text-muted); font-size: 8.8px; line-height: 1.45; }
+
 @media (max-width: 1150px) {
   .contract-row { grid-template-columns: 120px minmax(260px, 1fr) 190px; }
   .contract-state { grid-column: 2 / -1; grid-row: 2; display: flex; align-items: center; }
@@ -132,4 +180,5 @@
   .contract-actions > div { justify-content: flex-start; }
   .contract-version-history > div { grid-template-columns: 38px 1fr; }
   .contract-version-history small { grid-column: 2; }
+  .contract-end-action-options { grid-template-columns: 1fr; }
 }
