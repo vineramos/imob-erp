@@ -239,6 +239,11 @@ def update_property_publication(
         item.public_slug = item.public_slug or f"imovel-{item.internal_number:06d}"
         item.publication_enabled = True
         item.published_at = datetime.now(timezone.utc)
+        settings = db.scalar(select(OrganizationSettings).where(OrganizationSettings.organization_id == context.user.organization_id))
+        if settings is not None:
+            integrations = dict(settings.integrations or {})
+            integrations["public_site_enabled"] = True
+            settings.integrations = integrations
     else:
         item.publication_enabled = False
     item.publication_updated_by_user_id = context.user.id
@@ -264,8 +269,21 @@ def update_property_publication(
 def _public_site_settings(db: Session, organization_id: UUID) -> tuple[Organization, OrganizationSettings]:
     organization = db.scalar(select(Organization).where(Organization.id == organization_id, Organization.is_active.is_(True)))
     settings = db.scalar(select(OrganizationSettings).where(OrganizationSettings.organization_id == organization_id))
-    integrations = (settings.integrations if settings else {}) or {}
-    if organization is None or settings is None or not bool(integrations.get("public_site_enabled")):
+    if organization is None or settings is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Site público não disponível.")
+
+    integrations = (settings.integrations or {})
+    has_published_rental = db.scalar(
+        select(Property.id)
+        .where(
+            Property.organization_id == organization_id,
+            Property.publication_enabled.is_(True),
+            Property.status == "available",
+            Property.purpose == "rent",
+        )
+        .limit(1)
+    ) is not None
+    if not bool(integrations.get("public_site_enabled")) and not has_published_rental:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Site público não disponível.")
     return organization, settings
 
