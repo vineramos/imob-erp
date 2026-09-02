@@ -258,11 +258,12 @@ export type AdministrationContractStatus = 'draft' | 'review' | 'approved' | 'pe
 export type AdministrationPlan = 'essential' | 'complete' | 'custom'
 export type ContractFeeType = 'percent' | 'fixed'
 export type OperationalPayer = 'tenant' | 'owner' | 'agency'
-export type ContractSignerRole = 'owner' | 'agency' | 'witness' | 'other'
+export type ContractSignerRole = 'owner' | 'tenant' | 'agency' | 'witness' | 'other'
 export type ContractSignerCommunication = 'email' | 'sms' | 'whatsapp' | 'none'
 
 export type ContractSigner = {
   role: ContractSignerRole
+  person_id?: string | null
   name: string
   email: string
   document_number: string | null
