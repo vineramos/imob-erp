@@ -7,6 +7,7 @@ from app.core.config import get_settings
 from app.core.database import Base
 from app.domains.contracts import models as contracts_models  # noqa: F401
 from app.domains.finance import advanced_models as finance_advanced_models  # noqa: F401
+from app.domains.finance import bank_control_models as finance_bank_control_models  # noqa: F401
 from app.domains.finance import bank_models as finance_bank_models  # noqa: F401
 from app.domains.finance import core_models as finance_core_models  # noqa: F401
 from app.domains.finance import models as finance_models  # noqa: F401
