@@ -2,6 +2,8 @@ import {
   AlertTriangle,
   CalendarDays,
   CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   CircleDollarSign,
   Download,
   Landmark,
@@ -13,6 +15,7 @@ import {
 } from 'lucide-react'
 import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react'
 import { ApiError, apiBlobRequest, apiRequest } from '../../api/client'
+import { shiftMonth } from './finance-period'
 
 type ChargeItem = { key:string; label:string; amount:number; beneficiary:'owner'|'agency'|'third_party' }
 type Repasse = { id:string; charge_id:string; charge_code:string; lease_contract_id:string; lease_code:string; property_id:string; property_code:string; competence:string; owner_person_id:string; owner_name:string; ownership_percent:number; amount:number; due_date:string; status:string; paid_at:string|null; payment_reference:string|null }
@@ -119,7 +122,7 @@ export function FinancePage({permissions}:Props){
   }
 
   return <section className="workspace finance-workspace">
-    <div className="page-heading finance-heading"><div><span className="eyebrow">Financeiro · Locação</span><h1>Financeiro</h1><p>Cobrança, recebimento, taxas da imobiliária e dinheiro do proprietário separados no mesmo fluxo.</p></div><div className="heading-actions"><label className="finance-month"><CalendarDays size={15}/><input type="month" value={month} onChange={e=>setMonth(e.target.value)}/></label><button className="button secondary" type="button" onClick={()=>void load()} disabled={loading}><RefreshCw size={14}/> Atualizar</button>{canGenerate&&<button className="button primary" type="button" onClick={()=>void generate()} disabled={saving}><ReceiptText size={14}/> Gerar cobranças</button>}</div></div>
+    <div className="page-heading finance-heading"><div><span className="eyebrow">Financeiro · Locação</span><h1>Financeiro</h1><p>Cobrança, recebimento, taxas da imobiliária e dinheiro do proprietário separados no mesmo fluxo.</p></div><div className="heading-actions"><button className="icon-button" type="button" onClick={()=>setMonth(current=>shiftMonth(current,-1))} aria-label="Competência anterior" title="Competência anterior"><ChevronLeft size={16}/></button><label className="finance-month"><CalendarDays size={15}/><input type="month" value={month} onChange={e=>setMonth(e.target.value)}/></label><button className="icon-button" type="button" onClick={()=>setMonth(current=>shiftMonth(current,1))} aria-label="Próxima competência" title="Próxima competência"><ChevronRight size={16}/></button><button className="button secondary" type="button" onClick={()=>void load()} disabled={loading}><RefreshCw size={14}/> Atualizar</button>{canGenerate&&<button className="button primary" type="button" onClick={()=>void generate()} disabled={saving}><ReceiptText size={14}/> Gerar cobranças</button>}</div></div>
 
     {dashboard&&<div className="finance-metrics">
       <article className="panel finance-metric"><span>Recebido na competência</span><strong>{money(dashboard.received_amount)}</strong><small>{money(dashboard.agency_revenue_amount)} de receita da imobiliária</small></article>
