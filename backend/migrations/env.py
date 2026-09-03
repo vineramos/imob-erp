@@ -5,6 +5,7 @@ from sqlalchemy import engine_from_config, pool
 
 from app.core.config import get_settings
 from app.core.database import Base
+from app.domains.agenda import models as agenda_models  # noqa: F401
 from app.domains.contracts import models as contracts_models  # noqa: F401
 from app.domains.finance import advanced_models as finance_advanced_models  # noqa: F401
 from app.domains.finance import bank_control_models as finance_bank_control_models  # noqa: F401
