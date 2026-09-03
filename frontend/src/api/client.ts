@@ -7,12 +7,14 @@ const API_URL = runtimeConfig.apiUrl
 export class ApiError extends Error {
   status: number
   detail: string
+  payload: unknown
 
-  constructor(status: number, detail: string) {
+  constructor(status: number, detail: string, payload: unknown = null) {
     super(detail)
     this.name = 'ApiError'
     this.status = status
     this.detail = detail
+    this.payload = payload
   }
 }
 
@@ -25,17 +27,27 @@ async function getAccessToken(): Promise<string | null> {
   } catch { return null }
 }
 
-async function errorDetail(response: Response): Promise<string> {
+async function errorDetail(response: Response): Promise<{ detail: string; payload: unknown }> {
   let detail = `Erro ${response.status}`
+  let payload: unknown = null
   try {
-    const payload = (await response.json()) as { detail?: unknown }
-    if (typeof payload.detail === 'string') detail = payload.detail
+    const data = (await response.json()) as { detail?: unknown }
+    payload = data.detail ?? data
+    if (typeof data.detail === 'string') detail = data.detail
+    else if (data.detail && typeof data.detail === 'object') {
+      const candidate = data.detail as { reason?: unknown; message?: unknown }
+      if (typeof candidate.reason === 'string') detail = candidate.reason
+      else if (typeof candidate.message === 'string') detail = candidate.message
+    }
   } catch { /* mantém mensagem HTTP */ }
-  return detail
+  return { detail, payload }
 }
 
 async function parseResponse<T>(response: Response): Promise<T> {
-  if (!response.ok) throw new ApiError(response.status, await errorDetail(response))
+  if (!response.ok) {
+    const error = await errorDetail(response)
+    throw new ApiError(response.status, error.detail, error.payload)
+  }
   if (response.status === 204) return undefined as T
   return formatApiPayload((await response.json()) as T)
 }
@@ -56,7 +68,10 @@ export async function publicBlobRequest(path: string, init: RequestInit = {}): P
   const normalized = normalizeJsonRequest(init)
   const headers = new Headers(normalized.headers)
   const response = await fetch(apiUrl(path), { ...normalized, headers })
-  if (!response.ok) throw new ApiError(response.status, await errorDetail(response))
+  if (!response.ok) {
+    const error = await errorDetail(response)
+    throw new ApiError(response.status, error.detail, error.payload)
+  }
   return response.blob()
 }
 
@@ -75,6 +90,9 @@ export async function apiBlobRequest(path: string, init: RequestInit = {}): Prom
   const headers = new Headers(normalized.headers)
   if (token) headers.set('Authorization', `Bearer ${token}`)
   const response = await fetch(apiUrl(path), { ...normalized, headers })
-  if (!response.ok) throw new ApiError(response.status, await errorDetail(response))
+  if (!response.ok) {
+    const error = await errorDetail(response)
+    throw new ApiError(response.status, error.detail, error.payload)
+  }
   return response.blob()
 }
