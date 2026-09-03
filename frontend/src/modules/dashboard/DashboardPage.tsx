@@ -2,155 +2,67 @@ import {
   AlertTriangle,
   Building2,
   CalendarCheck2,
+  CalendarClock,
   FileSignature,
-  Landmark,
-  ShieldCheck,
-  Sparkles,
+  House,
+  RefreshCw,
+  TrendingDown,
+  WalletCards,
+  Wrench,
 } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { ApiError, apiRequest } from '../../api/client'
+import './dashboard-live.css'
 
-const cards = [
-  {
-    label: 'Imóveis administrados',
-    value: '—',
-    hint: 'Módulo de imóveis entra na próxima etapa',
-    icon: Building2,
-    tone: 'blue',
-  },
-  {
-    label: 'Contratos ativos',
-    value: '—',
-    hint: 'Aguardando módulo de contratos',
-    icon: FileSignature,
-    tone: 'violet',
-  },
-  {
-    label: 'Pendências críticas',
-    value: '0',
-    hint: 'Nenhuma ocorrência crítica',
-    icon: AlertTriangle,
-    tone: 'orange',
-  },
-  {
-    label: 'Tarefas de hoje',
-    value: '0',
-    hint: 'Agenda integrada sem pendências',
-    icon: CalendarCheck2,
-    tone: 'green',
-  },
-]
+type DashboardEvent = { id:string; title:string; start_at:string; event_type:string; module:string; priority:string }
+type Overview = {
+  administered_properties:number
+  available_properties:number
+  active_leases:number
+  contracts_expiring_120:number
+  open_maintenance:number
+  overdue_amount:number
+  pending_repasses_amount:number
+  tasks_today:number
+  overdue_tasks:number
+  events_today:DashboardEvent[]
+}
+type ModuleTarget = 'properties'|'contracts'|'maintenance'|'finance'|'agenda'
+type Props = { onNavigate:(module:ModuleTarget)=>void }
 
-const foundation = [
-  'Autenticação e Administrador inicial',
-  'Perfis, permissões e alçadas',
-  'Auditoria das ações sensíveis',
-  'Dados da empresa e identidade visual',
-  'Design System e navegação modular',
-]
+const money=(value:number)=>Number(value||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'})
+const timeLabel=(value:string)=>new Date(value).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})
+const eventLabel:Record<string,string>={task:'Tarefa',inspection:'Vistoria',inspection_deadline:'Prazo de vistoria',maintenance:'Manutenção',contract_expiry:'Contrato',adjustment:'Reajuste',billing:'Cobrança',repasse:'Repasse'}
+const moduleTargets=new Set<ModuleTarget>(['properties','contracts','maintenance','finance','agenda'])
 
-export function DashboardPage() {
-  return (
-    <section className="workspace dashboard-workspace">
-      <div className="page-heading dashboard-heading">
-        <div>
-          <span className="eyebrow">Visão geral</span>
-          <h1>Dashboard</h1>
-          <p>Uma visão rápida da operação. Os indicadores ganham dados reais conforme os módulos forem ativados.</p>
-        </div>
-        <div className="environment-pill">
-          <span className="status-dot status-ready" />
-          Ambiente operacional
-        </div>
-      </div>
+export function DashboardPage({onNavigate}:Props) {
+  const [data,setData]=useState<Overview|null>(null)
+  const [loading,setLoading]=useState(true)
+  const [error,setError]=useState('')
+  const load=useCallback(async()=>{setLoading(true);setError('');try{setData(await apiRequest<Overview>('/dashboard/overview'))}catch(cause){setError(cause instanceof ApiError?cause.detail:'Não foi possível carregar o dashboard operacional.')}finally{setLoading(false)}},[])
+  useEffect(()=>{void load()},[load])
 
-      <div className="metric-grid">
-        {cards.map(({ icon: Icon, tone, ...card }) => (
-          <article className="metric-card" key={card.label}>
-            <div className={`metric-icon metric-icon-${tone}`}>
-              <Icon size={20} strokeWidth={1.8} />
-            </div>
-            <div className="metric-copy">
-              <span>{card.label}</span>
-              <strong>{card.value}</strong>
-              <small>{card.hint}</small>
-            </div>
-          </article>
-        ))}
-      </div>
+  const cards=useMemo(()=>[
+    {label:'Imóveis administrados',value:data?.administered_properties??0,hint:'contratos de administração ativos',icon:Building2,module:'properties' as ModuleTarget,tone:'blue'},
+    {label:'Imóveis disponíveis',value:data?.available_properties??0,hint:'estoque pronto para locação',icon:House,module:'properties' as ModuleTarget,tone:'green'},
+    {label:'Contratos ativos',value:data?.active_leases??0,hint:'locações assinadas',icon:FileSignature,module:'contracts' as ModuleTarget,tone:'violet'},
+    {label:'Vencendo em 120 dias',value:data?.contracts_expiring_120??0,hint:'administração + locação',icon:CalendarClock,module:'contracts' as ModuleTarget,tone:'orange'},
+    {label:'Manutenções abertas',value:data?.open_maintenance??0,hint:'chamados ainda não concluídos',icon:Wrench,module:'maintenance' as ModuleTarget,tone:'orange'},
+    {label:'Tarefas de hoje',value:data?.tasks_today??0,hint:data?.overdue_tasks?`${data.overdue_tasks} tarefa(s) atrasada(s)`:'agenda em dia',icon:CalendarCheck2,module:'agenda' as ModuleTarget,tone:data?.overdue_tasks?'orange':'green'},
+  ],[data])
 
-      <div className="dashboard-grid dashboard-main-grid">
-        <article className="panel dashboard-foundation-panel">
-          <div className="panel-heading panel-heading-row">
-            <div>
-              <span className="eyebrow">Fundação</span>
-              <h2>Base do ERP pronta para evoluir</h2>
-            </div>
-            <div className="panel-heading-icon"><ShieldCheck size={20} /></div>
-          </div>
+  return <section className="workspace dashboard-workspace dashboard-live">
+    <div className="page-heading dashboard-heading"><div><span className="eyebrow">Visão geral</span><h1>Dashboard</h1><p>Operação da imobiliária em tempo real, conectando imóveis, contratos, agenda, manutenção e financeiro.</p></div><button className="button secondary" type="button" onClick={()=>void load()} disabled={loading}><RefreshCw size={14}/> Atualizar</button></div>
+    {error&&<div className="form-alert danger-alert">{error}</div>}
 
-          <div className="foundation-list foundation-checklist">
-            {foundation.map((item) => (
-              <div key={item}>
-                <span className="foundation-check"><ShieldCheck size={14} /></span>
-                <span>{item}</span>
-              </div>
-            ))}
-          </div>
-        </article>
+    <div className="dashboard-live-metrics">{cards.map(({icon:Icon,...card})=><button type="button" className={`panel dashboard-live-card tone-${card.tone}`} key={card.label} onClick={()=>onNavigate(card.module)}><div className="dashboard-live-icon"><Icon size={19}/></div><div><span>{card.label}</span><strong>{loading?'—':card.value}</strong><small>{card.hint}</small></div></button>)}</div>
 
-        <article className="panel next-step-panel">
-          <div className="panel-heading panel-heading-row">
-            <div>
-              <span className="eyebrow">Próxima etapa</span>
-              <h2>Operação imobiliária</h2>
-            </div>
-            <div className="panel-heading-icon"><Sparkles size={20} /></div>
-          </div>
+    <div className="dashboard-live-grid">
+      <article className="panel dashboard-today"><div className="dashboard-section-heading"><div><span className="eyebrow">Hoje</span><h2>Agenda operacional</h2><p>Compromissos automáticos e tarefas internas que pedem atenção hoje.</p></div><button className="button secondary compact" type="button" onClick={()=>onNavigate('agenda')}>Abrir agenda</button></div>{loading?<div className="settings-loading">Carregando compromissos...</div>:data?.events_today.length?<div className="dashboard-today-list">{data.events_today.map(item=><button type="button" key={item.id} onClick={()=>{if(moduleTargets.has(item.module as ModuleTarget))onNavigate(item.module as ModuleTarget);else onNavigate('agenda')}}><div className={`dashboard-event-dot priority-${item.priority}`}/><div><strong>{item.title}</strong><span>{eventLabel[item.event_type]||item.event_type} · {timeLabel(item.start_at)}</span></div></button>)}</div>:<div className="dashboard-empty"><CalendarCheck2 size={25}/><strong>Nenhum compromisso pendente hoje.</strong><span>A Agenda continuará monitorando vencimentos e eventos automáticos.</span></div>}</article>
 
-          <div className="next-step-list">
-            <div>
-              <span className="next-step-number">01</span>
-              <div><strong>Pessoas e imóveis</strong><small>Cadastros canônicos e propriedade.</small></div>
-            </div>
-            <div>
-              <span className="next-step-number">02</span>
-              <div><strong>Captação e administração</strong><small>Do lead do proprietário ao imóvel disponível.</small></div>
-            </div>
-            <div>
-              <span className="next-step-number">03</span>
-              <div><strong>Contratos e financeiro</strong><small>Regras próprias, cobrança, repasse e conciliação.</small></div>
-            </div>
-          </div>
-        </article>
-      </div>
+      <article className="panel dashboard-financial"><div className="dashboard-section-heading"><div><span className="eyebrow">Financeiro</span><h2>Pontos de atenção</h2><p>Valores que exigem acompanhamento operacional.</p></div><button className="button secondary compact" type="button" onClick={()=>onNavigate('finance')}>Abrir financeiro</button></div><div className="dashboard-financial-list"><button type="button" onClick={()=>onNavigate('finance')}><span className="dashboard-financial-icon danger"><TrendingDown size={17}/></span><div><span>Inadimplência em aberto</span><strong>{loading?'—':money(data?.overdue_amount||0)}</strong><small>Cobranças vencidas e ainda não liquidadas</small></div></button><button type="button" onClick={()=>onNavigate('finance')}><span className="dashboard-financial-icon"><WalletCards size={17}/></span><div><span>Repasses pendentes</span><strong>{loading?'—':money(data?.pending_repasses_amount||0)}</strong><small>Valores de proprietários aguardando repasse</small></div></button><button type="button" onClick={()=>onNavigate('agenda')}><span className={`dashboard-financial-icon ${data?.overdue_tasks?'danger':''}`}><AlertTriangle size={17}/></span><div><span>Tarefas atrasadas</span><strong>{loading?'—':data?.overdue_tasks||0}</strong><small>Prazos internos vencidos e ainda pendentes</small></div></button></div></article>
+    </div>
 
-      <div className="dashboard-grid dashboard-secondary-grid">
-        <article className="panel operating-principles">
-          <div className="panel-heading panel-heading-row">
-            <div>
-              <span className="eyebrow">Governança</span>
-              <h2>Princípios que já nascem no sistema</h2>
-            </div>
-            <Landmark size={19} />
-          </div>
-          <div className="principle-grid">
-            <div><strong>Rastreabilidade</strong><span>Ações sensíveis deixam histórico de quem, quando e o que mudou.</span></div>
-            <div><strong>Segregação</strong><span>Valores de terceiros ficam separados do caixa operacional da imobiliária.</span></div>
-            <div><strong>Regra por contrato</strong><span>Configuração define o padrão; cada contrato preserva sua própria regra.</span></div>
-          </div>
-        </article>
-
-        <article className="panel activity-preview">
-          <div className="panel-heading">
-            <span className="eyebrow">Atividades recentes</span>
-            <h2>Histórico operacional</h2>
-          </div>
-          <div className="activity-empty">
-            <span className="activity-empty-icon"><CalendarCheck2 size={20} /></span>
-            <strong>Nenhuma atividade operacional ainda</strong>
-            <small>Novos eventos aparecerão aqui conforme os módulos forem utilizados.</small>
-          </div>
-        </article>
-      </div>
-    </section>
-  )
+    <article className="panel dashboard-operation-note"><CalendarClock size={21}/><div><span className="eyebrow">Integração operacional</span><h2>A Agenda acompanha o ERP automaticamente</h2><p>Vistorias agendadas, manutenções, reajustes, vencimentos de contratos em 120/90/60/30 dias, cobranças e repasses entram na linha do tempo sem cadastro duplicado.</p></div></article>
+  </section>
 }
