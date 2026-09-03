@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 
 from app.api.routes.agenda import router as agenda_router
+from app.api.routes.agenda_history import router as agenda_history_router
 from app.api.routes.auth_proxy import router as auth_proxy_router
 from app.api.routes.branding import router as branding_router
 from app.api.routes.contracts import router as contracts_router
@@ -62,6 +63,7 @@ api_router.include_router(finance_treasury_router)
 api_router.include_router(finance_bank_control_router)
 api_router.include_router(finance_advanced_router)
 api_router.include_router(agenda_router)
+api_router.include_router(agenda_history_router)
 api_router.include_router(portal_router)
 api_router.include_router(inter_webhook_router)
 api_router.include_router(signature_events_router)
