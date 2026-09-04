@@ -132,7 +132,8 @@ def test_rental_financial_journey_first_and_second_rent_with_commissions(client)
     ).json()
     first_settlement = first_paid["settlement"]
     assert first_paid["status"] == "paid"
-    assert decimal(first_settlement["admin_fee_calculated"]) == decimal("200.00")
+    # Durante a intermediação inicial, a administração não é cobrada em paralelo.
+    assert decimal(first_settlement["admin_fee_calculated"]) == decimal("0.00")
     assert decimal(first_settlement["intermediation_fee_calculated"]) == decimal("2000.00")
     assert decimal(first_settlement["agency_fee_withheld"]) == decimal("2000.00")
     assert decimal(first_settlement["owner_entitlement_amount"]) == decimal("0.00")
@@ -378,15 +379,23 @@ def test_inspection_maintenance_finance_and_agenda_journey(client):
             },
         )
     ).json()
-    quote_id = maintenance["quotes"][0]["id"]
-    assert decimal(maintenance["partner_cost_total"]) == decimal("1000.00")
-    assert decimal(maintenance["client_charge_total"]) == decimal("1400.00")
-    assert decimal(maintenance["margin_total"]) == decimal("400.00")
+    quote = maintenance["quotes"][0]
+    quote_id = quote["id"]
+    # Antes da escolha, o chamado pode ter vários orçamentos; valida os valores na proposta.
+    assert maintenance["selected_quote_id"] is None
+    assert maintenance["partner_cost_total"] is None
+    assert decimal(quote["partner_cost_total"]) == decimal("1000.00")
+    assert decimal(quote["client_price_total"]) == decimal("1400.00")
+    assert decimal(quote["margin_total"]) == decimal("400.00")
 
     maintenance = assert_response(
         client.post(f"/api/maintenance-v2/{maintenance['id']}/quotes/{quote_id}/select")
     ).json()
     assert maintenance["status"] == "awaiting_approval"
+    assert maintenance["selected_quote_id"] == quote_id
+    assert decimal(maintenance["partner_cost_total"]) == decimal("1000.00")
+    assert decimal(maintenance["client_charge_total"]) == decimal("1400.00")
+    assert decimal(maintenance["margin_total"]) == decimal("400.00")
     maintenance = assert_response(
         client.post(f"/api/maintenance-v2/{maintenance['id']}/workflow", json={"action": "approve", "reason": None, "scheduled_at": None})
     ).json()
