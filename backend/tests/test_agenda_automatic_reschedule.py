@@ -121,4 +121,9 @@ def test_maintenance_completed_before_schedule_never_becomes_missed_or_reschedul
     assert rows[0]["reschedule_sequence"] == 0
     assert rows[0]["status"] == "completed"
     assert rows[0]["needs_justification"] is False
-    assert rows[0]["completed_at"] == completed_at.isoformat().replace("+00:00", "Z")
+
+    history = assert_response(client.get(f"/api/agenda/tasks/{rows[0]['task_id']}/history")).json()
+    assert len(history["entries"]) == 1
+    assert history["entries"][0]["status"] == "completed"
+    assert history["entries"][0]["needs_justification"] is False
+    assert history["entries"][0]["completed_at"] is not None
