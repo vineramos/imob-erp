@@ -23,6 +23,17 @@ def test_termination_runs_exit_inspection_keys_and_releases_property(client):
     assert started["fine_status"] == "pending"
     assert float(started["termination_fine_amount"]) > 0
 
+    next_competence = add_months(effective.replace(day=1), 1)
+    future_charge = assert_response(
+        client.post(
+            "/api/finance/charges/generate",
+            json={"competence": next_competence.isoformat(), "lease_contract_id": lease["id"]},
+        )
+    ).json()
+    assert future_charge["generated"] == 0
+    assert future_charge["skipped_ineligible"] == 1
+    assert future_charge["charges"] == []
+
     fine = assert_response(
         client.post(
             f"/api/lease-contracts/{lease['id']}/lifecycle/fine",
