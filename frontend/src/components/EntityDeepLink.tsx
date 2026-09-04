@@ -17,10 +17,7 @@ type DeepLinkRecord = {
   details: DeepLinkDetail[]
   root_route: string
 }
-type Props = {
-  route: string
-  onNavigate: (module: string, route: string) => void
-}
+type Props = { route: string }
 
 const patterns: Array<[RegExp, string]> = [
   [/^\/app\/people\/([^/?#]+)\/?$/, 'person'],
@@ -45,13 +42,13 @@ function parseTarget(route: string): DeepLinkTarget | null {
 
 function statusClass(status: string | null) {
   if (!status) return 'neutral'
-  if (['available', 'approved', 'signed', 'paid', 'completed', 'finalized'].includes(status)) return 'success'
+  if (['active', 'available', 'approved', 'signed', 'paid', 'completed', 'finalized'].includes(status)) return 'success'
   if (['cancelled', 'inactive', 'overdue', 'missed'].includes(status)) return 'danger'
   if (['reserved', 'review', 'pending_signature', 'awaiting_approval', 'contested', 'pending'].includes(status)) return 'warning'
   return 'neutral'
 }
 
-export function EntityDeepLink({ route, onNavigate }: Props) {
+export function EntityDeepLink({ route }: Props) {
   const target = useMemo(() => parseTarget(route), [route])
   const [record, setRecord] = useState<DeepLinkRecord | null>(null)
   const [loading, setLoading] = useState(false)
@@ -74,20 +71,20 @@ export function EntityDeepLink({ route, onNavigate }: Props) {
 
   useEffect(() => {
     if (!target) return
-    const close = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return
-      if (record) onNavigate(record.module, record.root_route)
-      else window.history.back()
-    }
+    const close = (event: KeyboardEvent) => { if (event.key === 'Escape') closePanel() }
     window.addEventListener('keydown', close)
     return () => window.removeEventListener('keydown', close)
-  }, [target, record, onNavigate])
+  })
 
   if (!target) return null
 
   function closePanel() {
-    if (record) onNavigate(record.module, record.root_route)
-    else window.history.back()
+    if (record) {
+      window.history.replaceState({}, '', record.root_route)
+      window.dispatchEvent(new PopStateEvent('popstate'))
+      return
+    }
+    window.history.back()
   }
 
   async function copyLink() {
@@ -127,7 +124,7 @@ export function EntityDeepLink({ route, onNavigate }: Props) {
         </div>
         <footer className="entity-deep-link-actions">
           <button className="button secondary" type="button" onClick={() => void copyLink()}><Copy size={14}/>{copied ? 'Link copiado' : 'Copiar link'}</button>
-          <button className="button primary" type="button" onClick={() => onNavigate(record.module, record.root_route)}>Abrir módulo completo <ArrowRight size={14}/></button>
+          <button className="button primary" type="button" onClick={closePanel}>Abrir módulo completo <ArrowRight size={14}/></button>
         </footer>
       </>}
     </aside>
