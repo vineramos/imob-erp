@@ -26,29 +26,20 @@ jobs:
                   raise SystemExit(f'marker not found: {label}')
               return text.replace(old, new, 1)
 
-          # Register context route.
           path = Path('backend/app/api/router.py')
           text = path.read_text()
           text = replace_once(text, 'from app.api.routes.deep_links import router as deep_links_router\n', 'from app.api.routes.deep_links import router as deep_links_router\nfrom app.api.routes.document_context import router as document_context_router\n', 'router import')
           text = replace_once(text, 'api_router.include_router(documents_router)\n', 'api_router.include_router(documents_router)\napi_router.include_router(document_context_router)\n', 'router include')
           path.write_text(text)
 
-          # Use the server-side relational folder and avoid nested forms when rendered inside Person edit form.
           path = Path('frontend/src/modules/documents/EntityDocumentsPanel.tsx')
           text = path.read_text()
-          text = replace_once(text,
-              "import { Archive, Download, File as FileIcon, FileClock, FilePlus2, FileText, History, Plus, RefreshCw, Search, Upload, X } from 'lucide-react'\nimport { FormEvent, useCallback, useEffect, useMemo, useState } from 'react'",
-              "import { Archive, Download, File as FileIcon, FilePlus2, FileText, History, Plus, RefreshCw, Search, Upload, X } from 'lucide-react'\nimport { useCallback, useEffect, useMemo, useState } from 'react'",
-              'panel imports')
-          text = replace_once(text, "export type DocumentEntityRef = { type: DocumentEntityType; id: string }\n", '', 'related ref type')
-          text = replace_once(text, "  relatedEntities?: DocumentEntityRef[]\n", '', 'related prop')
-          text = replace_once(text, "export function EntityDocumentsPanel({entityType,entityId,entityLabel,permissions,relatedEntities=[],compact=false}:Props){", "export function EntityDocumentsPanel({entityType,entityId,entityLabel,permissions,compact=false}:Props){", 'panel signature')
-          start = text.index('  const relatedSignature=useMemo(')
-          end = text.index('\n\n  const load=useCallback', start)
-          text = text[:start] + text[end+2:]
-          old_load = "  const load=useCallback(async()=>{\n    if(!canView)return\n    setLoading(true);setError('')\n    try{\n      const groups=await Promise.all(entityTypes.map(type=>apiRequest<CatalogItem[]>(`/documents?entity_type=${encodeURIComponent(type)}`)))\n      const deduped=new Map<string,CatalogItem>()\n      groups.flat().forEach(item=>{if(item.entity_type&&item.entity_id&&refKeys.has(`${item.entity_type}:${item.entity_id}`))deduped.set(item.key,item)})\n      setItems([...deduped.values()].sort((a,b)=>new Date(b.updated_at||b.created_at).getTime()-new Date(a.updated_at||a.created_at).getTime()))\n    }catch(cause){setError(cause instanceof ApiError?cause.detail:'Não foi possível carregar os documentos vinculados.')}\n    finally{setLoading(false)}\n  },[canView,entityTypes,refKeys])"
-          new_load = "  const load=useCallback(async()=>{\n    if(!canView)return\n    setLoading(true);setError('')\n    try{setItems(await apiRequest<CatalogItem[]>(`/documents/context/${entityType}/${entityId}`))}\n    catch(cause){setError(cause instanceof ApiError?cause.detail:'Não foi possível carregar os documentos vinculados.')}\n    finally{setLoading(false)}\n  },[canView,entityType,entityId])"
-          text = replace_once(text, old_load, new_load, 'panel load')
+          text = replace_once(text, "import { Archive, Download, File as FileIcon, FileClock, FilePlus2, FileText, History, Plus, RefreshCw, Search, Upload, X } from 'lucide-react'\nimport { FormEvent, useCallback, useEffect, useMemo, useState } from 'react'", "import { Archive, Download, File as FileIcon, FilePlus2, FileText, History, Plus, RefreshCw, Search, Upload, X } from 'lucide-react'\nimport { useCallback, useEffect, useMemo, useState } from 'react'", 'panel imports')
+          old_load_start = text.index('  const relatedSignature=useMemo(')
+          old_load_end = text.index('  useEffect(()=>{void load()},[load])', old_load_start)
+          old_load_end += len('  useEffect(()=>{void load()},[load])')
+          new_load = "  const load=useCallback(async()=>{\n    if(!canView)return\n    setLoading(true);setError('')\n    try{setItems(await apiRequest<CatalogItem[]>(`/documents/context/${entityType}/${entityId}`))}\n    catch(cause){setError(cause instanceof ApiError?cause.detail:'Não foi possível carregar os documentos vinculados.')}\n    finally{setLoading(false)}\n  },[canView,entityType,entityId])\n  useEffect(()=>{void load()},[load])"
+          text = text[:old_load_start] + new_load + text[old_load_end:]
           text = replace_once(text, '  async function submitCreate(event:FormEvent){\n    event.preventDefault();if(!form.file)return', '  async function submitCreate(){\n    if(!form.file)return', 'create handler')
           text = replace_once(text, '  async function addVersion(event:FormEvent){\n    event.preventDefault();if(!detail||!versionFile)return', '  async function addVersion(){\n    if(!detail||!versionFile)return', 'version handler')
           text = replace_once(text, '<form className="entity-documents-modal" onSubmit={submitCreate}>', '<div className="entity-documents-modal">', 'create form open')
@@ -57,64 +48,12 @@ jobs:
           text = replace_once(text, '<button className="button primary compact" disabled={saving||!versionFile}><Upload size={13}/> Criar versão</button></form>}', '<button className="button primary compact" type="button" disabled={saving||!versionFile} onClick={()=>void addVersion()}><Upload size={13}/> Criar versão</button></div>}', 'version form close')
           path.write_text(text)
 
-          # Property no longer needs to assemble related IDs in the browser.
           path = Path('frontend/src/modules/properties/PropertyWorkspacePage.tsx')
           text = path.read_text()
           old = "{detailTab==='documents'&&<EntityDocumentsPanel entityType=\"property\" entityId={selected.id} entityLabel={`Imóvel ${selected.code}`} permissions={permissions} relatedEntities={[...adminContracts.map(item=>({type:'administration_contract' as const,id:item.id})),...leases.map(item=>({type:'lease_contract' as const,id:item.id})),...inspections.map(item=>({type:'inspection' as const,id:item.id}))]}/>}"
           new = "{detailTab==='documents'&&<EntityDocumentsPanel entityType=\"property\" entityId={selected.id} entityLabel={`Imóvel ${selected.code}`} permissions={permissions}/>}"
           text = replace_once(text, old, new, 'property context')
           path.write_text(text)
-
-          # Regression: relational contexts include the system documents without copying them.
-          path = Path('backend/tests/test_documents.py')
-          text = path.read_text()
-          addition = r'''
-
-def test_contextual_document_folders_follow_operational_relationships(client):
-    scenario = build_signed_rental(client, publish=False)
-
-    property_rows = assert_response(
-        client.get(f"/api/documents/context/property/{scenario['property']['id']}")
-    ).json()
-    property_keys = {row["key"] for row in property_rows}
-    assert f"system:administration_contract:{scenario['administration']['id']}:generated" in property_keys
-    assert f"system:administration_contract:{scenario['administration']['id']}:archived" in property_keys
-    assert f"system:lease_contract:{scenario['lease']['id']}:generated" in property_keys
-    assert f"system:lease_contract:{scenario['lease']['id']}:archived" in property_keys
-
-    owner_rows = assert_response(
-        client.get(f"/api/documents/context/person/{scenario['owner']['id']}")
-    ).json()
-    owner_keys = {row["key"] for row in owner_rows}
-    assert f"system:administration_contract:{scenario['administration']['id']}:archived" in owner_keys
-    assert f"system:lease_contract:{scenario['lease']['id']}:archived" in owner_keys
-
-    tenant_rows = assert_response(
-        client.get(f"/api/documents/context/person/{scenario['tenant']['id']}")
-    ).json()
-    tenant_keys = {row["key"] for row in tenant_rows}
-    assert f"system:lease_contract:{scenario['lease']['id']}:generated" in tenant_keys
-    assert not any("administration_contract" in key for key in tenant_keys)
-
-    admin_rows = assert_response(
-        client.get(f"/api/documents/context/administration_contract/{scenario['administration']['id']}")
-    ).json()
-    assert {row["key"] for row in admin_rows} == {
-        f"system:administration_contract:{scenario['administration']['id']}:generated",
-        f"system:administration_contract:{scenario['administration']['id']}:archived",
-    }
-
-    lease_rows = assert_response(
-        client.get(f"/api/documents/context/lease_contract/{scenario['lease']['id']}")
-    ).json()
-    assert f"system:lease_contract:{scenario['lease']['id']}:generated" in {row["key"] for row in lease_rows}
-    assert f"system:lease_contract:{scenario['lease']['id']}:archived" in {row["key"] for row in lease_rows}
-
-    assert_response(client.get('/api/documents/context/property/00000000-0000-0000-0000-000000000000'), 404)
-'''
-          if 'test_contextual_document_folders_follow_operational_relationships' in text:
-              raise SystemExit('context test already exists')
-          path.write_text(text.rstrip() + addition + '\n')
           PY
       - name: Commit patch and remove helper workflow
         shell: bash
@@ -122,6 +61,6 @@ def test_contextual_document_folders_follow_operational_relationships(client):
           git config user.name "vineramos"
           git config user.email "97920119+vineramos@users.noreply.github.com"
           git rm .github/workflows/apply-document-context-backend.yml
-          git add backend/app/api/router.py backend/tests/test_documents.py frontend/src/modules/documents/EntityDocumentsPanel.tsx frontend/src/modules/properties/PropertyWorkspacePage.tsx
+          git add backend/app/api/router.py frontend/src/modules/documents/EntityDocumentsPanel.tsx frontend/src/modules/properties/PropertyWorkspacePage.tsx
           git commit -m "Completar pastas documentais por relacionamento"
           git push origin HEAD:sprint-1-foundation
