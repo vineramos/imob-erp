@@ -1,0 +1,34 @@
+name: Apply lease lifecycle integration
+
+on:
+  push:
+    branches: [sprint-1-foundation]
+    paths:
+      - tools/apply_lease_lifecycle_patch.py
+      - .github/workflows/apply-lease-lifecycle.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: sprint-1-foundation
+          fetch-depth: 0
+      - name: Apply lifecycle patch
+        run: python tools/apply_lease_lifecycle_patch.py
+      - name: Commit integrated files
+        run: |
+          if git diff --quiet; then
+            echo "No patch changes required."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend frontend
+          git commit -m "Integrar ciclo final aos contratos e vistorias"
+          git push origin HEAD:sprint-1-foundation
