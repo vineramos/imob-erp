@@ -107,6 +107,7 @@ def test_pending_maintenance_is_rescheduled_daily_and_keeps_missed_history(clien
     assert history["entries"][0]["status"] == "missed"
     assert history["entries"][0]["justification"] == "Não foi possível executar a manutenção na data prevista."
     assert history["entries"][1]["status"] == "pending"
+    assert history["entries"][1]["needs_justification"] is False
 
 
 def test_pending_maintenance_creates_r2_when_r1_also_expires(client, identity):
@@ -180,6 +181,19 @@ def test_sao_paulo_local_day_drives_daily_reschedule_not_utc_day(client, identit
     assert rows[0]["needs_justification"] is True
     assert rows[1]["status"] == "pending"
     assert rows[1]["needs_justification"] is False
+
+    yesterday_rows = _maintenance_events(client, start=yesterday_local, end=yesterday_local, maintenance_id=maintenance_id)
+    assert [row["reschedule_sequence"] for row in yesterday_rows] == [0]
+    assert yesterday_rows[0]["needs_justification"] is True
+
+    today_rows = _maintenance_events(client, start=today_local, end=today_local, maintenance_id=maintenance_id)
+    assert [row["reschedule_sequence"] for row in today_rows] == [1]
+    assert today_rows[0]["needs_justification"] is False
+
+    history = assert_response(client.get(f"/api/agenda/tasks/{today_rows[0]['task_id']}/history")).json()
+    assert [entry["sequence"] for entry in history["entries"]] == [0, 1]
+    assert history["entries"][0]["needs_justification"] is True
+    assert history["entries"][1]["needs_justification"] is False
 
 
 def test_maintenance_completed_before_schedule_never_becomes_missed_or_rescheduled(client, identity):
