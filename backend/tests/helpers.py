@@ -45,13 +45,14 @@ def create_person(
     email: str,
     role_keys: list[str],
 ) -> dict[str, Any]:
+    safe_email = email.replace("@imob.invalid", "@example.com")
     response = client.post(
         "/api/people",
         json={
             "person_type": "individual",
             "name": name,
             "document_number": document,
-            "email": email,
+            "email": safe_email,
             "phone": "(41) 99999-0000",
             "address": {
                 "street": "Rua dos Testes",
