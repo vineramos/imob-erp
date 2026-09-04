@@ -237,7 +237,7 @@ def build_signed_rental(client: TestClient, *, publish: bool = True) -> dict[str
         client,
         name="Proprietário Teste",
         document="11111111111",
-        email="proprietario@imob.invalid",
+        email="proprietario@example.com",
         role_keys=["owner"],
     )
     property_item = create_property(client, owner["id"])
@@ -246,7 +246,7 @@ def build_signed_rental(client: TestClient, *, publish: bool = True) -> dict[str
         client,
         name="Inquilino Teste",
         document="22222222222",
-        email="inquilino@imob.invalid",
+        email="inquilino@example.com",
         role_keys=["tenant"],
     )
     administration = create_signed_administration_contract(client, property_item["id"], start=start)
