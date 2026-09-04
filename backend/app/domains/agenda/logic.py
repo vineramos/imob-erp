@@ -320,7 +320,16 @@ def _ensure_source_chain(
     for sequence in range(sequence_count + 1):
         occurrence_date = original_at.date() + timedelta(days=sequence)
         item = by_sequence.get(sequence)
-        completed_here = bool(completion_at and completion_at.date() == occurrence_date)
+        # Se a origem foi concluída antes do horário/data inicialmente agendado,
+        # a ocorrência raiz é concluída antecipadamente. Ela nunca deve virar
+        # "não cumprida" nem abrir um reagendamento automático no dia seguinte.
+        completed_here = bool(
+            completion_at
+            and (
+                completion_at.date() == occurrence_date
+                or (sequence == 0 and completion_at.date() <= original_at.date())
+            )
+        )
         if item is None:
             starts_at = original_at if sequence == 0 else noon(occurrence_date)
             occurrence_all_day = all_day if sequence == 0 else True
