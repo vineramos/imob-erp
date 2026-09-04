@@ -61,13 +61,13 @@ export async function publicApiRequest<T>(path: string, init: RequestInit = {}):
   const normalized = normalizeJsonRequest(init)
   const headers = new Headers(normalized.headers)
   applyBodyContentType(headers, normalized.body)
-  return parseResponse<T>(await fetch(apiUrl(path), { ...normalized, headers }))
+  return parseResponse<T>(await fetch(apiUrl(path), { ...normalized, headers, credentials: normalized.credentials || 'include' }))
 }
 
 export async function publicBlobRequest(path: string, init: RequestInit = {}): Promise<Blob> {
   const normalized = normalizeJsonRequest(init)
   const headers = new Headers(normalized.headers)
-  const response = await fetch(apiUrl(path), { ...normalized, headers })
+  const response = await fetch(apiUrl(path), { ...normalized, headers, credentials: normalized.credentials || 'include' })
   if (!response.ok) {
     const error = await errorDetail(response)
     throw new ApiError(response.status, error.detail, error.payload)

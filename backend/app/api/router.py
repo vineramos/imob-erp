@@ -39,6 +39,8 @@ from app.api.routes.publication import router as publication_router
 from app.api.routes.reports import router as reports_router
 from app.api.routes.search import router as search_router
 from app.api.routes.signature_events import router as signature_events_router
+from app.api.routes.tenant_portal import admin_router as tenant_portal_admin_router
+from app.api.routes.tenant_portal import public_router as tenant_portal_router
 from app.domains.agenda.source_chain_rules import install_source_chain_rule
 from app.domains.agenda.timezone_rules import install_event_collection_timezone_rule
 from app.domains.finance.settlement_rules import install_settlement_rule
@@ -74,6 +76,7 @@ api_router.include_router(finance_maintenance_router)
 api_router.include_router(finance_treasury_router)
 api_router.include_router(finance_bank_control_router)
 api_router.include_router(finance_advanced_router)
+api_router.include_router(tenant_portal_admin_router)
 api_router.include_router(agenda_router)
 api_router.include_router(agenda_history_router)
 api_router.include_router(reports_router)
@@ -83,6 +86,7 @@ api_router.include_router(search_router)
 api_router.include_router(deep_links_router)
 api_router.include_router(notifications_router)
 api_router.include_router(portal_router)
+api_router.include_router(tenant_portal_router)
 api_router.include_router(inter_webhook_router)
 api_router.include_router(signature_events_router)
 api_router.include_router(integrations_router)
