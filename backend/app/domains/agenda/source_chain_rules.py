@@ -128,11 +128,15 @@ def install_source_chain_rule() -> None:
                 else:
                     item.original_task_id = root.id
                 by_sequence[sequence] = item
-            elif completed_here and item.status != "completed":
-                # Corrige inclusive dados legados que chegaram a ser marcados
-                # como "missed" mesmo com a origem já concluída.
+            elif completed_here:
+                # A origem é a verdade inclusive para dados legados que chegaram
+                # a ser marcados como "missed". A justificativa de um falso não
+                # cumprimento não deve continuar aparecendo ao usuário; a ação
+                # original permanece rastreável no AuditLog.
                 item.status = "completed"
                 item.completed_at = completion_at
+                item.missed_justification = None
+                item.missed_at = None
                 item.immutable_history = True
 
             previous = item
