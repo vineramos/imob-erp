@@ -7,19 +7,17 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.domains.agenda.models import AgendaTask
+from app.domains.agenda.timezone_rules import local_date, local_today, profile_timezone
 
 
 def install_source_chain_rule() -> None:
-    """Reconcilia a cadeia automática com o estado real do módulo de origem.
+    """Reconcilia a cadeia automática com o estado real e o dia civil da origem.
 
-    A política legada comparava a data de conclusão literalmente com a data da
-    ocorrência. Se um item fosse concluído antes da data que continuava gravada
-    como agendada, a Agenda o mantinha pendente para sempre: aceitava
-    justificativa de não cumprimento, mas não criava reagendamento.
-
-    A origem é a verdade. Uma conclusão anterior ao agendamento encerra a
+    A origem é a verdade: uma conclusão anterior ao agendamento encerra a
     ocorrência original; uma origem ainda pendente continua sendo reagendada
-    diariamente até ser concluída/cancelada.
+    diariamente até ser concluída/cancelada. O cálculo de ontem/hoje é feito no
+    timezone do perfil responsável (America/Sao_Paulo por padrão), embora os
+    timestamps permaneçam persistidos em UTC.
     """
     from app.domains.agenda import logic
 
@@ -45,7 +43,11 @@ def install_source_chain_rule() -> None:
         duration_minutes: int,
         priority: str,
     ) -> None:
-        today = datetime.now(timezone.utc).date()
+        zone = profile_timezone(db, organization_id, assigned_user_id)
+        today = local_today(zone)
+        original_date = local_date(original_at, zone)
+        completion_date = local_date(completion_at, zone) if completion_at else None
+
         existing = db.scalars(
             select(AgendaTask).where(
                 AgendaTask.organization_id == organization_id,
@@ -57,30 +59,25 @@ def install_source_chain_rule() -> None:
         ).all()
         by_sequence = {item.reschedule_sequence: item for item in existing}
 
-        # Quando a origem já foi encerrada antes do horário agendado, a
-        # ocorrência original é considerada encerrada. Não existe sentido em
-        # criar uma pendência futura para algo que já terminou no módulo fonte.
-        effective_completion_date = (
-            max(original_at.date(), completion_at.date()) if completion_at else None
-        )
+        # Se a origem já estava encerrada antes da data agendada, a ocorrência
+        # original é o ponto terminal da cadeia e nunca gera R1.
+        effective_completion_date = max(original_date, completion_date) if completion_date else None
 
-        if original_at.date() > today:
-            last_date = original_at.date()
+        if original_date > today:
+            last_date = original_date
         elif effective_completion_date and effective_completion_date <= today:
             last_date = effective_completion_date
         else:
             last_date = today
 
-        sequence_count = max(0, (last_date - original_at.date()).days)
+        sequence_count = max(0, (last_date - original_date).days)
         root = by_sequence.get(0)
         previous = None
 
         for sequence in range(sequence_count + 1):
-            occurrence_date = original_at.date() + timedelta(days=sequence)
+            occurrence_date = original_date + timedelta(days=sequence)
             item = by_sequence.get(sequence)
-            completed_here = bool(
-                effective_completion_date and effective_completion_date == occurrence_date
-            )
+            completed_here = bool(effective_completion_date and effective_completion_date == occurrence_date)
 
             if item is None:
                 starts_at = original_at if sequence == 0 else logic.noon(occurrence_date)
@@ -90,7 +87,7 @@ def install_source_chain_rule() -> None:
                 if sequence > 0:
                     suffix = (
                         f"Reagendamento automático nº {sequence}. "
-                        f"Agendamento original: {original_at.astimezone(timezone.utc).strftime('%d/%m/%Y')}."
+                        f"Agendamento original: {original_at.astimezone(zone).strftime('%d/%m/%Y')}."
                     )
                     next_description = f"{description + ' ' if description else ''}{suffix}"
 
@@ -129,10 +126,8 @@ def install_source_chain_rule() -> None:
                     item.original_task_id = root.id
                 by_sequence[sequence] = item
             elif completed_here:
-                # A origem é a verdade inclusive para dados legados que chegaram
-                # a ser marcados como "missed". A justificativa de um falso não
-                # cumprimento não deve continuar aparecendo ao usuário; a ação
-                # original permanece rastreável no AuditLog.
+                # Também corrige dados legados que foram marcados como missed
+                # apesar de a origem já estar concluída antes do agendamento.
                 item.status = "completed"
                 item.completed_at = completion_at
                 item.missed_justification = None
@@ -141,8 +136,8 @@ def install_source_chain_rule() -> None:
 
             previous = item
 
-        # Se a origem foi encerrada retroativamente, ocorrências que haviam sido
-        # abertas depois da data efetiva deixam de ser exigíveis.
+        # Se a origem foi encerrada retroativamente, ocorrências abertas depois
+        # da data terminal deixam de ser exigíveis, mas o histórico é preservado.
         if completion_at:
             for sequence, item in by_sequence.items():
                 if sequence <= sequence_count:
