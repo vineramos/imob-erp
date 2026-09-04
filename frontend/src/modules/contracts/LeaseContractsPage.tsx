@@ -20,6 +20,7 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react'
 import { ApiError, apiBlobRequest, apiRequest } from '../../api/client'
 import type { AdjustmentIndex, ContractDocument, OperationalDefaults, Person, Property } from '../../api/types'
 import { SignatureTimeline } from './SignatureTimeline'
+import { EntityDocumentsPanel } from '../documents/EntityDocumentsPanel'
 
 type LeaseStatus = 'draft' | 'review' | 'approved' | 'pending_signature' | 'signed' | 'cancelled'
 type GuaranteeType = 'insurance' | 'deposit' | 'capitalization' | 'guarantor' | 'none'
@@ -238,6 +239,7 @@ export function LeaseContractsPage({ permissions }: Props) {
   const [showForm, setShowForm] = useState(false)
   const [changeSummary, setChangeSummary] = useState('')
   const [expanded, setExpanded] = useState<string | null>(null)
+  const [expandedTab, setExpandedTab] = useState<'details' | 'documents'>('details')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -639,7 +641,7 @@ export function LeaseContractsPage({ permissions }: Props) {
             </div>
 
             <div className="contract-actions">
-              <button className="contract-history-toggle" type="button" onClick={() => setExpanded(isExpanded ? null : item.id)}><History size={14}/> Detalhes {isExpanded ? <ChevronUp size={13}/> : <ChevronDown size={13}/>}</button>
+              <button className="contract-history-toggle" type="button" onClick={() => { setExpanded(isExpanded ? null : item.id); setExpandedTab('details') }}><History size={14}/> Detalhes {isExpanded ? <ChevronUp size={13}/> : <ChevronDown size={13}/>}</button>
               <div>
                 {(item.status === 'draft' || item.status === 'review') && canEdit && <button className="button secondary" type="button" onClick={() => void openEdit(item)}>Nova versão</button>}
                 {item.status === 'draft' && canEdit && <button className="button primary" disabled={saving} type="button" onClick={() => void workflow(item, 'submit_review')}><Send size={14}/> Revisão</button>}
@@ -653,7 +655,7 @@ export function LeaseContractsPage({ permissions }: Props) {
               </div>
             </div>
 
-            {isExpanded && <div className="contract-expanded">
+            {isExpanded && <><div className="entity-document-tabs"><button type="button" className={expandedTab==='details'?'active':''} onClick={()=>setExpandedTab('details')}>Detalhes</button><button type="button" className={expandedTab==='documents'?'active':''} onClick={()=>setExpandedTab('documents')}>Documentos</button></div>{expandedTab==='details'&&<div className="contract-expanded">
               <div className="contract-version-panel">
                 <div className="panel-heading-row"><div><span className="eyebrow">Versões</span><h3>Histórico imutável</h3></div><CalendarClock size={17}/></div>
                 {item.versions.slice().reverse().map((version) => <div className="contract-version-row" key={version.version_number}><strong>v{version.version_number}</strong><span>{version.change_summary || 'Sem resumo'}</span><small>{new Date(version.created_at).toLocaleString('pt-BR')}</small></div>)}
@@ -679,7 +681,7 @@ export function LeaseContractsPage({ permissions }: Props) {
                 <div className="contract-document-detail"><span>Signatários</span><strong>{item.signers.map((signer) => signer.name).join(' / ') || 'não definidos'}</strong></div>
               </div>
               <SignatureTimeline contractId={item.id} contractType="lease"/>
-            </div>}
+            </div>}{expandedTab==='documents'&&<EntityDocumentsPanel entityType="lease_contract" entityId={item.id} entityLabel={item.code} permissions={permissions} compact/>}</>}
           </article>
         })}
         {items.length === 0 && <article className="panel portfolio-empty"><FileText size={26}/><strong>Nenhum contrato de locação ainda.</strong><span>Crie a primeira minuta usando as regras-padrão da imobiliária.</span></article>}

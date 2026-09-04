@@ -38,11 +38,12 @@ export function EntityDocumentsPanel({entityType,entityId,entityLabel,permission
   const [detail,setDetail]=useState<Detail|null>(null),[detailLoading,setDetailLoading]=useState(false)
   const [versionFile,setVersionFile]=useState<File|null>(null),[versionNotes,setVersionNotes]=useState('')
 
+  const relatedSignature=useMemo(()=>relatedEntities.map(ref=>`${ref.type}:${ref.id}`).sort().join('|'),[relatedEntities])
   const refs=useMemo(()=>{
     const map=new Map<string,DocumentEntityRef>()
     ;[{type:entityType,id:entityId},...relatedEntities].forEach(ref=>map.set(`${ref.type}:${ref.id}`,ref))
     return [...map.values()]
-  },[entityType,entityId,relatedEntities])
+  },[entityType,entityId,relatedSignature])
   const refKeys=useMemo(()=>new Set(refs.map(ref=>`${ref.type}:${ref.id}`)),[refs])
   const entityTypes=useMemo(()=>[...new Set(refs.map(ref=>ref.type))],[refs])
 

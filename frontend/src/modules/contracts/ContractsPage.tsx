@@ -30,6 +30,7 @@ import type {
   Property,
 } from '../../api/types'
 import { SignatureTimeline } from './SignatureTimeline'
+import { EntityDocumentsPanel } from '../documents/EntityDocumentsPanel'
 
 const statusLabel: Record<AdministrationContractStatus, string> = {
   draft: 'Rascunho', review: 'Em revisão', approved: 'Aprovado', pending_signature: 'Assinatura', signed: 'Assinado', cancelled: 'Cancelado',
@@ -118,6 +119,7 @@ export function ContractsPage({ permissions }: Props) {
   const [showForm, setShowForm] = useState(false)
   const [editing, setEditing] = useState<AdministrationContract | null>(null)
   const [expanded, setExpanded] = useState<string | null>(null)
+  const [expandedTab, setExpandedTab] = useState<'details' | 'documents'>('details')
   const [propertyId, setPropertyId] = useState('')
   const [terms, setTerms] = useState<AdministrationContractTerms>(() => defaultTerms())
   const [leaseMonths, setLeaseMonths] = useState(30)
@@ -357,7 +359,7 @@ export function ContractsPage({ permissions }: Props) {
       return <article className="panel contract-card" key={item.id}>
         <div className="contract-row"><div className="contract-code"><FileSignature size={18}/><span>ADMINISTRAÇÃO</span><strong>{item.code}</strong><small>v{item.current_version}</small></div><div className="contract-property"><strong>Imóvel #{item.property_code}</strong><span>{addressLine(item.property_address)}</span><small>{item.owners.map((owner) => `${owner.name} · ${Number(owner.ownership_percent).toLocaleString('pt-BR')}%`).join(' / ')}</small></div><div className="contract-commercial"><span>Plano / condições comerciais</span><strong>{planLabel[item.plan]} · administração {adminFee(item)}</strong><small>Intermediação {Number(item.intermediation_percent).toLocaleString('pt-BR')}% em {item.intermediation_installments} parcela(s) · administração após a intermediação · Repasse D+{item.owner_repasse_business_days}</small></div><div className="contract-state"><i className={`status-badge ${statusClass(item.status)}`}>{statusLabel[item.status]}</i><span>{signingLabel(item)}</span></div></div>
         <div className="contract-document-strip"><div><FileText size={15}/><span>PDF</span><strong>{documentCurrent ? `v${item.generated_document_version} · ${item.generated_document_hash?.slice(0, 10)}…` : 'não gerado'}</strong></div><div><FileSignature size={15}/><span>Clicksign</span><strong>{item.signing_envelope_id ? `envelope ${item.signing_envelope_id.slice(0, 8)}…` : 'não enviado'}</strong></div><div><FileCheck2 size={15}/><span>Arquivo final</span><strong>{item.archive_status === 'archived' ? `${item.final_document_hash?.slice(0, 10)}…` : item.archive_status.replaceAll('_', ' ')}</strong></div></div>
-        <div className="contract-actions"><button className="contract-history-toggle" type="button" onClick={() => setExpanded(isExpanded ? null : item.id)}><History size={14}/> Detalhes {isExpanded ? <ChevronUp size={13}/> : <ChevronDown size={13}/>}</button><div>
+        <div className="contract-actions"><button className="contract-history-toggle" type="button" onClick={() => { setExpanded(isExpanded ? null : item.id); setExpandedTab('details') }}><History size={14}/> Detalhes {isExpanded ? <ChevronUp size={13}/> : <ChevronDown size={13}/>}</button><div>
           {(item.status === 'draft' || item.status === 'review') && canEdit && <button className="button secondary" type="button" onClick={() => openEdit(item)}>Nova versão</button>}
           {item.status === 'draft' && canEdit && <button className="button primary" disabled={saving} type="button" onClick={() => void workflow(item, 'submit_review')}><Send size={14}/> Revisão</button>}
           {item.status === 'review' && canApprove && <button className="button primary" disabled={saving} type="button" onClick={() => void workflow(item, 'approve')}><CheckCircle2 size={14}/> Aprovar</button>}
@@ -369,7 +371,7 @@ export function ContractsPage({ permissions }: Props) {
           {item.status !== 'cancelled' && item.status !== 'signed' && canEdit && <button className="button ghost-danger" disabled={saving} type="button" onClick={() => void workflow(item, 'cancel')}>Cancelar</button>}
           <a className="button secondary" href={`/api/administration-contracts/${item.id}/document/pdf`} target="_blank" rel="noreferrer"><Download size={14}/> Ver PDF</a>
         </div></div>
-        {isExpanded && <div className="contract-expanded-detail contract-expanded-three"><div className="contract-signers-summary"><span className="eyebrow">Signatários</span>{item.signers.length ? item.signers.map((signer) => <div key={signer.email}><strong>{signer.name}</strong><span>{signerRoleLabel[signer.role] ?? signer.role} · {signer.email} · ordem {signer.sign_order}</span></div>) : <small>Nenhum signatário.</small>}</div><div className="contract-version-history"><span className="eyebrow">Versões</span>{[...item.versions].reverse().map((version) => <div key={version.version_number}><span>v{version.version_number}</span><strong>{version.change_summary || 'Versão registrada'}</strong><small>{new Date(version.created_at).toLocaleString('pt-BR')}</small></div>)}</div><SignatureTimeline contractId={item.id}/></div>}
+        {isExpanded && <><div className="entity-document-tabs"><button type="button" className={expandedTab==='details'?'active':''} onClick={()=>setExpandedTab('details')}>Detalhes</button><button type="button" className={expandedTab==='documents'?'active':''} onClick={()=>setExpandedTab('documents')}>Documentos</button></div>{expandedTab==='details'&&<div className="contract-expanded-detail contract-expanded-three"><div className="contract-signers-summary"><span className="eyebrow">Signatários</span>{item.signers.length ? item.signers.map((signer) => <div key={signer.email}><strong>{signer.name}</strong><span>{signerRoleLabel[signer.role] ?? signer.role} · {signer.email} · ordem {signer.sign_order}</span></div>) : <small>Nenhum signatário.</small>}</div><div className="contract-version-history"><span className="eyebrow">Versões</span>{[...item.versions].reverse().map((version) => <div key={version.version_number}><span>v{version.version_number}</span><strong>{version.change_summary || 'Versão registrada'}</strong><small>{new Date(version.created_at).toLocaleString('pt-BR')}</small></div>)}</div><SignatureTimeline contractId={item.id}/></div>}{expandedTab==='documents'&&<EntityDocumentsPanel entityType="administration_contract" entityId={item.id} entityLabel={item.code} permissions={permissions} compact/>}</>}
       </article>
     })}{filtered.length === 0 && <article className="panel portfolio-empty"><FileSignature size={27}/><strong>Nenhum contrato nesta etapa.</strong></article>}</div>}
 
