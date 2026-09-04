@@ -25,6 +25,7 @@ if "test" not in database_name.lower():
     )
 
 from app.api.routes import contracts as contracts_routes  # noqa: E402
+from app.api.routes import documents as documents_routes  # noqa: E402
 from app.api.routes import inspections as inspections_routes  # noqa: E402
 from app.api.routes import leases as leases_routes  # noqa: E402
 from app.api.routes import property_media as property_media_routes  # noqa: E402
@@ -60,6 +61,8 @@ ALL_TEST_PERMISSIONS = frozenset(
         "finance.repasse.execute",
         "agenda.view",
         "agenda.manage",
+        "documents.view",
+        "documents.manage",
         "settings.view",
         "settings.company.manage",
         "settings.appearance.manage",
@@ -153,7 +156,7 @@ def fake_integrations(monkeypatch: pytest.MonkeyPatch):
     storage = FakeDocumentStorage()
     signature = FakeSignatureProvider()
 
-    for module in (property_media_routes, contracts_routes, leases_routes, inspections_routes):
+    for module in (property_media_routes, contracts_routes, leases_routes, inspections_routes, documents_routes):
         monkeypatch.setattr(module, "get_document_storage", lambda storage=storage: storage)
     monkeypatch.setattr(contracts_routes, "get_signature_provider", lambda _key: signature)
     monkeypatch.setattr(leases_routes, "get_signature_provider", lambda _key: signature)
