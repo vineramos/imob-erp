@@ -145,3 +145,10 @@ def test_source_completed_before_schedule_closes_original_and_never_reschedules(
     assert len(repaired) == 1
     assert repaired[0]["status"] == "completed"
     assert repaired[0]["needs_justification"] is False
+    assert repaired[0]["missed_justification"] is None
+
+    with SessionLocal() as db:
+        task = db.scalar(select(AgendaTask).where(AgendaTask.id == UUID(repaired[0]["task_id"])))
+        assert task is not None
+        assert task.missed_justification is None
+        assert task.missed_at is None
