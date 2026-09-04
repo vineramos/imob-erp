@@ -15,14 +15,14 @@ from app.domains.agenda.models import AgendaMeetingParticipant, AgendaMeetingReq
 from app.domains.contracts.models import AdministrationContract
 from app.domains.finance.models import OwnerRepasse, RentCharge
 from app.domains.foundation.access import UserContext, get_current_user_context
-from app.domains.foundation.notification_models import UserNotificationState
+from app.domains.foundation.models import AuditLog
 from app.domains.inspections.models import Inspection
 from app.domains.leases.models import LeaseContract
 from app.domains.maintenance.models import MaintenanceRequest
 
 router = APIRouter(tags=["notifications"])
-
 SEVERITY_ORDER = {"critical": 0, "warning": 1, "info": 2}
+BR_TZ = ZoneInfo("America/Sao_Paulo")
 
 
 class NotificationReadPayload(BaseModel):
@@ -61,8 +61,7 @@ def _expiry_text(days: int) -> str:
     return f"Vence em {days} dia(s)"
 
 
-def _notification(
-    *,
+def _item(
     key: str,
     severity: str,
     category: str,
@@ -71,7 +70,7 @@ def _notification(
     module: str,
     route: str,
     event_at: datetime,
-    action_label: str = "Abrir",
+    action_label: str,
 ) -> dict[str, Any]:
     return {
         "key": key,
@@ -99,326 +98,296 @@ def _task_scope(db: Session, context: UserContext) -> tuple[list[Any], set[Any],
     return [context.user.id], {current.department_id} if current.department_id else set(), grants
 
 
-def _task_details_allowed(context: UserContext, grants: dict[Any, dict], item: AgendaTask) -> bool:
-    if item.assigned_user_id is None or item.assigned_user_id == context.user.id:
+def _task_details_allowed(context: UserContext, grants: dict[Any, dict], task: AgendaTask) -> bool:
+    if task.assigned_user_id is None or task.assigned_user_id == context.user.id:
         return True
-    grant = grants.get(item.assigned_user_id)
+    grant = grants.get(task.assigned_user_id)
     if not grant:
         return False
-    return bool(grant.get("private_details" if item.privacy == "private" else "details"))
+    return bool(grant.get("private_details" if task.privacy == "private" else "details"))
+
+
+def _agenda_notifications(db: Session, context: UserContext, now: datetime) -> tuple[list[dict[str, Any]], set[tuple[str, str]]]:
+    items: list[dict[str, Any]] = []
+    blocked_sources: set[tuple[str, str]] = set()
+    user_ids, department_ids, grants = _task_scope(db, context)
+    scope = []
+    if user_ids:
+        scope.append(AgendaTask.assigned_user_id.in_(user_ids))
+    if department_ids:
+        scope.append(and_(AgendaTask.assigned_user_id.is_(None), AgendaTask.department_id.in_(department_ids)))
+    if scope:
+        tasks = db.scalars(
+            select(AgendaTask).where(
+                AgendaTask.organization_id == context.user.organization_id,
+                AgendaTask.status == "pending",
+                AgendaTask.starts_at <= now,
+                or_(*scope),
+            ).order_by(AgendaTask.mandatory_action.desc(), AgendaTask.starts_at.asc()).limit(30)
+        ).all()
+        for task in tasks:
+            allowed = _task_details_allowed(context, grants, task)
+            if task.automatic and task.mandatory_action and task.source_module and task.source_id:
+                blocked_sources.add((task.source_module, task.source_id))
+            severity = "critical" if task.mandatory_action else "warning" if task.priority in {"urgent", "high"} else "info"
+            title = task.title if allowed else "Tarefa pendente na equipe"
+            if task.mandatory_action:
+                title = f"Justificativa obrigatória · {title}" if allowed else "Justificativa obrigatória na equipe"
+            subtitle = "Conteúdo protegido pela privacidade da agenda." if not allowed else (
+                f"{_code('TAR-', task.internal_number)} · pendente desde {task.starts_at.astimezone(BR_TZ).strftime('%d/%m/%Y')}"
+                + (f" · {task.reschedule_sequence}º reagendamento" if task.reschedule_sequence else "")
+            )
+            items.append(_item(
+                f"agenda-overdue:{task.id}:{task.reschedule_sequence}", severity, "agenda", title, subtitle, "agenda",
+                f"/app/agenda/task/{task.id}" if allowed else "/app/agenda", task.starts_at,
+                "Justificar" if task.mandatory_action else "Abrir tarefa",
+            ))
+
+    participants = db.scalars(
+        select(AgendaMeetingParticipant).where(
+            AgendaMeetingParticipant.user_id == context.user.id,
+            AgendaMeetingParticipant.status == "pending",
+        )
+    ).all()
+    request_ids = [row.meeting_request_id for row in participants]
+    if request_ids:
+        requests = db.scalars(
+            select(AgendaMeetingRequest).where(
+                AgendaMeetingRequest.organization_id == context.user.organization_id,
+                AgendaMeetingRequest.id.in_(request_ids),
+                AgendaMeetingRequest.status == "pending",
+            )
+        ).all()
+        for request in requests:
+            items.append(_item(
+                f"meeting-invite:{request.id}:pending", "info", "agenda", "Convite de reunião aguardando resposta",
+                request.title, "agenda", "/app/agenda", request.created_at, "Responder",
+            ))
+    return items, blocked_sources
+
+
+def _contract_notifications(db: Session, context: UserContext, today: date) -> list[dict[str, Any]]:
+    items: list[dict[str, Any]] = []
+    organization_id = context.user.organization_id
+    admin_contracts = db.scalars(
+        select(AdministrationContract).where(
+            AdministrationContract.organization_id == organization_id,
+            AdministrationContract.status == "signed",
+            AdministrationContract.end_date.is_not(None),
+            AdministrationContract.end_date <= today + timedelta(days=120),
+        )
+    ).all()
+    for contract in admin_contracts:
+        if contract.end_date is None:
+            continue
+        days = (contract.end_date - today).days
+        severity = "critical" if days <= 7 else "warning" if days <= 30 else "info"
+        address = contract.property_snapshot.get("address", {}) if isinstance(contract.property_snapshot, dict) else {}
+        location = address.get("neighborhood") or address.get("city") or "imóvel administrado"
+        items.append(_item(
+            f"admin-contract-expiry:{contract.id}:{_expiry_bucket(days)}", severity, "contracts",
+            f"Contrato de administração {_code('ADM-', contract.internal_number)}", f"{_expiry_text(days)} · {location}",
+            "contracts", f"/app/contracts/administration/{contract.id}", _date_at(contract.end_date), "Ver contrato",
+        ))
+
+    leases = db.scalars(
+        select(LeaseContract).where(
+            LeaseContract.organization_id == organization_id,
+            LeaseContract.status == "signed",
+            LeaseContract.end_date <= today + timedelta(days=120),
+        )
+    ).all()
+    for contract in leases:
+        days = (contract.end_date - today).days
+        severity = "critical" if days <= 7 else "warning" if days <= 30 else "info"
+        tenants = " / ".join(str(row.get("name") or "") for row in (contract.tenant_snapshot or []) if row.get("name")) or "Locatário não informado"
+        items.append(_item(
+            f"lease-contract-expiry:{contract.id}:{_expiry_bucket(days)}", severity, "contracts",
+            f"Locação {_code('LOC-', contract.internal_number)} próxima do término", f"{_expiry_text(days)} · {tenants}",
+            "contracts", f"/app/contracts/lease/{contract.id}", _date_at(contract.end_date), "Ver contrato",
+        ))
+        adjustment_days = (contract.next_adjustment_date - today).days
+        if 0 <= adjustment_days <= 30:
+            items.append(_item(
+                f"lease-adjustment:{contract.id}:{'7' if adjustment_days <= 7 else '30'}",
+                "warning" if adjustment_days <= 7 else "info", "contracts",
+                f"Reajuste de {_code('LOC-', contract.internal_number)}",
+                f"{contract.adjustment_index} · {'hoje' if adjustment_days == 0 else f'em {adjustment_days} dia(s)'}",
+                "contracts", f"/app/contracts/lease/{contract.id}", _date_at(contract.next_adjustment_date), "Conferir reajuste",
+            ))
+    return items
+
+
+def _finance_notifications(db: Session, context: UserContext, today: date, blocked_sources: set[tuple[str, str]]) -> list[dict[str, Any]]:
+    items: list[dict[str, Any]] = []
+    organization_id = context.user.organization_id
+    charges = db.scalars(
+        select(RentCharge).where(
+            RentCharge.organization_id == organization_id,
+            RentCharge.due_date < today,
+            RentCharge.paid_at.is_(None),
+            RentCharge.cancelled_at.is_(None),
+            RentCharge.status.notin_(("paid", "cancelled")),
+        ).order_by(RentCharge.due_date.asc()).limit(25)
+    ).all()
+    for charge in charges:
+        if ("finance", str(charge.id)) in blocked_sources:
+            continue
+        overdue_days = (today - charge.due_date).days
+        tenants = " / ".join(str(row.get("name") or "") for row in (charge.tenant_snapshot or []) if row.get("name")) or "Locatário não informado"
+        items.append(_item(
+            f"charge-overdue:{charge.id}", "critical" if overdue_days >= 5 else "warning", "finance",
+            f"Cobrança {_code('COB-', charge.internal_number)} vencida",
+            f"{tenants} · {overdue_days} dia(s) · {_money(charge.gross_amount)}", "finance",
+            f"/app/finance/charge/{charge.id}", _date_at(charge.due_date), "Abrir cobrança",
+        ))
+
+    repasses = db.scalars(
+        select(OwnerRepasse).where(
+            OwnerRepasse.organization_id == organization_id,
+            OwnerRepasse.due_date < today,
+            OwnerRepasse.status == "pending",
+            OwnerRepasse.paid_at.is_(None),
+        ).order_by(OwnerRepasse.due_date.asc()).limit(25)
+    ).all()
+    for repasse in repasses:
+        if ("finance", str(repasse.id)) in blocked_sources:
+            continue
+        overdue_days = (today - repasse.due_date).days
+        items.append(_item(
+            f"repasse-overdue:{repasse.id}", "critical" if overdue_days >= 3 else "warning", "finance",
+            "Repasse ao proprietário em atraso", f"{repasse.owner_name} · {overdue_days} dia(s) · {_money(repasse.amount)}",
+            "finance", f"/app/finance/charge/{repasse.charge_id}", _date_at(repasse.due_date), "Abrir financeiro",
+        ))
+    return items
+
+
+def _maintenance_notifications(db: Session, context: UserContext, now: datetime, blocked_sources: set[tuple[str, str]]) -> list[dict[str, Any]]:
+    items: list[dict[str, Any]] = []
+    rows = db.scalars(
+        select(MaintenanceRequest).where(
+            MaintenanceRequest.organization_id == context.user.organization_id,
+            MaintenanceRequest.status.in_(("awaiting_approval", "scheduled", "in_progress")),
+        ).order_by(MaintenanceRequest.reported_at.asc()).limit(30)
+    ).all()
+    for maintenance in rows:
+        if maintenance.status == "awaiting_approval":
+            items.append(_item(
+                f"maintenance-approval:{maintenance.id}:{maintenance.status}",
+                "critical" if maintenance.priority == "urgent" else "warning", "maintenance",
+                f"Manutenção {_code('MAN-', maintenance.internal_number)} aguarda aprovação", maintenance.title,
+                "maintenance", f"/app/maintenance/{maintenance.id}", maintenance.updated_at, "Analisar orçamento",
+            ))
+        elif maintenance.scheduled_at and maintenance.scheduled_at < now and ("maintenance", str(maintenance.id)) not in blocked_sources:
+            items.append(_item(
+                f"maintenance-schedule:{maintenance.id}:{maintenance.scheduled_at.date().isoformat()}",
+                "critical" if maintenance.priority == "urgent" else "warning", "maintenance",
+                f"Manutenção {_code('MAN-', maintenance.internal_number)} requer acompanhamento",
+                f"{maintenance.title} · agendada para {maintenance.scheduled_at.astimezone(BR_TZ).strftime('%d/%m %H:%M')}",
+                "maintenance", f"/app/maintenance/{maintenance.id}", maintenance.scheduled_at, "Abrir manutenção",
+            ))
+    return items
+
+
+def _inspection_notifications(db: Session, context: UserContext, today: date, blocked_sources: set[tuple[str, str]]) -> list[dict[str, Any]]:
+    items: list[dict[str, Any]] = []
+    rows = db.scalars(
+        select(Inspection).where(
+            Inspection.organization_id == context.user.organization_id,
+            Inspection.status.notin_(("finalized", "completed", "cancelled")),
+        ).order_by(Inspection.scheduled_at.asc().nullslast()).limit(30)
+    ).all()
+    tomorrow = today + timedelta(days=1)
+    for inspection in rows:
+        if inspection.scheduled_at:
+            scheduled_local = inspection.scheduled_at.astimezone(BR_TZ)
+            if scheduled_local.date() <= today and ("inspections", str(inspection.id)) not in blocked_sources:
+                overdue = scheduled_local.date() < today
+                items.append(_item(
+                    f"inspection-schedule:{inspection.id}:{scheduled_local.date().isoformat()}", "warning" if overdue else "info", "inspections",
+                    f"Vistoria {_code('VIS-', inspection.internal_number)} {'atrasada' if overdue else 'hoje'}",
+                    f"{inspection.inspection_type} · {inspection.inspector_name or 'vistoriador a definir'}",
+                    "inspections", f"/app/inspections/{inspection.id}", inspection.scheduled_at, "Abrir vistoria",
+                ))
+        if inspection.contest_deadline:
+            contest_local = inspection.contest_deadline.astimezone(BR_TZ)
+            if today <= contest_local.date() <= tomorrow:
+                items.append(_item(
+                    f"inspection-contest:{inspection.id}:{contest_local.date().isoformat()}", "warning", "inspections",
+                    f"Prazo de contestação · {_code('VIS-', inspection.internal_number)}",
+                    f"Encerra em {contest_local.strftime('%d/%m/%Y %H:%M')}", "inspections",
+                    f"/app/inspections/{inspection.id}", inspection.contest_deadline, "Conferir vistoria",
+                ))
+    return items
 
 
 def _collect_active_notifications(db: Session, context: UserContext) -> list[dict[str, Any]]:
-    organization_id = context.user.organization_id
     now = datetime.now(timezone.utc)
-    today = datetime.now(ZoneInfo("America/Sao_Paulo")).date()
+    today = datetime.now(BR_TZ).date()
     items: list[dict[str, Any]] = []
     blocked_sources: set[tuple[str, str]] = set()
 
     if context.has("agenda.view"):
-        user_ids, department_ids, grants = _task_scope(db, context)
-        scope = []
-        if user_ids:
-            scope.append(AgendaTask.assigned_user_id.in_(user_ids))
-        if department_ids:
-            scope.append(and_(AgendaTask.assigned_user_id.is_(None), AgendaTask.department_id.in_(department_ids)))
-        if scope:
-            tasks = db.scalars(
-                select(AgendaTask).where(
-                    AgendaTask.organization_id == organization_id,
-                    AgendaTask.status == "pending",
-                    AgendaTask.starts_at <= now,
-                    or_(*scope),
-                ).order_by(AgendaTask.mandatory_action.desc(), AgendaTask.starts_at.asc()).limit(30)
-            ).all()
-            for task in tasks:
-                allowed = _task_details_allowed(context, grants, task)
-                if task.automatic and task.mandatory_action and task.source_module and task.source_id:
-                    blocked_sources.add((task.source_module, task.source_id))
-                severity = "critical" if task.mandatory_action else "warning" if task.priority in {"urgent", "high"} else "info"
-                title = task.title if allowed else "Tarefa pendente na equipe"
-                if task.mandatory_action:
-                    title = f"Justificativa obrigatória · {title}" if allowed else "Justificativa obrigatória na equipe"
-                subtitle = "Conteúdo protegido pela privacidade da agenda." if not allowed else (
-                    f"{_code('TAR-', task.internal_number)} · pendente desde {task.starts_at.astimezone(ZoneInfo('America/Sao_Paulo')).strftime('%d/%m/%Y')}"
-                    + (f" · {task.reschedule_sequence}º reagendamento" if task.reschedule_sequence else "")
-                )
-                route = f"/app/agenda/task/{task.id}" if allowed else "/app/agenda"
-                items.append(_notification(
-                    key=f"agenda-overdue:{task.id}:{task.reschedule_sequence}",
-                    severity=severity,
-                    category="agenda",
-                    title=title,
-                    subtitle=subtitle,
-                    module="agenda",
-                    route=route,
-                    event_at=task.starts_at,
-                    action_label="Justificar" if task.mandatory_action else "Abrir tarefa",
-                ))
-
-        pending_participants = db.scalars(
-            select(AgendaMeetingParticipant).where(
-                AgendaMeetingParticipant.user_id == context.user.id,
-                AgendaMeetingParticipant.status == "pending",
-            )
-        ).all()
-        if pending_participants:
-            request_ids = [row.meeting_request_id for row in pending_participants]
-            requests = db.scalars(
-                select(AgendaMeetingRequest).where(
-                    AgendaMeetingRequest.organization_id == organization_id,
-                    AgendaMeetingRequest.id.in_(request_ids),
-                    AgendaMeetingRequest.status == "pending",
-                )
-            ).all()
-            for request in requests:
-                items.append(_notification(
-                    key=f"meeting-invite:{request.id}:pending",
-                    severity="info",
-                    category="agenda",
-                    title="Convite de reunião aguardando resposta",
-                    subtitle=request.title,
-                    module="agenda",
-                    route="/app/agenda",
-                    event_at=request.created_at,
-                    action_label="Responder",
-                ))
-
+        agenda_items, blocked_sources = _agenda_notifications(db, context, now)
+        items.extend(agenda_items)
     if context.has("contracts.view"):
-        admin_contracts = db.scalars(
-            select(AdministrationContract).where(
-                AdministrationContract.organization_id == organization_id,
-                AdministrationContract.status == "signed",
-                AdministrationContract.end_date.is_not(None),
-                AdministrationContract.end_date <= today + timedelta(days=120),
-            )
-        ).all()
-        for contract in admin_contracts:
-            if contract.end_date is None:
-                continue
-            days = (contract.end_date - today).days
-            bucket = _expiry_bucket(days)
-            severity = "critical" if days <= 7 else "warning" if days <= 30 else "info"
-            address = contract.property_snapshot.get("address", {}) if isinstance(contract.property_snapshot, dict) else {}
-            neighborhood = address.get("neighborhood") or address.get("city") or "imóvel administrado"
-            items.append(_notification(
-                key=f"admin-contract-expiry:{contract.id}:{bucket}",
-                severity=severity,
-                category="contracts",
-                title=f"Contrato de administração {_code('ADM-', contract.internal_number)}",
-                subtitle=f"{_expiry_text(days)} · {neighborhood}",
-                module="contracts",
-                route=f"/app/contracts/administration/{contract.id}",
-                event_at=_date_at(contract.end_date),
-                action_label="Ver contrato",
-            ))
-
-        lease_contracts = db.scalars(
-            select(LeaseContract).where(
-                LeaseContract.organization_id == organization_id,
-                LeaseContract.status == "signed",
-                LeaseContract.end_date <= today + timedelta(days=120),
-            )
-        ).all()
-        for contract in lease_contracts:
-            days = (contract.end_date - today).days
-            bucket = _expiry_bucket(days)
-            severity = "critical" if days <= 7 else "warning" if days <= 30 else "info"
-            tenants = " / ".join(str(row.get("name") or "") for row in (contract.tenant_snapshot or []) if row.get("name")) or "Locatário não informado"
-            items.append(_notification(
-                key=f"lease-contract-expiry:{contract.id}:{bucket}",
-                severity=severity,
-                category="contracts",
-                title=f"Locação {_code('LOC-', contract.internal_number)} próxima do término",
-                subtitle=f"{_expiry_text(days)} · {tenants}",
-                module="contracts",
-                route=f"/app/contracts/lease/{contract.id}",
-                event_at=_date_at(contract.end_date),
-                action_label="Ver contrato",
-            ))
-            adjustment_days = (contract.next_adjustment_date - today).days
-            if 0 <= adjustment_days <= 30:
-                items.append(_notification(
-                    key=f"lease-adjustment:{contract.id}:{'7' if adjustment_days <= 7 else '30'}",
-                    severity="warning" if adjustment_days <= 7 else "info",
-                    category="contracts",
-                    title=f"Reajuste de {_code('LOC-', contract.internal_number)}",
-                    subtitle=f"{contract.adjustment_index} · {'hoje' if adjustment_days == 0 else f'em {adjustment_days} dia(s)'}",
-                    module="contracts",
-                    route=f"/app/contracts/lease/{contract.id}",
-                    event_at=_date_at(contract.next_adjustment_date),
-                    action_label="Conferir reajuste",
-                ))
-
+        items.extend(_contract_notifications(db, context, today))
     if context.has("finance.view"):
-        charges = db.scalars(
-            select(RentCharge).where(
-                RentCharge.organization_id == organization_id,
-                RentCharge.due_date < today,
-                RentCharge.paid_at.is_(None),
-                RentCharge.cancelled_at.is_(None),
-                RentCharge.status.notin_(("paid", "cancelled")),
-            ).order_by(RentCharge.due_date.asc()).limit(25)
-        ).all()
-        for charge in charges:
-            if ("finance", str(charge.id)) in blocked_sources:
-                continue
-            overdue_days = (today - charge.due_date).days
-            tenants = " / ".join(str(row.get("name") or "") for row in (charge.tenant_snapshot or []) if row.get("name")) or "Locatário não informado"
-            items.append(_notification(
-                key=f"charge-overdue:{charge.id}",
-                severity="critical" if overdue_days >= 5 else "warning",
-                category="finance",
-                title=f"Cobrança {_code('COB-', charge.internal_number)} vencida",
-                subtitle=f"{tenants} · {overdue_days} dia(s) · {_money(charge.gross_amount)}",
-                module="finance",
-                route=f"/app/finance/charge/{charge.id}",
-                event_at=_date_at(charge.due_date),
-                action_label="Abrir cobrança",
-            ))
-
-        repasses = db.scalars(
-            select(OwnerRepasse).where(
-                OwnerRepasse.organization_id == organization_id,
-                OwnerRepasse.due_date < today,
-                OwnerRepasse.status == "pending",
-                OwnerRepasse.paid_at.is_(None),
-            ).order_by(OwnerRepasse.due_date.asc()).limit(25)
-        ).all()
-        for repasse in repasses:
-            if ("finance", str(repasse.id)) in blocked_sources:
-                continue
-            overdue_days = (today - repasse.due_date).days
-            items.append(_notification(
-                key=f"repasse-overdue:{repasse.id}",
-                severity="critical" if overdue_days >= 3 else "warning",
-                category="finance",
-                title="Repasse ao proprietário em atraso",
-                subtitle=f"{repasse.owner_name} · {overdue_days} dia(s) · {_money(repasse.amount)}",
-                module="finance",
-                route=f"/app/finance/charge/{repasse.charge_id}",
-                event_at=_date_at(repasse.due_date),
-                action_label="Abrir financeiro",
-            ))
-
+        items.extend(_finance_notifications(db, context, today, blocked_sources))
     if context.has("maintenance.view"):
-        maintenances = db.scalars(
-            select(MaintenanceRequest).where(
-                MaintenanceRequest.organization_id == organization_id,
-                MaintenanceRequest.status.in_(("awaiting_approval", "scheduled", "in_progress")),
-            ).order_by(MaintenanceRequest.reported_at.asc()).limit(30)
-        ).all()
-        for maintenance in maintenances:
-            if maintenance.status == "awaiting_approval":
-                items.append(_notification(
-                    key=f"maintenance-approval:{maintenance.id}:{maintenance.status}",
-                    severity="critical" if maintenance.priority == "urgent" else "warning",
-                    category="maintenance",
-                    title=f"Manutenção {_code('MAN-', maintenance.internal_number)} aguarda aprovação",
-                    subtitle=maintenance.title,
-                    module="maintenance",
-                    route=f"/app/maintenance/{maintenance.id}",
-                    event_at=maintenance.updated_at,
-                    action_label="Analisar orçamento",
-                ))
-            elif maintenance.scheduled_at and maintenance.scheduled_at < now and ("maintenance", str(maintenance.id)) not in blocked_sources:
-                items.append(_notification(
-                    key=f"maintenance-schedule:{maintenance.id}:{maintenance.scheduled_at.date().isoformat()}",
-                    severity="critical" if maintenance.priority == "urgent" else "warning",
-                    category="maintenance",
-                    title=f"Manutenção {_code('MAN-', maintenance.internal_number)} requer acompanhamento",
-                    subtitle=f"{maintenance.title} · agendada para {maintenance.scheduled_at.astimezone(ZoneInfo('America/Sao_Paulo')).strftime('%d/%m %H:%M')}",
-                    module="maintenance",
-                    route=f"/app/maintenance/{maintenance.id}",
-                    event_at=maintenance.scheduled_at,
-                    action_label="Abrir manutenção",
-                ))
-
+        items.extend(_maintenance_notifications(db, context, now, blocked_sources))
     if context.has("inspections.view"):
-        inspections = db.scalars(
-            select(Inspection).where(
-                Inspection.organization_id == organization_id,
-                Inspection.status.notin_(("finalized", "completed", "cancelled")),
-            ).order_by(Inspection.scheduled_at.asc().nullslast()).limit(30)
-        ).all()
-        tomorrow = today + timedelta(days=1)
-        for inspection in inspections:
-            if inspection.scheduled_at:
-                scheduled_local = inspection.scheduled_at.astimezone(ZoneInfo("America/Sao_Paulo"))
-                if scheduled_local.date() <= today and ("inspections", str(inspection.id)) not in blocked_sources:
-                    overdue = scheduled_local.date() < today
-                    items.append(_notification(
-                        key=f"inspection-schedule:{inspection.id}:{scheduled_local.date().isoformat()}",
-                        severity="warning" if overdue else "info",
-                        category="inspections",
-                        title=f"Vistoria {_code('VIS-', inspection.internal_number)} {'atrasada' if overdue else 'hoje'}",
-                        subtitle=f"{inspection.inspection_type} · {inspection.inspector_name or 'vistoriador a definir'}",
-                        module="inspections",
-                        route=f"/app/inspections/{inspection.id}",
-                        event_at=inspection.scheduled_at,
-                        action_label="Abrir vistoria",
-                    ))
-            if inspection.contest_deadline:
-                contest_local = inspection.contest_deadline.astimezone(ZoneInfo("America/Sao_Paulo"))
-                if today <= contest_local.date() <= tomorrow:
-                    items.append(_notification(
-                        key=f"inspection-contest:{inspection.id}:{contest_local.date().isoformat()}",
-                        severity="warning",
-                        category="inspections",
-                        title=f"Prazo de contestação · {_code('VIS-', inspection.internal_number)}",
-                        subtitle=f"Encerra em {contest_local.strftime('%d/%m/%Y %H:%M')}",
-                        module="inspections",
-                        route=f"/app/inspections/{inspection.id}",
-                        event_at=inspection.contest_deadline,
-                        action_label="Conferir vistoria",
-                    ))
+        items.extend(_inspection_notifications(db, context, today, blocked_sources))
 
     items.sort(key=lambda row: (SEVERITY_ORDER.get(row["severity"], 9), row["event_at"]))
     return items
 
 
-def _apply_read_state(db: Session, context: UserContext, items: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    keys = [item["key"] for item in items]
+def _read_keys(db: Session, context: UserContext, keys: list[str]) -> set[str]:
     if not keys:
-        return items
-    states = db.scalars(
-        select(UserNotificationState).where(
-            UserNotificationState.organization_id == context.user.organization_id,
-            UserNotificationState.user_id == context.user.id,
-            UserNotificationState.notification_key.in_(keys),
-            UserNotificationState.read_at.is_not(None),
+        return set()
+    values = db.scalars(
+        select(AuditLog.entity_id).where(
+            AuditLog.organization_id == context.user.organization_id,
+            AuditLog.actor_user_id == context.user.id,
+            AuditLog.action == "notification.read",
+            AuditLog.module == "notifications",
+            AuditLog.entity_type == "notification",
+            AuditLog.entity_id.in_(keys),
         )
     ).all()
-    read_keys = {state.notification_key for state in states}
+    return {str(value) for value in values if value}
+
+
+def _apply_read_state(db: Session, context: UserContext, items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    read = _read_keys(db, context, [item["key"] for item in items])
     for item in items:
-        item["read"] = item["key"] in read_keys
+        item["read"] = item["key"] in read
     return items
 
 
 def _mark_read(db: Session, context: UserContext, keys: set[str]) -> int:
     if not keys:
         return 0
-    states = db.scalars(
-        select(UserNotificationState).where(
-            UserNotificationState.organization_id == context.user.organization_id,
-            UserNotificationState.user_id == context.user.id,
-            UserNotificationState.notification_key.in_(keys),
-        )
-    ).all()
-    by_key = {state.notification_key: state for state in states}
+    existing = _read_keys(db, context, list(keys))
+    pending = keys - existing
     read_at = datetime.now(timezone.utc)
-    for key in keys:
-        state = by_key.get(key)
-        if state is None:
-            db.add(UserNotificationState(
-                organization_id=context.user.organization_id,
-                user_id=context.user.id,
-                notification_key=key,
-                read_at=read_at,
-            ))
-        else:
-            state.read_at = read_at
-    db.commit()
+    for key in pending:
+        db.add(AuditLog(
+            organization_id=context.user.organization_id,
+            actor_user_id=context.user.id,
+            action="notification.read",
+            module="notifications",
+            entity_type="notification",
+            entity_id=key,
+            before_data=None,
+            after_data={"read_at": read_at.isoformat()},
+            reason=None,
+            ip_address=None,
+            user_agent=None,
+        ))
+    if pending:
+        db.commit()
     return len(keys)
 
 
@@ -447,7 +416,7 @@ def read_notifications(
     context: UserContext = Depends(get_current_user_context),
 ) -> dict[str, int]:
     active_keys = {item["key"] for item in _collect_active_notifications(db, context)}
-    requested = {key.strip() for key in payload.keys if key.strip() and len(key.strip()) <= 240}
+    requested = {key.strip() for key in payload.keys if key.strip() and len(key.strip()) <= 180}
     return {"updated": _mark_read(db, context, requested & active_keys)}
 
 
