@@ -4,6 +4,7 @@ import { ApiError, apiRequest } from './api/client'
 import type { CurrentUser } from './api/types'
 import { authConfigured } from './auth/client'
 import { LoginPage } from './auth/LoginPage'
+import { EntityDeepLink } from './components/EntityDeepLink'
 import { GlobalSearch } from './components/GlobalSearch'
 import { navigation } from './config/navigation'
 import { AgendaNotifier } from './modules/agenda/AgendaNotifier'
@@ -33,6 +34,7 @@ function moduleFromPath(pathname: string): ModuleKey {
   return moduleKeys.has(candidate) ? candidate as ModuleKey : 'dashboard'
 }
 function routeForModule(module: ModuleKey) { return `/app/${module}` }
+function browserRoute() { return `${window.location.pathname}${window.location.search}` }
 
 const devBypass = import.meta.env.DEV && !authConfigured
 const devUser: CurrentUser = {
@@ -55,6 +57,7 @@ function AccessError({ message, onRetry }: { message: string; onRetry: () => voi
 function ErpApp() {
   const { theme, setTheme } = useTheme()
   const [activeModule, setActiveModule] = useState<ModuleKey>(() => moduleFromPath(window.location.pathname))
+  const [currentRoute, setCurrentRoute] = useState(() => browserRoute())
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [authState, setAuthState] = useState<AuthState>(devBypass ? 'authenticated' : 'loading')
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(devBypass ? devUser : null)
@@ -65,8 +68,9 @@ function ErpApp() {
     const nextModule = module as ModuleKey
     setActiveModule(nextModule)
     const nextRoute = route || routeForModule(nextModule)
-    const currentRoute = `${window.location.pathname}${window.location.search}`
-    if (currentRoute !== nextRoute) window.history.pushState({}, '', nextRoute)
+    const current = browserRoute()
+    if (current !== nextRoute) window.history.pushState({}, '', nextRoute)
+    setCurrentRoute(nextRoute)
   }, [])
 
   const refreshUser = useCallback(async () => {
@@ -78,7 +82,10 @@ function ErpApp() {
 
   useEffect(() => { if (!devBypass) void refreshUser() }, [refreshUser])
   useEffect(() => {
-    const syncRoute = () => setActiveModule(moduleFromPath(window.location.pathname))
+    const syncRoute = () => {
+      setActiveModule(moduleFromPath(window.location.pathname))
+      setCurrentRoute(browserRoute())
+    }
     window.addEventListener('popstate', syncRoute)
     return () => window.removeEventListener('popstate', syncRoute)
   }, [])
@@ -87,8 +94,10 @@ function ErpApp() {
   useEffect(() => {
     if (visibleNavigation.length > 0 && !visibleNavigation.some((item) => item.module === activeModule)) {
       const next = visibleNavigation[0].module
+      const nextRoute = routeForModule(next)
       setActiveModule(next)
-      window.history.replaceState({}, '', routeForModule(next))
+      window.history.replaceState({}, '', nextRoute)
+      setCurrentRoute(nextRoute)
     }
   }, [activeModule, visibleNavigation])
 
@@ -107,6 +116,7 @@ function ErpApp() {
     <main className="main-area"><header className="topbar"><div className="topbar-left"><button className="sidebar-toggle" type="button" aria-label={sidebarCollapsed ? 'Expandir menu lateral' : 'Recolher menu lateral'} onClick={() => setSidebarCollapsed((value) => !value)}><Menu size={20}/></button><GlobalSearch onNavigate={navigateModule}/></div><div className="topbar-actions">{!authConfigured && <span className="dev-badge">DEV · Auth pendente</span>}<button className="topbar-icon" type="button" aria-label="Notificações"><Bell size={18}/></button><button className="topbar-icon topbar-secondary-action" type="button" aria-label="Mensagens"><Mail size={18}/></button><button className="topbar-icon topbar-secondary-action" type="button" aria-label="Ajuda"><CircleHelp size={18}/></button><span className="topbar-divider"/><div className="user-summary"><div className="avatar avatar-user">{initials}</div><div><strong>{currentUser.name}</strong><span>{primaryRole}</span></div><ChevronDown size={15}/></div></div></header>
       {currentUser.permissions.includes('agenda.view') && <AgendaNotifier onOpenAgenda={() => navigateModule('agenda')}/>} 
       {activeModule === 'dashboard' && <DashboardPage onNavigate={module => navigateModule(module)}/>}{activeModule === 'people' && <PropertiesPage permissions={currentUser.permissions} initialTab="people"/>}{activeModule === 'properties' && <PropertiesPage permissions={currentUser.permissions} initialTab="properties"/>}{activeModule === 'brokers' && <BrokersPage permissions={currentUser.permissions}/>}{activeModule === 'captures' && <CapturesPage permissions={currentUser.permissions}/>}{activeModule === 'crm' && <CommercialPage permissions={currentUser.permissions} organizationId={currentUser.organization_id}/>}{activeModule === 'contracts' && <ContractsHub permissions={currentUser.permissions}/>}{activeModule === 'inspections' && <InspectionsPage permissions={currentUser.permissions}/>}{activeModule === 'maintenance' && <MaintenancePage permissions={currentUser.permissions}/>}{activeModule === 'finance' && <FinancePage permissions={currentUser.permissions}/>}{activeModule === 'agenda' && <AgendaPage permissions={currentUser.permissions} onNavigate={module => navigateModule(module)}/>}{activeModule === 'settings' && <SettingsPage permissions={currentUser.permissions}/>} {!implemented.includes(activeModule) && <ModulePlaceholder module={activeModule}/>} 
+      <EntityDeepLink route={currentRoute} onNavigate={navigateModule}/>
     </main>
   </div>
 }
