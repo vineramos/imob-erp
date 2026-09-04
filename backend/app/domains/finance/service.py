@@ -259,7 +259,7 @@ def generate_charges(
         and lease.archive_status == "archived"
         and lease.final_document_hash
         and lease.start_date <= period_end
-        and lease.end_date >= competence
+        and (lease.operational_end_date or lease.end_date) >= competence
     ]
     skipped_ineligible = max(0, len(leases) - len(eligible))
     if not eligible:

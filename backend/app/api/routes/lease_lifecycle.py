@@ -193,7 +193,6 @@ def complete_renewal(
     item.status = "renewed"
     item.closed_at = now
     item.closed_by_user_id = context.user.id
-    item.property_disposition = "available" if False else None
     property_item = db.get(Property, lease.property_id)
     if property_item is not None:
         property_item.status = "leased"

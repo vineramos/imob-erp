@@ -192,6 +192,8 @@ def _response(item: LeaseContract) -> LeaseContractResponse:
         term_months=item.term_months,
         start_date=item.start_date,
         end_date=item.end_date,
+        operational_end_date=item.operational_end_date,
+        closed_at=item.closed_at,
         termination_fine_months=item.termination_fine_months,
         inspection_contest_days=item.inspection_contest_days,
         guarantee_type=item.guarantee_type,
@@ -323,7 +325,7 @@ def create_lease_contract(
         select(LeaseContract.id).where(
             LeaseContract.organization_id == context.user.organization_id,
             LeaseContract.property_id == payload.property_id,
-            LeaseContract.status.not_in(("cancelled",)),
+            LeaseContract.status.not_in(("cancelled", "closed")),
         )
     )
     if existing is not None:

@@ -7,7 +7,7 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
 
 AdjustmentIndex = Literal["IPCA", "IGP-M", "INPC", "IPC-FIPE", "IGP-DI"]
 GuaranteeType = Literal["insurance", "deposit", "capitalization", "guarantor", "none"]
-LeaseStatus = Literal["draft", "review", "approved", "pending_signature", "signed", "cancelled"]
+LeaseStatus = Literal["draft", "review", "approved", "pending_signature", "signed", "closed", "cancelled"]
 LeaseWorkflowAction = Literal["submit_review", "approve", "prepare_signature", "return_draft", "cancel"]
 LeaseSignerRole = Literal["owner", "tenant", "agency", "witness", "other"]
 SignerCommunication = Literal["email", "sms", "whatsapp", "none"]
@@ -60,6 +60,8 @@ class LeaseContractTerms(BaseModel):
     term_months: int = Field(default=30, ge=1, le=240)
     start_date: date
     end_date: date
+    operational_end_date: date | None = None
+    closed_at: datetime | None = None
     termination_fine_months: Decimal = Field(default=Decimal("3"), ge=0, le=12)
     inspection_contest_days: int = Field(default=5, ge=1, le=30)
     guarantee_type: GuaranteeType = "insurance"

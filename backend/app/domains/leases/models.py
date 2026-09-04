@@ -29,6 +29,8 @@ class LeaseContract(Base):
     term_months: Mapped[int] = mapped_column(Integer, nullable=False, default=30)
     start_date: Mapped[date] = mapped_column(Date, nullable=False)
     end_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    operational_end_date: Mapped[date | None] = mapped_column(Date, index=True)
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
     termination_fine_months: Mapped[Decimal] = mapped_column(Numeric(7, 2), nullable=False, default=3)
     inspection_contest_days: Mapped[int] = mapped_column(Integer, nullable=False, default=5)
 

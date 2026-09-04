@@ -20,9 +20,10 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react'
 import { ApiError, apiBlobRequest, apiRequest } from '../../api/client'
 import type { AdjustmentIndex, ContractDocument, OperationalDefaults, Person, Property } from '../../api/types'
 import { SignatureTimeline } from './SignatureTimeline'
+import { LeaseLifecyclePanel } from './LeaseLifecyclePanel'
 import { EntityDocumentsPanel } from '../documents/EntityDocumentsPanel'
 
-type LeaseStatus = 'draft' | 'review' | 'approved' | 'pending_signature' | 'signed' | 'cancelled'
+type LeaseStatus = 'draft' | 'review' | 'approved' | 'pending_signature' | 'signed' | 'closed' | 'cancelled'
 type GuaranteeType = 'insurance' | 'deposit' | 'capitalization' | 'guarantor' | 'none'
 type LeaseWorkflowAction = 'submit_review' | 'approve' | 'prepare_signature' | 'return_draft' | 'cancel'
 type LeaseSignerRole = 'owner' | 'tenant' | 'agency' | 'witness' | 'other'
@@ -75,6 +76,8 @@ type Lease = {
   term_months: number
   start_date: string
   end_date: string
+  operational_end_date: string | null
+  closed_at: string | null
   termination_fine_months: number
   inspection_contest_days: number
   guarantee_type: GuaranteeType
@@ -132,6 +135,7 @@ const statusLabels: Record<LeaseStatus, string> = {
   approved: 'Aprovado',
   pending_signature: 'Assinatura',
   signed: 'Assinado',
+  closed: 'Encerrado',
   cancelled: 'Cancelado',
 }
 const signerRoleLabels: Record<LeaseSignerRole, string> = {
@@ -157,7 +161,7 @@ function money(value: number | null) {
   return value == null ? '—' : Number(value).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 }
 function statusClass(value: LeaseStatus) {
-  if (value === 'signed' || value === 'approved') return 'success'
+  if (value === 'signed' || value === 'approved' || value === 'closed') return 'success'
   if (value === 'cancelled') return 'danger'
   if (value === 'review' || value === 'pending_signature') return 'warning'
   return 'neutral'
@@ -239,7 +243,7 @@ export function LeaseContractsPage({ permissions }: Props) {
   const [showForm, setShowForm] = useState(false)
   const [changeSummary, setChangeSummary] = useState('')
   const [expanded, setExpanded] = useState<string | null>(null)
-  const [expandedTab, setExpandedTab] = useState<'details' | 'documents'>('details')
+  const [expandedTab, setExpandedTab] = useState<'details' | 'lifecycle' | 'documents'>('details')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -273,7 +277,7 @@ export function LeaseContractsPage({ permissions }: Props) {
     [persons],
   )
   const eligibleProperties = useMemo(
-    () => properties.filter((property) => property.owners.length > 0 && !items.some((contract) => contract.property_id === property.id && contract.status !== 'cancelled')),
+    () => properties.filter((property) => property.owners.length > 0 && !items.some((contract) => contract.property_id === property.id && !['cancelled', 'closed'].includes(contract.status))),
     [properties, items],
   )
   const metrics = useMemo(() => ({
@@ -655,7 +659,7 @@ export function LeaseContractsPage({ permissions }: Props) {
               </div>
             </div>
 
-            {isExpanded && <><div className="entity-document-tabs"><button type="button" className={expandedTab==='details'?'active':''} onClick={()=>setExpandedTab('details')}>Detalhes</button><button type="button" className={expandedTab==='documents'?'active':''} onClick={()=>setExpandedTab('documents')}>Documentos</button></div>{expandedTab==='details'&&<div className="contract-expanded">
+            {isExpanded && <><div className="entity-document-tabs"><button type="button" className={expandedTab==='details'?'active':''} onClick={()=>setExpandedTab('details')}>Detalhes</button><button type="button" className={expandedTab==='lifecycle'?'active':''} onClick={()=>setExpandedTab('lifecycle')}>Ciclo da locação</button><button type="button" className={expandedTab==='documents'?'active':''} onClick={()=>setExpandedTab('documents')}>Documentos</button></div>{expandedTab==='details'&&<div className="contract-expanded">
               <div className="contract-version-panel">
                 <div className="panel-heading-row"><div><span className="eyebrow">Versões</span><h3>Histórico imutável</h3></div><CalendarClock size={17}/></div>
                 {item.versions.slice().reverse().map((version) => <div className="contract-version-row" key={version.version_number}><strong>v{version.version_number}</strong><span>{version.change_summary || 'Sem resumo'}</span><small>{new Date(version.created_at).toLocaleString('pt-BR')}</small></div>)}
@@ -681,7 +685,8 @@ export function LeaseContractsPage({ permissions }: Props) {
                 <div className="contract-document-detail"><span>Signatários</span><strong>{item.signers.map((signer) => signer.name).join(' / ') || 'não definidos'}</strong></div>
               </div>
               <SignatureTimeline contractId={item.id} contractType="lease"/>
-            </div>}{expandedTab==='documents'&&<EntityDocumentsPanel entityType="lease_contract" entityId={item.id} entityLabel={item.code} permissions={permissions} compact/>}</>}
+            </div>}{expandedTab==='lifecycle'&&<LeaseLifecyclePanel lease={item} permissions={permissions} onChanged={()=>void load()}/>}
+              {expandedTab==='documents'&&<EntityDocumentsPanel entityType="lease_contract" entityId={item.id} entityLabel={item.code} permissions={permissions} compact/>}</>}
           </article>
         })}
         {items.length === 0 && <article className="panel portfolio-empty"><FileText size={26}/><strong>Nenhum contrato de locação ainda.</strong><span>Crie a primeira minuta usando as regras-padrão da imobiliária.</span></article>}
