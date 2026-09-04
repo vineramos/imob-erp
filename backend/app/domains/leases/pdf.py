@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from functools import partial
 from io import BytesIO
 from typing import Any
 from xml.sax.saxutils import escape
@@ -9,6 +10,7 @@ from reportlab.lib.enums import TA_CENTER
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
+from reportlab.pdfgen import canvas
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 
@@ -54,7 +56,7 @@ def _monthly_rules(contract: Any) -> list[dict[str, Any]]:
 
 
 def build_lease_contract_pdf(*, contract: Any, organization: Any) -> bytes:
-    """Gera o PDF operacional da versão congelada do contrato de locação."""
+    """Gera o PDF operacional determinístico da versão congelada do contrato."""
     buffer = BytesIO()
     code = lease_contract_code(contract)
     doc = SimpleDocTemplate(
@@ -245,5 +247,5 @@ def build_lease_contract_pdf(*, contract: Any, organization: Any) -> bytes:
             small,
         ),
     ])
-    doc.build(story)
+    doc.build(story, canvasmaker=partial(canvas.Canvas, invariant=1))
     return buffer.getvalue()
