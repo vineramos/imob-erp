@@ -5,6 +5,7 @@ from app.api.routes.agenda_history import router as agenda_history_router
 from app.api.routes.auth_proxy import router as auth_proxy_router
 from app.api.routes.branding import router as branding_router
 from app.api.routes.contracts import router as contracts_router
+from app.api.routes.deep_links import router as deep_links_router
 from app.api.routes.economic_indices import router as economic_indices_router
 from app.api.routes.finance import router as finance_router
 from app.api.routes.finance_advanced import public_router as portal_router
@@ -66,6 +67,7 @@ api_router.include_router(finance_advanced_router)
 api_router.include_router(agenda_router)
 api_router.include_router(agenda_history_router)
 api_router.include_router(search_router)
+api_router.include_router(deep_links_router)
 api_router.include_router(portal_router)
 api_router.include_router(inter_webhook_router)
 api_router.include_router(signature_events_router)
