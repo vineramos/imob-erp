@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from functools import partial
 from io import BytesIO
 from typing import Any
 
@@ -8,6 +9,7 @@ from reportlab.lib.enums import TA_CENTER
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
+from reportlab.pdfgen import canvas
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 
@@ -52,10 +54,11 @@ def _lease_months(start: Any, end: Any) -> str:
 
 
 def build_administration_contract_pdf(*, contract: Any, organization: Any) -> bytes:
-    """Gera a representação PDF da versão corrente já congelada no contrato.
+    """Gera a representação PDF determinística da versão corrente congelada.
 
-    O documento é operacional e versionado; o texto jurídico definitivo poderá ser
-    evoluído por template sem alterar a regra de snapshots/hashes.
+    O modo ``invariant`` do ReportLab elimina timestamps/IDs variáveis do arquivo.
+    Assim, a mesma versão contratual produz sempre os mesmos bytes e o SHA-256
+    registrado pode ser validado novamente antes do envio para assinatura.
     """
     buffer = BytesIO()
     doc = SimpleDocTemplate(
@@ -175,7 +178,7 @@ def build_administration_contract_pdf(*, contract: Any, organization: Any) -> by
         ),
     ])
 
-    doc.build(story)
+    doc.build(story, canvasmaker=partial(canvas.Canvas, invariant=1))
     return buffer.getvalue()
 
 
