@@ -60,8 +60,6 @@ class LeaseContractTerms(BaseModel):
     term_months: int = Field(default=30, ge=1, le=240)
     start_date: date
     end_date: date
-    operational_end_date: date | None = None
-    closed_at: datetime | None = None
     termination_fine_months: Decimal = Field(default=Decimal("3"), ge=0, le=12)
     inspection_contest_days: int = Field(default=5, ge=1, le=30)
     guarantee_type: GuaranteeType = "insurance"
@@ -131,6 +129,8 @@ class LeaseContractResponse(BaseModel):
     term_months: int
     start_date: date
     end_date: date
+    operational_end_date: date | None = None
+    closed_at: datetime | None = None
     termination_fine_months: Decimal
     inspection_contest_days: int
     guarantee_type: GuaranteeType
