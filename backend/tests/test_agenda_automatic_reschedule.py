@@ -2,10 +2,14 @@ from __future__ import annotations
 
 from datetime import datetime, time, timedelta, timezone
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 from app.core.database import SessionLocal
 from app.domains.maintenance.models import MaintenanceRequest
 from tests.helpers import assert_response, create_person, create_property
+
+
+SAO_PAULO = ZoneInfo("America/Sao_Paulo")
 
 
 def _maintenance(
@@ -15,6 +19,7 @@ def _maintenance(
     scheduled_at: datetime,
     status: str = "scheduled",
     completed_at: datetime | None = None,
+    cancelled_at: datetime | None = None,
 ) -> str:
     assert SessionLocal is not None
     with SessionLocal() as db:
@@ -33,6 +38,8 @@ def _maintenance(
             history=[],
             scheduled_at=scheduled_at,
             completed_at=completed_at,
+            cancelled_at=cancelled_at,
+            cancellation_reason="Cancelada no teste de regressão." if cancelled_at else None,
             created_by_user_id=identity["user_id"],
             approved_by_user_id=identity["user_id"],
             completed_by_user_id=identity["user_id"] if completed_at else None,
@@ -100,6 +107,79 @@ def test_pending_maintenance_is_rescheduled_daily_and_keeps_missed_history(clien
     assert history["entries"][0]["status"] == "missed"
     assert history["entries"][0]["justification"] == "Não foi possível executar a manutenção na data prevista."
     assert history["entries"][1]["status"] == "pending"
+
+
+def test_pending_maintenance_creates_r2_when_r1_also_expires(client, identity):
+    today = datetime.now(timezone.utc).date()
+    original_day = today - timedelta(days=2)
+    scheduled_at = datetime.combine(original_day, time(hour=11, minute=30), tzinfo=timezone.utc)
+    property_item = _property(client)
+    maintenance_id = _maintenance(identity, property_id=property_item["id"], scheduled_at=scheduled_at)
+
+    rows = _maintenance_events(client, start=original_day, end=today, maintenance_id=maintenance_id)
+    assert [row["reschedule_sequence"] for row in rows] == [0, 1, 2]
+    assert rows[0]["needs_justification"] is True
+    assert rows[1]["needs_justification"] is True
+    assert rows[2]["status"] == "pending"
+    assert rows[2]["needs_justification"] is False
+
+
+def test_completed_maintenance_stops_chain_without_creating_next_day(client, identity):
+    today = datetime.now(timezone.utc).date()
+    original_day = today - timedelta(days=2)
+    terminal_day = today - timedelta(days=1)
+    scheduled_at = datetime.combine(original_day, time(hour=11, minute=30), tzinfo=timezone.utc)
+    completed_at = datetime.combine(terminal_day, time(hour=15), tzinfo=timezone.utc)
+    property_item = _property(client)
+    maintenance_id = _maintenance(
+        identity,
+        property_id=property_item["id"],
+        scheduled_at=scheduled_at,
+        status="completed",
+        completed_at=completed_at,
+    )
+
+    rows = _maintenance_events(client, start=original_day, end=today, maintenance_id=maintenance_id)
+    assert [row["reschedule_sequence"] for row in rows] == [0, 1]
+    assert all(row["reschedule_sequence"] != 2 for row in rows)
+
+
+def test_cancelled_maintenance_stops_chain_without_creating_next_day(client, identity):
+    today = datetime.now(timezone.utc).date()
+    original_day = today - timedelta(days=2)
+    terminal_day = today - timedelta(days=1)
+    scheduled_at = datetime.combine(original_day, time(hour=11, minute=30), tzinfo=timezone.utc)
+    cancelled_at = datetime.combine(terminal_day, time(hour=15), tzinfo=timezone.utc)
+    property_item = _property(client)
+    maintenance_id = _maintenance(
+        identity,
+        property_id=property_item["id"],
+        scheduled_at=scheduled_at,
+        status="cancelled",
+        cancelled_at=cancelled_at,
+    )
+
+    rows = _maintenance_events(client, start=original_day, end=today, maintenance_id=maintenance_id)
+    assert [row["reschedule_sequence"] for row in rows] == [0, 1]
+    assert all(row["reschedule_sequence"] != 2 for row in rows)
+
+
+def test_sao_paulo_local_day_drives_daily_reschedule_not_utc_day(client, identity):
+    today_local = datetime.now(timezone.utc).astimezone(SAO_PAULO).date()
+    yesterday_local = today_local - timedelta(days=1)
+    # 22:30 em São Paulo já é 01:30 UTC do dia seguinte. A cadeia deve seguir
+    # o dia civil do perfil, e não a data UTC persistida no banco.
+    scheduled_local = datetime.combine(yesterday_local, time(hour=22, minute=30), tzinfo=SAO_PAULO)
+    scheduled_at = scheduled_local.astimezone(timezone.utc)
+    property_item = _property(client)
+    maintenance_id = _maintenance(identity, property_id=property_item["id"], scheduled_at=scheduled_at)
+
+    rows = _maintenance_events(client, start=yesterday_local, end=today_local, maintenance_id=maintenance_id)
+    assert [row["reschedule_sequence"] for row in rows] == [0, 1]
+    assert rows[0]["status"] == "pending"
+    assert rows[0]["needs_justification"] is True
+    assert rows[1]["status"] == "pending"
+    assert rows[1]["needs_justification"] is False
 
 
 def test_maintenance_completed_before_schedule_never_becomes_missed_or_rescheduled(client, identity):
