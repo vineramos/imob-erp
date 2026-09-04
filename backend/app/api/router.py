@@ -33,6 +33,7 @@ from app.api.routes.person_profile import router as person_profile_router
 from app.api.routes.portfolio import router as portfolio_router
 from app.api.routes.property_media import router as property_media_router
 from app.api.routes.publication import router as publication_router
+from app.api.routes.reports import router as reports_router
 from app.api.routes.search import router as search_router
 from app.api.routes.signature_events import router as signature_events_router
 from app.domains.agenda.source_chain_rules import install_source_chain_rule
@@ -71,6 +72,7 @@ api_router.include_router(finance_bank_control_router)
 api_router.include_router(finance_advanced_router)
 api_router.include_router(agenda_router)
 api_router.include_router(agenda_history_router)
+api_router.include_router(reports_router)
 api_router.include_router(search_router)
 api_router.include_router(deep_links_router)
 api_router.include_router(notifications_router)

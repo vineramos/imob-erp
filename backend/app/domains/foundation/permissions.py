@@ -39,6 +39,7 @@ PERMISSIONS: tuple[PermissionDefinition, ...] = (
     PermissionDefinition("agenda.view", "agenda", "Visualizar agenda", "Permite consultar agenda, tarefas e alertas."),
     PermissionDefinition("agenda.manage", "agenda", "Gerenciar agenda", "Permite criar e alterar tarefas e compromissos."),
     PermissionDefinition("reports.view", "reports", "Visualizar relatórios", "Permite acessar relatórios autorizados."),
+    PermissionDefinition("reports.export", "reports", "Exportar relatórios", "Permite exportar relatórios autorizados em PDF ou CSV."),
     PermissionDefinition("settings.view", "settings", "Visualizar configurações", "Permite consultar configurações permitidas."),
     PermissionDefinition("settings.company.manage", "settings", "Editar empresa", "Permite alterar dados institucionais da empresa."),
     PermissionDefinition("settings.appearance.manage", "settings", "Editar aparência", "Permite alterar temas, marca e identidade visual."),

@@ -22,7 +22,8 @@ ROLE_TEMPLATES: tuple[RoleTemplate, ...] = (
             "captures.view", "captures.manage", "crm.view", "crm.manage",
             "contracts.view", "contracts.create", "contracts.edit",
             "maintenance.view", "maintenance.manage", "inspections.view", "inspections.manage",
-            "documents.view", "documents.manage", "agenda.view", "agenda.manage", "reports.view",
+            "documents.view", "documents.manage", "agenda.view", "agenda.manage",
+            "reports.view", "reports.export",
         }),
     ),
     RoleTemplate(
@@ -32,7 +33,8 @@ ROLE_TEMPLATES: tuple[RoleTemplate, ...] = (
         frozenset({
             "dashboard.view", "properties.view", "contracts.view", "finance.view",
             "finance.charge.create", "finance.reconcile", "finance.payment.prepare",
-            "finance.repasse.execute", "documents.view", "agenda.view", "agenda.manage", "reports.view",
+            "finance.repasse.execute", "documents.view", "agenda.view", "agenda.manage",
+            "reports.view", "reports.export",
         }),
     ),
     RoleTemplate(
