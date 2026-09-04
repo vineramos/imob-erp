@@ -76,7 +76,24 @@ def test_tenant_portal_login_overview_documents_and_maintenance(client, identity
     ).json()
     assert created["status"] == "requested"
 
+    internal_document = assert_response(
+        client.post(
+            "/api/documents",
+            data={
+                "title": "Orçamento interno do parceiro",
+                "category": "maintenance",
+                "entity_type": "maintenance",
+                "entity_id": created["id"],
+                "notes": "Documento deliberadamente interno para validar privacidade do portal.",
+            },
+            files={"file": ("orcamento-interno.txt", b"custo interno do parceiro", "text/plain")},
+        ),
+        201,
+    ).json()
+
     refreshed = assert_response(client.get("/api/tenant-portal/overview")).json()
+    assert all(item["key"] != f"managed:{internal_document['id']}" for item in refreshed["documents"])
+    assert client.get(f"/api/tenant-portal/documents/managed:{internal_document['id']}/content").status_code == 404
     request = next(item for item in refreshed["maintenance"] if item["id"] == created["id"])
     assert request["title"] == "Vazamento na cozinha"
     assert request["priority"] == "high"

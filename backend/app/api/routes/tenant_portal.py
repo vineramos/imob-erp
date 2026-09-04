@@ -151,7 +151,8 @@ def _document_rows(db: Session, identity: PortalIdentity, leases: list[LeaseCont
             entity_type="lease_contract",
             entity_id=lease.id,
         ) or []:
-            unique[row.key] = row
+            if row.entity_type in {"lease_contract", "inspection"}:
+                unique[row.key] = row
     ordered = sorted(unique.values(), key=lambda row: row.updated_at or row.created_at, reverse=True)
     return [
         {
@@ -178,7 +179,7 @@ def _allowed_document_keys(db: Session, identity: PortalIdentity) -> set[str]:
             entity_type="lease_contract",
             entity_id=lease.id,
         ) or []
-        keys.update(row.key for row in rows)
+        keys.update(row.key for row in rows if row.entity_type in {"lease_contract", "inspection"})
     return keys
 
 
