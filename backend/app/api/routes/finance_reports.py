@@ -133,7 +133,7 @@ def dre_pdf(
     start_date: date = Query(...),
     end_date: date = Query(...),
     regime: str = Query(default="cash", pattern="^(cash|competence)$"),
-    context: UserContext = Depends(require_permission("reports.view")),
+    context: UserContext = Depends(require_permission("reports.export")),
     db: Session = Depends(get_db),
 ) -> Response:
     report = _dre(db, context.user.organization_id, start_date, end_date, regime)
@@ -225,7 +225,7 @@ def annual_income_pdf(
     year: int = Query(..., ge=2000, le=2200),
     party_type: str = Query(default="tenant", pattern="^(tenant|owner)$"),
     person_id: UUID = Query(...),
-    context: UserContext = Depends(require_permission("reports.view")),
+    context: UserContext = Depends(require_permission("reports.export")),
     db: Session = Depends(get_db),
 ) -> Response:
     report = _annual(db, context.user.organization_id, year, party_type, person_id)
