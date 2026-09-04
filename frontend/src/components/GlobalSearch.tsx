@@ -32,6 +32,20 @@ function ResultIcon({ kind }: { kind: string }) {
   return <FileText size={16}/>
 }
 
+function deepLinkRoute(item: SearchResult) {
+  const id = encodeURIComponent(item.id)
+  if (item.kind === 'person') return `/app/people/${id}`
+  if (item.kind === 'property') return `/app/properties/${id}`
+  if (item.kind === 'administration_contract') return `/app/contracts/administration/${id}`
+  if (item.kind === 'lease_contract') return `/app/contracts/lease/${id}`
+  if (item.kind === 'inspection') return `/app/inspections/${id}`
+  if (item.kind === 'maintenance') return `/app/maintenance/${id}`
+  if (item.kind === 'maintenance_partner') return `/app/maintenance/partners/${id}`
+  if (item.kind === 'charge') return `/app/finance/charge/${id}`
+  if (item.kind === 'agenda_task') return `/app/agenda/task/${id}`
+  return item.route
+}
+
 export function GlobalSearch({ onNavigate }: Props) {
   const wrapperRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -99,7 +113,7 @@ export function GlobalSearch({ onNavigate }: Props) {
 
   function choose(item: SearchResult) {
     setOpen(false)
-    onNavigate(item.module, item.route)
+    onNavigate(item.module, deepLinkRoute(item))
   }
 
   function onInputKeyDown(event: KeyboardEvent<HTMLInputElement>) {
