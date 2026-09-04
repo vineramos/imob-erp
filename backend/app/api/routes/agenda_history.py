@@ -1,4 +1,3 @@
-from datetime import datetime, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -8,6 +7,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.domains.agenda.logic import access_map, ensure_agenda_structure, require_calendar_access
 from app.domains.agenda.models import AgendaTask
+from app.domains.agenda.timezone_rules import local_date, local_today, resolve_timezone
 from app.domains.foundation.access import UserContext, require_permission
 
 router = APIRouter(tags=["agenda"])
@@ -21,6 +21,15 @@ def _can_view_unassigned(db: Session, context: UserContext, item: AgendaTask) ->
     if profile.access_level in {"director", "admin"}:
         return True
     return profile.department_id == item.department_id
+
+
+def _needs_justification(row: AgendaTask, profiles, viewer_id: UUID) -> bool:
+    if not (row.automatic and row.mandatory_action and row.status == "pending"):
+        return False
+    profile = profiles.get(row.assigned_user_id) if row.assigned_user_id else profiles.get(viewer_id)
+    zone = resolve_timezone(profile.timezone if profile else None)
+    occurrence_day = row.starts_at.date() if row.all_day else local_date(row.starts_at, zone)
+    return occurrence_day < local_today(zone)
 
 
 @router.get("/agenda/tasks/{task_id}/history")
@@ -64,7 +73,7 @@ def agenda_task_history(
     else:
         chain = [item]
 
-    now = datetime.now(timezone.utc)
+    _, profiles, _ = ensure_agenda_structure(db, context.user.organization_id)
     return {
         "task_id": str(item.id),
         "root_task_id": str(root_id or item.id),
@@ -80,12 +89,7 @@ def agenda_task_history(
                 "completed_at": row.completed_at,
                 "created_at": row.created_at,
                 "previous_task_id": str(row.previous_task_id) if row.previous_task_id else None,
-                "needs_justification": bool(
-                    row.automatic
-                    and row.mandatory_action
-                    and row.status == "pending"
-                    and row.starts_at < now
-                ),
+                "needs_justification": _needs_justification(row, profiles, context.user.id),
                 "selected": row.id == item.id,
             }
             for row in chain
