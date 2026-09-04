@@ -29,6 +29,23 @@ jobs:
 
   backend:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_DB: imob_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d imob_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      APP_ENV: test
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/imob_test
     defaults:
       run:
         working-directory: backend
@@ -42,6 +59,10 @@ jobs:
       - run: python -c "from sqlalchemy.orm import configure_mappers; import app.domains.foundation.models; configure_mappers()"
       - run: python -c "from app.main import app; assert app.title"
       - run: alembic heads
+      - name: Prepare isolated test database
+        run: alembic upgrade head
+      - name: Critical business journeys
+        run: pytest -q
 
   container:
     runs-on: ubuntu-latest
