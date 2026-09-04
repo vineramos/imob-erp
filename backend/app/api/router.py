@@ -36,9 +36,11 @@ from app.api.routes.publication import router as publication_router
 from app.api.routes.search import router as search_router
 from app.api.routes.signature_events import router as signature_events_router
 from app.domains.agenda.source_chain_rules import install_source_chain_rule
+from app.domains.agenda.timezone_rules import install_event_collection_timezone_rule
 from app.domains.finance.settlement_rules import install_settlement_rule
 
 install_source_chain_rule()
+install_event_collection_timezone_rule()
 install_settlement_rule()
 
 api_router = APIRouter()
