@@ -33,6 +33,7 @@ MODULE_LABELS = {
 }
 
 STATUS_LABELS = {
+    "active": "Ativo",
     "draft": "Rascunho",
     "available": "Disponível",
     "reserved": "Reservado",
@@ -61,6 +62,35 @@ STATUS_LABELS = {
     "missed": "Não cumprido",
 }
 
+VALUE_LABELS = {
+    "apartment": "Apartamento",
+    "house": "Casa",
+    "commercial": "Comercial",
+    "land": "Terreno",
+    "studio": "Studio",
+    "other": "Outro",
+    "rent": "Locação",
+    "sale": "Venda",
+    "essential": "Essencial",
+    "complete": "Completo",
+    "custom": "Personalizado",
+    "initial": "Inicial",
+    "final": "Final",
+    "insurance": "Seguro fiança",
+    "deposit": "Caução",
+    "capitalization": "Título de capitalização",
+    "guarantor": "Fiador",
+    "none": "Sem garantia",
+    "low": "Baixa",
+    "normal": "Normal",
+    "high": "Alta",
+    "urgent": "Urgente",
+    "task": "Tarefa",
+    "appointment": "Compromisso",
+    "visit": "Visita",
+    "meeting": "Reunião",
+}
+
 
 def _require(context: UserContext, permission: str) -> None:
     if not context.has(permission):
@@ -84,12 +114,25 @@ def _money(value: Decimal | float | int | None) -> str:
     return f"R$ {formatted}"
 
 
+def _percent(value: Decimal | float | int | None) -> str:
+    if value is None:
+        return "—"
+    number = float(value)
+    formatted = f"{number:.4f}".rstrip("0").rstrip(".").replace(".", ",")
+    return f"{formatted}%"
+
+
 def _date(value: date | datetime | None, include_time: bool = False) -> str:
     if value is None:
         return "—"
     if isinstance(value, datetime):
         return value.strftime("%d/%m/%Y %H:%M" if include_time else "%d/%m/%Y")
     return value.strftime("%d/%m/%Y")
+
+
+def _label(value: Any) -> str:
+    text = str(value or "").strip()
+    return VALUE_LABELS.get(text, text) or "—"
 
 
 def _detail(label: str, value: Any) -> dict[str, str]:
@@ -140,7 +183,7 @@ def resolve_deep_link(
             module="people",
             code="PESSOA",
             title=item.name,
-            status_value="available" if item.is_active else "inactive",
+            status_value="active" if item.is_active else "inactive",
             subtitle=" · ".join(part for part in (item.document_number or "", item.email or "") if part) or roles,
             details=[
                 _detail("CPF/CNPJ", item.document_number),
@@ -172,8 +215,8 @@ def resolve_deep_link(
             subtitle=_address(item.address),
             details=[
                 _detail("Código", code),
-                _detail("Tipo", item.property_type),
-                _detail("Finalidade", item.purpose),
+                _detail("Tipo", _label(item.property_type)),
+                _detail("Finalidade", _label(item.purpose)),
                 _detail("Proprietário(s)", owners),
                 _detail("Aluguel", _money(item.rent_amount)),
                 _detail("Condomínio", _money(item.condo_amount)),
@@ -204,13 +247,13 @@ def resolve_deep_link(
             subtitle=_address(snapshot.get("address") if isinstance(snapshot, dict) else {}),
             details=[
                 _detail("Proprietário(s)", owners),
-                _detail("Plano", item.plan),
-                _detail("Administração", f"{item.admin_fee_percent}%" if item.admin_fee_type == "percent" and item.admin_fee_percent is not None else _money(item.admin_fee_amount)),
-                _detail("Intermediação", f"{item.intermediation_percent}%"),
+                _detail("Plano", _label(item.plan)),
+                _detail("Administração", _percent(item.admin_fee_percent) if item.admin_fee_type == "percent" else _money(item.admin_fee_amount)),
+                _detail("Intermediação", _percent(item.intermediation_percent)),
                 _detail("Início", _date(item.start_date)),
                 _detail("Fim", _date(item.end_date)),
                 _detail("Versão", item.current_version),
-                _detail("Assinatura", item.signing_status),
+                _detail("Assinatura", item.signing_status.replace("_", " ")),
             ],
         )
 
@@ -243,7 +286,7 @@ def resolve_deep_link(
                 _detail("Início", _date(item.start_date)),
                 _detail("Fim", _date(item.end_date)),
                 _detail("Reajuste", f"{item.adjustment_index} · {_date(item.next_adjustment_date)}"),
-                _detail("Garantia", item.guarantee_type),
+                _detail("Garantia", _label(item.guarantee_type)),
             ],
         )
 
@@ -264,7 +307,7 @@ def resolve_deep_link(
             status_value=item.status,
             subtitle=_address(lease_snapshot.get("property_address") or lease_snapshot.get("address") or {}),
             details=[
-                _detail("Tipo", item.inspection_type),
+                _detail("Tipo", _label(item.inspection_type)),
                 _detail("Vistoriador", item.inspector_name),
                 _detail("Agendada para", _date(item.scheduled_at, include_time=True)),
                 _detail("Realizada em", _date(item.performed_at, include_time=True)),
@@ -297,7 +340,7 @@ def resolve_deep_link(
             status_value=item.status,
             subtitle=f"Imóvel {property_code} · {_address(property_item.address if property_item else {})}",
             details=[
-                _detail("Prioridade", item.priority),
+                _detail("Prioridade", _label(item.priority)),
                 _detail("Categoria", item.category),
                 _detail("Responsabilidade", item.responsibility),
                 _detail("Serviços", len(item.services or [])),
@@ -324,7 +367,7 @@ def resolve_deep_link(
             module="maintenance",
             code=code,
             title=item.name,
-            status_value="available" if item.is_active else "inactive",
+            status_value="active" if item.is_active else "inactive",
             subtitle=item.legal_name or item.document_number or "Parceiro terceirizado",
             details=[
                 _detail("CPF/CNPJ", item.document_number),
@@ -383,10 +426,10 @@ def resolve_deep_link(
             code=code,
             title=item.title,
             status_value=item.status,
-            subtitle=f"{_date(item.starts_at, include_time=not item.all_day)} · {item.priority}",
+            subtitle=f"{_date(item.starts_at, include_time=not item.all_day)} · {_label(item.priority)}",
             details=[
-                _detail("Tipo", item.kind),
-                _detail("Prioridade", item.priority),
+                _detail("Tipo", _label(item.kind)),
+                _detail("Prioridade", _label(item.priority)),
                 _detail("Início", _date(item.starts_at, include_time=not item.all_day)),
                 _detail("Fim", _date(item.ends_at, include_time=not item.all_day)),
                 _detail("Prazo", _date(item.due_at, include_time=True)),
