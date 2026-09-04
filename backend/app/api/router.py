@@ -27,6 +27,7 @@ from app.api.routes.integrations import router as integrations_router
 from app.api.routes.leases import router as leases_router
 from app.api.routes.maintenance import router as maintenance_router
 from app.api.routes.maintenance_v2 import router as maintenance_v2_router
+from app.api.routes.notifications import router as notifications_router
 from app.api.routes.person_bank_details import router as person_bank_details_router
 from app.api.routes.person_profile import router as person_profile_router
 from app.api.routes.portfolio import router as portfolio_router
@@ -68,6 +69,7 @@ api_router.include_router(agenda_router)
 api_router.include_router(agenda_history_router)
 api_router.include_router(search_router)
 api_router.include_router(deep_links_router)
+api_router.include_router(notifications_router)
 api_router.include_router(portal_router)
 api_router.include_router(inter_webhook_router)
 api_router.include_router(signature_events_router)
