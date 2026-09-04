@@ -115,7 +115,9 @@ def _response(item: Inspection) -> InspectionResponse:
 
 def _load(db: Session, organization_id: UUID, inspection_id: UUID) -> Inspection:
     item = db.scalar(
-        select(Inspection).options(selectinload(Inspection.versions), selectinload(Inspection.key_handover))
+        select(Inspection)
+        .options(selectinload(Inspection.versions), selectinload(Inspection.key_handover))
+        .execution_options(populate_existing=True)
         .where(Inspection.id == inspection_id, Inspection.organization_id == organization_id)
     )
     if item is None:
