@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from functools import partial
 from io import BytesIO
 from typing import Any
 
@@ -9,7 +8,6 @@ from reportlab.lib.enums import TA_CENTER
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
-from reportlab.pdfgen import canvas
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 
@@ -70,6 +68,7 @@ def build_administration_contract_pdf(*, contract: Any, organization: Any) -> by
         bottomMargin=16 * mm,
         title=f"Contrato de Administração {contract.internal_number:06d}",
         author=getattr(organization, "display_name", "Imobiliária"),
+        invariant=1,
     )
     styles = getSampleStyleSheet()
     title = ParagraphStyle("ContractTitle", parent=styles["Title"], fontSize=15, leading=18, alignment=TA_CENTER, spaceAfter=8)
@@ -178,7 +177,7 @@ def build_administration_contract_pdf(*, contract: Any, organization: Any) -> by
         ),
     ])
 
-    doc.build(story, canvasmaker=partial(canvas.Canvas, invariant=1))
+    doc.build(story)
     return buffer.getvalue()
 
 
