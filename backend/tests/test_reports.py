@@ -81,17 +81,11 @@ def test_reports_annual_income_csv_and_dimob_readiness(client, identity):
 def test_reports_export_requires_specific_permission(client, identity):
     scenario, _, paid_at = _paid_rent_scenario(client)
     _grant_reports(identity, export=False)
+    params = {"year": paid_at.year, "party_type": "tenant", "person_id": scenario["tenant"]["id"]}
 
-    assert_response(
-        client.get(
-            "/api/reports/annual-income",
-            params={"year": paid_at.year, "party_type": "tenant", "person_id": scenario["tenant"]["id"]},
-        )
-    )
-    assert_response(
-        client.get(
-            "/api/reports/annual-income.csv",
-            params={"year": paid_at.year, "party_type": "tenant", "person_id": scenario["tenant"]["id"]},
-        ),
-        403,
-    )
+    assert_response(client.get("/api/reports/annual-income", params=params))
+    assert_response(client.get("/api/reports/annual-income.csv", params=params), 403)
+
+    # O painel financeiro antigo não pode virar um caminho alternativo para exportar.
+    assert_response(client.get("/api/finance/advanced/reports/annual-income", params=params))
+    assert_response(client.get("/api/finance/advanced/reports/annual-income.pdf", params=params), 403)
