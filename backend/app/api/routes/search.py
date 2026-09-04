@@ -202,7 +202,8 @@ def global_search(
             code = _code("LOC-", item.internal_number)
             tenants = ", ".join(str(row.get("name") or "") for row in (item.tenant_snapshot or []) if row.get("name"))
             snapshot = item.property_snapshot or {}
-            subtitle = " · ".join(part for part in (tenants, _address_label(snapshot.get("address") if isinstance(snapshot, dict) else {})) if snapshot else "") if part)
+            address_part = _address_label(snapshot.get("address") if isinstance(snapshot, dict) else {}) if snapshot else ""
+            subtitle = " · ".join(part for part in (tenants, address_part) if part)
             results.append(
                 _result(
                     entity_id=item.id,
