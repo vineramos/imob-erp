@@ -56,8 +56,10 @@ def _audit(db: Session, request: Request, context: UserContext, *, action: str, 
 
 
 def _query_charges():
-    return select(RentCharge).options(
-        selectinload(RentCharge.settlement).selectinload(FinancialSettlement.repasses)
+    return (
+        select(RentCharge)
+        .options(selectinload(RentCharge.settlement).selectinload(FinancialSettlement.repasses))
+        .execution_options(populate_existing=True)
     )
 
 
