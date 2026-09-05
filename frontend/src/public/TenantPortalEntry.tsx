@@ -1,6 +1,6 @@
 import { ArrowLeft, CheckCircle2, KeyRound, Mail, XCircle } from 'lucide-react'
 import { FormEvent, useEffect, useState } from 'react'
-import { ApiError, publicApiRequest } from '../api/client'
+import { ApiError, publicApiRequest, TENANT_PORTAL_AUTH_EVENT } from '../api/client'
 import { TenantPortalPage } from './TenantPortalPage'
 import './tenant-portal.css'
 import './tenant-portal-auth.css'
@@ -24,10 +24,15 @@ export function TenantPortalEntry() {
 
   useEffect(() => {
     let active = true
+    const requireAuth = () => { if (active) setAuthState('anonymous') }
+    window.addEventListener(TENANT_PORTAL_AUTH_EVENT, requireAuth)
     void publicApiRequest('/tenant-portal/me')
       .then(() => { if (active) setAuthState('authenticated') })
       .catch(() => { if (active) setAuthState('anonymous') })
-    return () => { active = false }
+    return () => {
+      active = false
+      window.removeEventListener(TENANT_PORTAL_AUTH_EVENT, requireAuth)
+    }
   }, [])
 
   if (authState === 'checking') {

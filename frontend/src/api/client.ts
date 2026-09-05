@@ -3,6 +3,7 @@ import { runtimeConfig } from '../config/runtime'
 import { formatApiPayload, normalizeJsonRequest } from '../utils/brFormat'
 
 const API_URL = runtimeConfig.apiUrl
+export const TENANT_PORTAL_AUTH_EVENT = 'imob:tenant-portal-auth-required'
 
 export class ApiError extends Error {
   status: number
@@ -56,18 +57,27 @@ function apiUrl(path: string): string { return `${API_URL}${path.startsWith('/')
 function applyBodyContentType(headers: Headers, body: BodyInit | null | undefined) {
   if (body && !(body instanceof FormData) && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json')
 }
+function notifyTenantPortalAuth(path: string, response: Response) {
+  if (typeof window === 'undefined' || !path.startsWith('/tenant-portal/')) return
+  if (response.status === 401 || response.status === 403 || path === '/tenant-portal/auth/logout') {
+    window.dispatchEvent(new Event(TENANT_PORTAL_AUTH_EVENT))
+  }
+}
 
 export async function publicApiRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
   const normalized = normalizeJsonRequest(init)
   const headers = new Headers(normalized.headers)
   applyBodyContentType(headers, normalized.body)
-  return parseResponse<T>(await fetch(apiUrl(path), { ...normalized, headers, credentials: normalized.credentials || 'include' }))
+  const response = await fetch(apiUrl(path), { ...normalized, headers, credentials: normalized.credentials || 'include' })
+  notifyTenantPortalAuth(path, response)
+  return parseResponse<T>(response)
 }
 
 export async function publicBlobRequest(path: string, init: RequestInit = {}): Promise<Blob> {
   const normalized = normalizeJsonRequest(init)
   const headers = new Headers(normalized.headers)
   const response = await fetch(apiUrl(path), { ...normalized, headers, credentials: normalized.credentials || 'include' })
+  notifyTenantPortalAuth(path, response)
   if (!response.ok) {
     const error = await errorDetail(response)
     throw new ApiError(response.status, error.detail, error.payload)
