@@ -19,6 +19,16 @@ class Settings(BaseSettings):
     clicksign_environment: str = "sandbox"
     clicksign_webhook_secret: str = ""
 
+    # E-mail transacional. Senha SMTP fica somente no ambiente/Secret Manager.
+    email_smtp_host: str = ""
+    email_smtp_port: int = 587
+    email_smtp_username: str = ""
+    email_smtp_password: str = ""
+    email_smtp_from_email: str = ""
+    email_smtp_from_name: str = "Portal do Inquilino"
+    email_smtp_use_tls: bool = True
+    email_smtp_use_ssl: bool = False
+
     # Banco Inter Empresas. As credenciais e o certificado mTLS ficam apenas
     # no ambiente/Secret Manager. O ERP persiste somente IDs e respostas
     # operacionais necessárias para rastrear cobranças e movimentações.
@@ -64,6 +74,14 @@ class Settings(BaseSettings):
         if self.clicksign_environment.strip().lower() == "production":
             return "https://app.clicksign.com/api/v3"
         return "https://sandbox.clicksign.com/api/v3"
+
+    @property
+    def email_smtp_configured(self) -> bool:
+        if not self.email_smtp_host.strip() or not self.email_smtp_from_email.strip():
+            return False
+        if self.email_smtp_username.strip() and not self.email_smtp_password:
+            return False
+        return True
 
     @property
     def inter_base_url(self) -> str:

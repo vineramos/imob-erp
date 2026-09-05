@@ -41,6 +41,7 @@ from app.api.routes.search import router as search_router
 from app.api.routes.signature_events import router as signature_events_router
 from app.api.routes.tenant_portal import admin_router as tenant_portal_admin_router
 from app.api.routes.tenant_portal import public_router as tenant_portal_router
+from app.api.routes.tenant_portal_recovery import router as tenant_portal_recovery_router
 from app.domains.agenda.source_chain_rules import install_source_chain_rule
 from app.domains.agenda.timezone_rules import install_event_collection_timezone_rule
 from app.domains.finance.settlement_rules import install_settlement_rule
@@ -86,6 +87,7 @@ api_router.include_router(search_router)
 api_router.include_router(deep_links_router)
 api_router.include_router(notifications_router)
 api_router.include_router(portal_router)
+api_router.include_router(tenant_portal_recovery_router)
 api_router.include_router(tenant_portal_router)
 api_router.include_router(inter_webhook_router)
 api_router.include_router(signature_events_router)
