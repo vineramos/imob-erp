@@ -24,7 +24,7 @@ import { ReportsPage } from './modules/reports/ReportsPage'
 import { SettingsPage } from './modules/settings/SettingsPage'
 import { ExternalPortalPage } from './public/ExternalPortalPage'
 import { PublicSitePage } from './public/PublicSitePage'
-import { TenantPortalPage } from './public/TenantPortalPage'
+import { TenantPortalEntry } from './public/TenantPortalEntry'
 import { useTheme } from './theme/ThemeProvider'
 import type { ThemeConfig } from './theme/theme'
 
@@ -126,7 +126,7 @@ function ErpApp() {
 }
 
 export default function App() {
-  if (window.location.pathname === '/portal' || window.location.pathname === '/portal/') return <TenantPortalPage/>
+  if (window.location.pathname === '/portal' || window.location.pathname === '/portal/') return <TenantPortalEntry/>
   const portalMatch = window.location.pathname.match(/^\/portal\/([^/]+)\/?$/)
   if (portalMatch) return <ExternalPortalPage token={decodeURIComponent(portalMatch[1])}/>
   const match = window.location.pathname.match(/^\/site\/([^/]+)(?:\/imoveis\/([^/]+))?\/?$/)
