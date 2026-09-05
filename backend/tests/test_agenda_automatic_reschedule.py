@@ -72,7 +72,7 @@ def _maintenance_events(client, *, start, end, maintenance_id: str):
 
 
 def test_pending_maintenance_is_rescheduled_daily_and_keeps_missed_history(client, identity):
-    today = datetime.now(timezone.utc).date()
+    today = datetime.now(SAO_PAULO).date()
     yesterday = today - timedelta(days=1)
     scheduled_at = datetime.combine(yesterday, time(hour=11, minute=30), tzinfo=timezone.utc)
     property_item = _property(client)
@@ -111,7 +111,7 @@ def test_pending_maintenance_is_rescheduled_daily_and_keeps_missed_history(clien
 
 
 def test_pending_maintenance_creates_r2_when_r1_also_expires(client, identity):
-    today = datetime.now(timezone.utc).date()
+    today = datetime.now(SAO_PAULO).date()
     original_day = today - timedelta(days=2)
     scheduled_at = datetime.combine(original_day, time(hour=11, minute=30), tzinfo=timezone.utc)
     property_item = _property(client)
@@ -126,7 +126,7 @@ def test_pending_maintenance_creates_r2_when_r1_also_expires(client, identity):
 
 
 def test_completed_maintenance_stops_chain_without_creating_next_day(client, identity):
-    today = datetime.now(timezone.utc).date()
+    today = datetime.now(SAO_PAULO).date()
     original_day = today - timedelta(days=2)
     terminal_day = today - timedelta(days=1)
     scheduled_at = datetime.combine(original_day, time(hour=11, minute=30), tzinfo=timezone.utc)
@@ -146,7 +146,7 @@ def test_completed_maintenance_stops_chain_without_creating_next_day(client, ide
 
 
 def test_cancelled_maintenance_stops_chain_without_creating_next_day(client, identity):
-    today = datetime.now(timezone.utc).date()
+    today = datetime.now(SAO_PAULO).date()
     original_day = today - timedelta(days=2)
     terminal_day = today - timedelta(days=1)
     scheduled_at = datetime.combine(original_day, time(hour=11, minute=30), tzinfo=timezone.utc)
@@ -197,7 +197,7 @@ def test_sao_paulo_local_day_drives_daily_reschedule_not_utc_day(client, identit
 
 
 def test_maintenance_completed_before_schedule_never_becomes_missed_or_rescheduled(client, identity):
-    today = datetime.now(timezone.utc).date()
+    today = datetime.now(SAO_PAULO).date()
     yesterday = today - timedelta(days=1)
     scheduled_at = datetime.combine(yesterday, time(hour=11, minute=30), tzinfo=timezone.utc)
     completed_at = scheduled_at - timedelta(days=1)

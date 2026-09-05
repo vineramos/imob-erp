@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, time, timedelta, timezone
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
 
@@ -9,6 +10,9 @@ from app.core.database import SessionLocal
 from app.domains.agenda.models import AgendaTask
 from app.domains.maintenance.models import MaintenanceRequest
 from tests.helpers import assert_response, create_person, create_property
+
+
+SAO_PAULO = ZoneInfo("America/Sao_Paulo")
 
 
 def _maintenance_source(client, identity, *, status: str, scheduled_at: datetime, completed_at: datetime | None = None) -> str:
@@ -60,7 +64,7 @@ def _source_events(client, source_id: str, start, end) -> list[dict]:
 
 def test_pending_maintenance_is_automatically_rescheduled_next_day(client, identity):
     """Manutenção vencida e ainda aberta precisa ganhar R1 no dia seguinte."""
-    today = datetime.now(timezone.utc).date()
+    today = datetime.now(SAO_PAULO).date()
     yesterday = today - timedelta(days=1)
     scheduled_at = datetime.combine(yesterday, time(hour=11, minute=30), tzinfo=timezone.utc)
     source_id = _maintenance_source(
@@ -106,7 +110,7 @@ def test_pending_maintenance_is_automatically_rescheduled_next_day(client, ident
 
 def test_source_completed_before_schedule_closes_original_and_never_reschedules(client, identity):
     """Conclusão antecipada da origem não pode virar falsa pendência na Agenda."""
-    today = datetime.now(timezone.utc).date()
+    today = datetime.now(SAO_PAULO).date()
     yesterday = today - timedelta(days=1)
     scheduled_at = datetime.combine(yesterday, time(hour=11, minute=30), tzinfo=timezone.utc)
     completed_at = scheduled_at - timedelta(days=1)

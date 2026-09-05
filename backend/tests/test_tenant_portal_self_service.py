@@ -34,10 +34,11 @@ def test_tenant_portal_self_service_first_access_and_reset(client, monkeypatch):
     assert len(sent) == 1
     code = sent[-1]["code"]
     assert len(code) == 6 and code.isdigit()
+    wrong_code = "000000" if code != "000000" else "000001"
 
     assert client.post(
         "/api/tenant-portal/auth/access/confirm",
-        json={"email": tenant["email"], "code": "999999", "password": first_password},
+        json={"email": tenant["email"], "code": wrong_code, "password": first_password},
     ).status_code == 422
 
     assert_response(
