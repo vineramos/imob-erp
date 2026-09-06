@@ -20,6 +20,7 @@ import {
 import { FormEvent, type CSSProperties, useEffect, useMemo, useState } from 'react'
 import { ApiError, publicApiRequest } from '../api/client'
 import type { PublicProperty, PublicSiteProfile } from '../api/types'
+import { PublicCaptureForm } from './PublicCaptureForm'
 import { PublicInquiryForm } from './PublicInquiryForm'
 import { PublicPropertyCardMedia, PublicPropertyGallery } from './PublicPropertyMedia'
 
@@ -171,7 +172,7 @@ export function PublicSitePage({ organizationId, slug }: Props) {
     <header className="public-header">
       {brand}
       <nav className="public-nav"><a href={`/site/${organizationId}#imoveis`}>Alugar</a><a href={`/site/${organizationId}#bairros`}>Bairros</a><a href={`/site/${organizationId}#servicos`}>Serviços</a><a href="#contato">Contato</a></nav>
-      {contactActions}
+      <div className="public-header-actions">{contactActions}<a className="public-announce" href={`/site/${organizationId}#anunciar`}>Anunciar imóvel</a></div>
     </header>
     <section className="public-detail-shell">
       <a className="public-back" href={`/site/${organizationId}#imoveis`}><ArrowLeft size={15}/> Voltar aos imóveis</a>
@@ -203,7 +204,7 @@ export function PublicSitePage({ organizationId, slug }: Props) {
       <article className="public-description-panel"><span className="public-kicker">SOBRE O IMÓVEL</span><h2>Detalhes</h2><p>{selected.description || 'Entre em contato para receber mais informações sobre este imóvel.'}</p></article>
     </section>
     <section className="public-detail-contact public-inquiry-lead" id="contato">
-      <div className="public-inquiry-intro"><span className="public-kicker">AGENDE SUA VISITA</span><h2>Gostou deste imóvel?</h2><p>Deixe seus dados e a equipe recebe este interesse diretamente no CRM, já vinculado ao imóvel.</p>{contactActions}</div>
+      <div className="public-inquiry-intro"><span className="public-kicker">AGENDE SUA VISITA</span><h2>Gostou deste imóvel?</h2><p>Deixe seus dados e a equipe recebe este interesse diretamente no CRM, já vinculado ao imóvel. Este formulário não cria uma captação.</p>{contactActions}</div>
       <PublicInquiryForm organizationId={organizationId} item={selected}/>
     </section>
     <footer className="public-footer"><div>{brand}</div><div><strong>Catálogo conectado ao Imob ERP</strong><span>Informações sujeitas a confirmação e disponibilidade.</span></div></footer>
@@ -217,8 +218,8 @@ export function PublicSitePage({ organizationId, slug }: Props) {
   return <main className="public-site" style={siteStyle}>
     <header className="public-header">
       {brand}
-      <nav className="public-nav"><a href="#imoveis">Alugar</a><a href="#bairros">Bairros</a><a href="#servicos">Serviços</a><a href="#contato">Contato</a></nav>
-      <div className="public-header-actions">{contactActions}<a className="public-announce" href="#contato">Anunciar imóvel</a></div>
+      <nav className="public-nav"><a href="#imoveis">Alugar</a><a href="#bairros">Bairros</a><a href="#servicos">Serviços</a><a href="#anunciar">Anunciar</a></nav>
+      <div className="public-header-actions">{contactActions}<a className="public-announce" href="#anunciar">Anunciar imóvel</a></div>
     </header>
 
     <section className={`public-hero ${featured ? 'has-featured' : ''}`}>
@@ -272,12 +273,14 @@ export function PublicSitePage({ organizationId, slug }: Props) {
       <div className="public-benefit"><ShieldCheck size={19}/><div><strong>Negociação segura</strong><span>Do início ao fim</span></div></div>
     </section>
 
-    <section className="public-owner-cta" id="contato">
-      <div><span className="public-kicker">É PROPRIETÁRIO?</span><h2>Quer colocar seu imóvel para alugar?</h2><p>Converse com nossa equipe sobre anúncio e administração. Depois de aprovado, o imóvel entra no mesmo fluxo que alimenta este site.</p></div>
-      <div className="public-owner-actions">
-        {whatsapp && <a className="public-primary-action" href={`https://wa.me/${whatsapp}?text=${encodeURIComponent('Olá! Tenho um imóvel e gostaria de conversar sobre locação e administração.')}`} target="_blank" rel="noreferrer"><MessageCircle size={16}/> Falar sobre meu imóvel</a>}
-        {profile.contact_email && <a className="public-secondary-action" href={`mailto:${profile.contact_email}?subject=Quero colocar meu imóvel para alugar`}><Mail size={16}/> Enviar e-mail</a>}
+    <section className="public-owner-cta public-owner-capture" id="anunciar">
+      <div className="public-owner-copy">
+        <span className="public-kicker">É PROPRIETÁRIO?</span>
+        <h2>Quer colocar seu imóvel para alugar?</h2>
+        <p>Envie os dados básicos do imóvel. A solicitação entra diretamente em Captações para análise da equipe, sem criar nem publicar um imóvel antes da aprovação.</p>
+        <div className="public-owner-flow"><span><b>1</b> Você envia os dados</span><span><b>2</b> A equipe avalia a captação</span><span><b>3</b> Só depois da aprovação nasce o cadastro definitivo do imóvel</span></div>
       </div>
+      <PublicCaptureForm organizationId={organizationId}/>
     </section>
 
     <footer className="public-footer">
