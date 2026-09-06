@@ -1,7 +1,8 @@
 import { Camera, ChevronLeft, ChevronRight } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { publicApiRequest, publicBlobRequest } from '../api/client'
+import { useEffect, useMemo, useState } from 'react'
+import { publicApiRequest } from '../api/client'
 import type { PublicProperty } from '../api/types'
+import { runtimeConfig } from '../config/runtime'
 import './public-property-media.css'
 
 type PublicPhoto = {
@@ -14,59 +15,42 @@ type PublicPhoto = {
   content_url: string
 }
 
-type LoadedPhoto = PublicPhoto & { objectUrl: string }
+type PublicPropertyWithCover = PublicProperty & { cover_photo_url?: string | null }
 
 function propertyType(value: string) {
   const labels: Record<string, string> = { apartment: 'Apartamento', house: 'Casa', commercial: 'Comercial', land: 'Terreno', studio: 'Studio', other: 'Imóvel' }
   return labels[value] ?? value
 }
 
-export function PublicPropertyCardMedia({ organizationId, item }: { organizationId: string; item: PublicProperty }) {
-  const [photoUrl, setPhotoUrl] = useState<string | null>(null)
+function mediaUrl(path: string) {
+  if (/^https?:\/\//i.test(path)) return path
+  return `${runtimeConfig.apiUrl}${path.startsWith('/') ? path : `/${path}`}`
+}
 
-  useEffect(() => {
-    let active = true
-    let objectUrl: string | null = null
-    async function load() {
-      try {
-        const photos = await publicApiRequest<PublicPhoto[]>(`/public/sites/${organizationId}/properties/${item.slug}/photos`)
-        const cover = photos.find((photo) => photo.is_cover) ?? photos[0]
-        if (!cover) return
-        const blob = await publicBlobRequest(cover.content_url)
-        objectUrl = URL.createObjectURL(blob)
-        if (active) setPhotoUrl(objectUrl)
-      } catch { /* mantém fallback visual */ }
-    }
-    void load()
-    return () => { active = false; if (objectUrl) URL.revokeObjectURL(objectUrl) }
-  }, [organizationId, item.slug])
-
-  return <div className={`public-property-visual ${photoUrl ? 'public-property-photo' : ''}`}>
-    {photoUrl ? <img src={photoUrl} alt={item.title}/> : <span>{propertyType(item.property_type)}</span>}
+export function PublicPropertyCardMedia({ organizationId: _organizationId, item }: { organizationId: string; item: PublicProperty }) {
+  const cover = (item as PublicPropertyWithCover).cover_photo_url || null
+  return <div className={`public-property-visual ${cover ? 'public-property-photo' : ''}`}>
+    {cover ? <img loading="lazy" src={mediaUrl(cover)} alt={item.title}/> : <span>{propertyType(item.property_type)}</span>}
     <small>#{item.code}</small>
   </div>
 }
 
 export function PublicPropertyGallery({ organizationId, item }: { organizationId: string; item: PublicProperty }) {
-  const [photos, setPhotos] = useState<LoadedPhoto[]>([])
+  const [photos, setPhotos] = useState<PublicPhoto[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
-  const urls = useRef<string[]>([])
 
   useEffect(() => {
     let active = true
     async function load() {
       try {
         const metadata = await publicApiRequest<PublicPhoto[]>(`/public/sites/${organizationId}/properties/${item.slug}/photos`)
-        const loaded = await Promise.all(metadata.map(async (photo) => ({ ...photo, objectUrl: URL.createObjectURL(await publicBlobRequest(photo.content_url)) })))
-        if (!active) { loaded.forEach((photo) => URL.revokeObjectURL(photo.objectUrl)); return }
-        urls.current.forEach((url) => URL.revokeObjectURL(url))
-        urls.current = loaded.map((photo) => photo.objectUrl)
-        setPhotos(loaded)
-        setSelectedId(loaded.find((photo) => photo.is_cover)?.id ?? loaded[0]?.id ?? null)
+        if (!active) return
+        setPhotos(metadata)
+        setSelectedId(metadata.find((photo) => photo.is_cover)?.id ?? metadata[0]?.id ?? null)
       } catch { /* mantém fallback visual */ }
     }
     void load()
-    return () => { active = false; urls.current.forEach((url) => URL.revokeObjectURL(url)); urls.current = [] }
+    return () => { active = false }
   }, [organizationId, item.slug])
 
   const selected = useMemo(() => photos.find((photo) => photo.id === selectedId) ?? photos.find((photo) => photo.is_cover) ?? photos[0] ?? null, [photos, selectedId])
@@ -76,8 +60,8 @@ export function PublicPropertyGallery({ organizationId, item }: { organizationId
   if (!selected) return <div className="public-detail-visual public-detail-photo-fallback"><Camera size={28}/><span>{propertyType(item.property_type)}</span><strong>{item.title}</strong></div>
 
   return <div className="public-detail-gallery">
-    <div className="public-detail-gallery-main"><img src={selected.objectUrl} alt={selected.caption || item.title}/>{photos.length > 1 && <><button type="button" className="previous" aria-label="Foto anterior" onClick={() => shift(-1)}><ChevronLeft size={19}/></button><button type="button" className="next" aria-label="Próxima foto" onClick={() => shift(1)}><ChevronRight size={19}/></button></>}<span>{index + 1} / {photos.length}</span></div>
-    {photos.length > 1 && <div className="public-detail-gallery-thumbs">{photos.map((photo) => <button type="button" className={photo.id === selected.id ? 'active' : ''} key={photo.id} onClick={() => setSelectedId(photo.id)}><img src={photo.objectUrl} alt={photo.caption || item.title}/></button>)}</div>}
+    <div className="public-detail-gallery-main"><img src={mediaUrl(selected.content_url)} alt={selected.caption || item.title}/>{photos.length > 1 && <><button type="button" className="previous" aria-label="Foto anterior" onClick={() => shift(-1)}><ChevronLeft size={19}/></button><button type="button" className="next" aria-label="Próxima foto" onClick={() => shift(1)}><ChevronRight size={19}/></button></>}<span>{index + 1} / {photos.length}</span></div>
+    {photos.length > 1 && <div className="public-detail-gallery-thumbs">{photos.map((photo) => <button type="button" className={photo.id === selected.id ? 'active' : ''} key={photo.id} onClick={() => setSelectedId(photo.id)}><img loading="lazy" src={mediaUrl(photo.content_url)} alt={photo.caption || item.title}/></button>)}</div>}
     {selected.caption && <small className="public-detail-gallery-caption">{selected.caption}</small>}
   </div>
 }

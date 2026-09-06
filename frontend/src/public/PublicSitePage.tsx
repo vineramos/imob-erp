@@ -12,7 +12,6 @@ import {
   MapPin,
   MapPinned,
   MessageCircle,
-  PawPrint,
   Phone,
   Ruler,
   Search,
@@ -21,6 +20,7 @@ import {
 import { FormEvent, type CSSProperties, useEffect, useMemo, useState } from 'react'
 import { ApiError, publicApiRequest } from '../api/client'
 import type { PublicProperty, PublicSiteProfile } from '../api/types'
+import { PublicInquiryForm } from './PublicInquiryForm'
 import { PublicPropertyCardMedia, PublicPropertyGallery } from './PublicPropertyMedia'
 
 function money(value: number | null) {
@@ -170,7 +170,7 @@ export function PublicSitePage({ organizationId, slug }: Props) {
   if (selected) return <main className="public-site" style={siteStyle}>
     <header className="public-header">
       {brand}
-      <nav className="public-nav"><a href={`/site/${organizationId}#imoveis`}>Alugar</a><a href={`/site/${organizationId}#bairros`}>Bairros</a><a href={`/site/${organizationId}#servicos`}>Serviços</a><a href={`/site/${organizationId}#contato`}>Contato</a></nav>
+      <nav className="public-nav"><a href={`/site/${organizationId}#imoveis`}>Alugar</a><a href={`/site/${organizationId}#bairros`}>Bairros</a><a href={`/site/${organizationId}#servicos`}>Serviços</a><a href="#contato">Contato</a></nav>
       {contactActions}
     </header>
     <section className="public-detail-shell">
@@ -202,7 +202,10 @@ export function PublicSitePage({ organizationId, slug }: Props) {
       </div>
       <article className="public-description-panel"><span className="public-kicker">SOBRE O IMÓVEL</span><h2>Detalhes</h2><p>{selected.description || 'Entre em contato para receber mais informações sobre este imóvel.'}</p></article>
     </section>
-    <section className="public-detail-contact" id="contato"><div><span className="public-kicker">AGENDE SUA VISITA</span><h2>Gostou deste imóvel?</h2><p>Converse com nossa equipe para confirmar disponibilidade, tirar dúvidas e agendar uma visita.</p></div>{contactActions}</section>
+    <section className="public-detail-contact public-inquiry-lead" id="contato">
+      <div className="public-inquiry-intro"><span className="public-kicker">AGENDE SUA VISITA</span><h2>Gostou deste imóvel?</h2><p>Deixe seus dados e a equipe recebe este interesse diretamente no CRM, já vinculado ao imóvel.</p>{contactActions}</div>
+      <PublicInquiryForm organizationId={organizationId} item={selected}/>
+    </section>
     <footer className="public-footer"><div>{brand}</div><div><strong>Catálogo conectado ao Imob ERP</strong><span>Informações sujeitas a confirmação e disponibilidade.</span></div></footer>
   </main>
 

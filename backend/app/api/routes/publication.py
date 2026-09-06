@@ -1,11 +1,11 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
-from pydantic import BaseModel, Field
-from sqlalchemy import func, select
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.database import get_db
@@ -19,6 +19,7 @@ from app.domains.portfolio.schemas import (
     PublicationReadinessResponse,
     PublicationUpdate,
 )
+from app.domains.portfolio.site_models import PublicSiteInquiry
 
 router = APIRouter(tags=["publication"])
 
@@ -50,6 +51,49 @@ class CommercialPropertyProfileUpdate(BaseModel):
     rent_amount: Decimal | None = Field(default=None, ge=0)
     condo_amount: Decimal | None = Field(default=None, ge=0)
     iptu_amount: Decimal | None = Field(default=None, ge=0)
+
+
+class PublicPropertySiteResponse(PublicPropertyResponse):
+    cover_photo_url: str | None = None
+
+
+class PublicSiteInquiryCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=2, max_length=120)
+    email: EmailStr | None = None
+    phone: str | None = Field(default=None, max_length=40)
+    preferred_contact: Literal["whatsapp", "phone", "email"] = "whatsapp"
+    message: str | None = Field(default=None, max_length=2000)
+    consent: bool
+    website: str = Field(default="", max_length=200)
+
+
+class PublicSiteInquiryAck(BaseModel):
+    accepted: bool = True
+    message: str
+
+
+class SiteInquiryResponse(BaseModel):
+    id: UUID
+    property_id: UUID | None = None
+    property_code: str
+    property_title: str
+    name: str
+    email: str | None = None
+    phone: str | None = None
+    preferred_contact: str
+    message: str | None = None
+    status: str
+    source: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class SiteInquiryUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    status: Literal["new", "contacted", "visit_scheduled", "qualified", "lost"]
 
 
 def _request_metadata(request: Request) -> tuple[str | None, str | None]:
@@ -272,7 +316,7 @@ def _public_site_settings(db: Session, organization_id: UUID) -> tuple[Organizat
     if organization is None or settings is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Site público não disponível.")
 
-    integrations = (settings.integrations or {})
+    integrations = settings.integrations or {}
     has_published_rental = db.scalar(
         select(Property.id)
         .where(
@@ -313,10 +357,45 @@ def _public_address(item: Property) -> dict[str, str]:
     }
 
 
-def _public_response(item: Property) -> PublicPropertyResponse:
-    return PublicPropertyResponse(
+def _public_property_item(db: Session, organization_id: UUID, slug: str) -> Property:
+    item = db.scalar(
+        select(Property).where(
+            Property.organization_id == organization_id,
+            Property.public_slug == slug,
+            Property.publication_enabled.is_(True),
+            Property.status == "available",
+        )
+    )
+    if item is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Imóvel publicado não encontrado.")
+    return item
+
+
+def _cover_photo_map(db: Session, items: list[Property]) -> dict[UUID, UUID]:
+    property_ids = [item.id for item in items]
+    if not property_ids:
+        return {}
+    rows = db.execute(
+        select(PropertyPhoto.property_id, PropertyPhoto.id)
+        .where(PropertyPhoto.property_id.in_(property_ids), PropertyPhoto.is_cover.is_(True))
+        .order_by(PropertyPhoto.position.asc(), PropertyPhoto.created_at.asc())
+    ).all()
+    result: dict[UUID, UUID] = {}
+    for property_id, photo_id in rows:
+        result.setdefault(property_id, photo_id)
+    return result
+
+
+def _public_response(item: Property, organization_id: UUID, cover_photo_id: UUID | None = None) -> PublicPropertySiteResponse:
+    slug = item.public_slug or f"imovel-{item.internal_number:06d}"
+    cover_photo_url = (
+        f"/public/sites/{organization_id}/properties/{slug}/photos/{cover_photo_id}/content"
+        if cover_photo_id
+        else None
+    )
+    return PublicPropertySiteResponse(
         code=f"{item.internal_number:06d}",
-        slug=item.public_slug or f"imovel-{item.internal_number:06d}",
+        slug=slug,
         property_type=item.property_type,
         purpose=item.purpose,
         address=_public_address(item),
@@ -333,36 +412,224 @@ def _public_response(item: Property) -> PublicPropertyResponse:
         title=item.public_title or f"Imóvel {item.internal_number:06d}",
         description=item.public_description or "",
         published_at=item.published_at,
+        cover_photo_url=cover_photo_url,
     )
 
 
-@router.get("/public/sites/{organization_id}/properties", response_model=list[PublicPropertyResponse])
-def public_properties(organization_id: UUID, db: Session = Depends(get_db)) -> list[PublicPropertyResponse]:
+@router.get("/public/sites/{organization_id}/properties", response_model=list[PublicPropertySiteResponse])
+def public_properties(organization_id: UUID, db: Session = Depends(get_db)) -> list[PublicPropertySiteResponse]:
     _public_site_settings(db, organization_id)
-    items = db.scalars(
-        select(Property)
-        .where(
-            Property.organization_id == organization_id,
-            Property.publication_enabled.is_(True),
-            Property.status == "available",
+    items = list(
+        db.scalars(
+            select(Property)
+            .where(
+                Property.organization_id == organization_id,
+                Property.publication_enabled.is_(True),
+                Property.status == "available",
+            )
+            .order_by(Property.published_at.desc().nullslast(), Property.internal_number.desc())
+            .limit(500)
+        ).all()
+    )
+    covers = _cover_photo_map(db, items)
+    return [_public_response(item, organization_id, covers.get(item.id)) for item in items]
+
+
+@router.get("/public/sites/{organization_id}/properties/{slug}", response_model=PublicPropertySiteResponse)
+def public_property_detail(organization_id: UUID, slug: str, db: Session = Depends(get_db)) -> PublicPropertySiteResponse:
+    _public_site_settings(db, organization_id)
+    item = _public_property_item(db, organization_id, slug)
+    cover_id = db.scalar(
+        select(PropertyPhoto.id)
+        .where(PropertyPhoto.property_id == item.id, PropertyPhoto.is_cover.is_(True))
+        .order_by(PropertyPhoto.position.asc(), PropertyPhoto.created_at.asc())
+        .limit(1)
+    )
+    return _public_response(item, organization_id, cover_id)
+
+
+def _normalized_inquiry_contact(payload: PublicSiteInquiryCreate) -> tuple[str, str | None, str | None]:
+    name = payload.name.strip()
+    if len(name) < 2:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Informe seu nome.")
+    email = str(payload.email).strip().lower() if payload.email else None
+    phone_digits = "".join(char for char in (payload.phone or "") if char.isdigit())
+    phone = phone_digits or None
+    if phone and not 10 <= len(phone) <= 15:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Informe um telefone válido.")
+    if not email and not phone:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Informe telefone ou e-mail para contato.")
+    if payload.preferred_contact == "email" and not email:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Informe o e-mail escolhido para contato.")
+    if payload.preferred_contact in {"phone", "whatsapp"} and not phone:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Informe o telefone escolhido para contato.")
+    if payload.consent is not True:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Autorize o contato para enviar seu interesse.")
+    return name, email, phone
+
+
+@router.post(
+    "/public/sites/{organization_id}/properties/{slug}/inquiries",
+    response_model=PublicSiteInquiryAck,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_public_site_inquiry(
+    organization_id: UUID,
+    slug: str,
+    payload: PublicSiteInquiryCreate,
+    request: Request,
+    db: Session = Depends(get_db),
+) -> PublicSiteInquiryAck:
+    _public_site_settings(db, organization_id)
+    property_item = _public_property_item(db, organization_id, slug)
+
+    # Campo invisível para pessoas; bots que o preenchem recebem resposta genérica sem gravar PII.
+    if payload.website.strip():
+        return PublicSiteInquiryAck(message="Recebemos seu interesse. Nossa equipe fará o contato.")
+
+    name, email, phone = _normalized_inquiry_contact(payload)
+    ip_address, user_agent = _request_metadata(request)
+    now = datetime.now(timezone.utc)
+
+    if ip_address:
+        recent_count = int(
+            db.scalar(
+                select(func.count(PublicSiteInquiry.id)).where(
+                    PublicSiteInquiry.organization_id == organization_id,
+                    PublicSiteInquiry.requester_ip == ip_address,
+                    PublicSiteInquiry.created_at >= now - timedelta(minutes=10),
+                )
+            )
+            or 0
         )
-        .order_by(Property.published_at.desc().nullslast(), Property.internal_number.desc())
-        .limit(500)
-    ).all()
-    return [_public_response(item) for item in items]
+        if recent_count >= 5:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="Muitas solicitações em sequência. Aguarde alguns minutos e tente novamente.",
+            )
+
+    contact_matches = []
+    if email:
+        contact_matches.append(func.lower(PublicSiteInquiry.email) == email)
+    if phone:
+        contact_matches.append(PublicSiteInquiry.phone == phone)
+    if contact_matches:
+        duplicate = db.scalar(
+            select(PublicSiteInquiry.id)
+            .where(
+                PublicSiteInquiry.organization_id == organization_id,
+                PublicSiteInquiry.property_id == property_item.id,
+                PublicSiteInquiry.created_at >= now - timedelta(minutes=30),
+                or_(*contact_matches),
+            )
+            .limit(1)
+        )
+        if duplicate is not None:
+            return PublicSiteInquiryAck(message="Recebemos seu interesse. Nossa equipe fará o contato.")
+
+    item = PublicSiteInquiry(
+        organization_id=organization_id,
+        property_id=property_item.id,
+        property_code=f"{property_item.internal_number:06d}",
+        property_title=property_item.public_title or f"Imóvel {property_item.internal_number:06d}",
+        name=name,
+        email=email,
+        phone=phone,
+        preferred_contact=payload.preferred_contact,
+        message=(payload.message or "").strip() or None,
+        consent_at=now,
+        status="new",
+        source="public_site",
+        requester_ip=ip_address,
+        user_agent=user_agent,
+    )
+    db.add(item)
+    db.commit()
+    return PublicSiteInquiryAck(message="Recebemos seu interesse. Nossa equipe fará o contato.")
 
 
-@router.get("/public/sites/{organization_id}/properties/{slug}", response_model=PublicPropertyResponse)
-def public_property_detail(organization_id: UUID, slug: str, db: Session = Depends(get_db)) -> PublicPropertyResponse:
-    _public_site_settings(db, organization_id)
+def _site_inquiry_response(item: PublicSiteInquiry) -> SiteInquiryResponse:
+    return SiteInquiryResponse(
+        id=item.id,
+        property_id=item.property_id,
+        property_code=item.property_code,
+        property_title=item.property_title,
+        name=item.name,
+        email=item.email,
+        phone=item.phone,
+        preferred_contact=item.preferred_contact,
+        message=item.message,
+        status=item.status,
+        source=item.source,
+        created_at=item.created_at,
+        updated_at=item.updated_at,
+    )
+
+
+@router.get("/crm/site-inquiries", response_model=list[SiteInquiryResponse])
+def list_site_inquiries(
+    inquiry_status: str | None = Query(default=None, alias="status", max_length=32),
+    q: str = Query(default="", max_length=120),
+    context: UserContext = Depends(require_permission("crm.view")),
+    db: Session = Depends(get_db),
+) -> list[SiteInquiryResponse]:
+    stmt = (
+        select(PublicSiteInquiry)
+        .where(PublicSiteInquiry.organization_id == context.user.organization_id)
+        .order_by(PublicSiteInquiry.created_at.desc())
+        .limit(250)
+    )
+    if inquiry_status:
+        stmt = stmt.where(PublicSiteInquiry.status == inquiry_status)
+    items = list(db.scalars(stmt).all())
+    term = q.strip().lower()
+    if term:
+        items = [
+            item
+            for item in items
+            if term
+            in " ".join(
+                filter(
+                    None,
+                    [item.property_code, item.property_title, item.name, item.email or "", item.phone or "", item.message or ""],
+                )
+            ).lower()
+        ]
+    return [_site_inquiry_response(item) for item in items]
+
+
+@router.patch("/crm/site-inquiries/{inquiry_id}", response_model=SiteInquiryResponse)
+def update_site_inquiry(
+    inquiry_id: UUID,
+    payload: SiteInquiryUpdate,
+    request: Request,
+    context: UserContext = Depends(require_permission("crm.manage")),
+    db: Session = Depends(get_db),
+) -> SiteInquiryResponse:
     item = db.scalar(
-        select(Property).where(
-            Property.organization_id == organization_id,
-            Property.public_slug == slug,
-            Property.publication_enabled.is_(True),
-            Property.status == "available",
+        select(PublicSiteInquiry).where(
+            PublicSiteInquiry.id == inquiry_id,
+            PublicSiteInquiry.organization_id == context.user.organization_id,
         )
     )
     if item is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Imóvel publicado não encontrado.")
-    return _public_response(item)
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Interesse não encontrado.")
+
+    before = {"status": item.status}
+    item.status = payload.status
+    ip_address, user_agent = _request_metadata(request)
+    write_audit(
+        db,
+        context=context,
+        action="crm.site_inquiry.updated",
+        module="crm",
+        entity_type="public_site_inquiry",
+        entity_id=str(item.id),
+        before_data=before,
+        after_data={"status": item.status},
+        ip_address=ip_address,
+        user_agent=user_agent,
+    )
+    db.commit()
+    db.refresh(item)
+    return _site_inquiry_response(item)
