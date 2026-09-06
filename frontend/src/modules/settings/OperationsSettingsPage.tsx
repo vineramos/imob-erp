@@ -11,8 +11,12 @@ const adjustmentIndexes: { value: AdjustmentIndex; label: string }[] = [
   { value: 'IPC-FIPE', label: 'IPC-FIPE — Índice de Preços ao Consumidor' },
   { value: 'IGP-DI', label: 'IGP-DI — Índice Geral de Preços - Disponibilidade Interna' },
 ]
-const defaults: OperationalDefaults = {
-  rent_due_day: 10, owner_repasse_business_days: 2, residential_lease_months: 30, adjustment_index: 'IPCA', termination_fine_months: 3, inspection_contest_days: 5, default_admin_fee_percent: 10, delinquency_critical_day: 5,
+type OperationsForm = OperationalDefaults & {
+  delinquency_first_contact_day: number
+  delinquency_followup_day: number
+}
+const defaults: OperationsForm = {
+  rent_due_day: 10, owner_repasse_business_days: 2, residential_lease_months: 30, adjustment_index: 'IPCA', termination_fine_months: 3, inspection_contest_days: 5, default_admin_fee_percent: 10, delinquency_first_contact_day: 1, delinquency_followup_day: 3, delinquency_critical_day: 5,
 }
 type Props = { canEdit: boolean }
 type IndexHistory = { index_code:string; name:string; from_competence:string; average_12m:number|null; months_in_average:number; sync_message:string|null; values:EconomicIndexValue[] }
@@ -25,7 +29,7 @@ function competenceLabel(value: string | null | undefined) {
 function rate(value:number){return Number(value).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:4})+'%'}
 
 export function OperationsSettingsPage({ canEdit }: Props) {
-  const [form, setForm] = useState<OperationalDefaults>(defaults)
+  const [form, setForm] = useState<OperationsForm>(defaults)
   const [indices, setIndices] = useState<EconomicIndexValue[]>([])
   const [syncing, setSyncing] = useState<AdjustmentIndex | null>(null)
   const [syncInfo, setSyncInfo] = useState<Partial<Record<AdjustmentIndex, EconomicIndexSync>>>({})
@@ -41,7 +45,7 @@ export function OperationsSettingsPage({ canEdit }: Props) {
   useEffect(() => {
     if (!authConfigured) return
     let active = true
-    void Promise.all([apiRequest<OperationalDefaults>('/settings/operations'), apiRequest<EconomicIndexValue[]>('/economic-indices/latest')])
+    void Promise.all([apiRequest<OperationsForm>('/settings/operations'), apiRequest<EconomicIndexValue[]>('/economic-indices/latest')])
       .then(([data, latest]) => { if (active) { setForm(data); setIndices(latest) } })
       .catch((cause) => { if (active) setError(cause instanceof ApiError ? cause.detail : 'Não foi possível carregar os padrões operacionais.') })
       .finally(() => { if (active) setLoading(false) })
@@ -49,15 +53,15 @@ export function OperationsSettingsPage({ canEdit }: Props) {
   }, [])
   useEffect(()=>{if(!historyCode)return;const close=(event:KeyboardEvent)=>{if(event.key==='Escape')setHistoryCode(null)};window.addEventListener('keydown',close);return()=>window.removeEventListener('keydown',close)},[historyCode])
 
-  function numberField<K extends keyof OperationalDefaults>(key: K, value: string) {
+  function numberField<K extends keyof OperationsForm>(key: K, value: string) {
     setForm((current) => ({ ...current, [key]: Number(value) })); setSuccess('')
   }
   async function save(event: FormEvent) {
     event.preventDefault(); if (!canEdit) return
     setSaving(true); setError(''); setSuccess('')
     try {
-      const updated = authConfigured ? await apiRequest<OperationalDefaults>('/settings/operations', { method: 'PUT', body: JSON.stringify(form) }) : form
-      setForm(updated); setSuccess('Padrões operacionais salvos. Novos registros passam a usar esta configuração.')
+      const updated = authConfigured ? await apiRequest<OperationsForm>('/settings/operations', { method: 'PUT', body: JSON.stringify(form) }) : form
+      setForm(updated); setSuccess('Padrões operacionais salvos. A régua de inadimplência passa a usar estes marcos na operação.')
     } catch (cause) { setError(cause instanceof ApiError ? cause.detail : 'Não foi possível salvar os padrões operacionais.') }
     finally { setSaving(false) }
   }
@@ -86,9 +90,9 @@ export function OperationsSettingsPage({ canEdit }: Props) {
     <form id="operations-settings-form" onSubmit={save} className="operations-settings-grid">
       <div className="operations-settings-main">
         <article className="panel settings-card-refined"><div className="settings-card-title"><div className="settings-card-icon"><CalendarClock size={18}/></div><div><span className="eyebrow">Locação</span><h2>Contrato e cobrança</h2><p>Padrões aplicados somente aos novos registros.</p></div></div><div className="form-grid two-columns refined-form-grid"><label className="field"><span>Vencimento padrão do aluguel</span><input disabled={!canEdit} min={1} max={28} type="number" value={form.rent_due_day} onChange={(e)=>numberField('rent_due_day',e.target.value)}/></label><label className="field"><span>Prazo residencial (meses)</span><input disabled={!canEdit} min={1} max={120} type="number" value={form.residential_lease_months} onChange={(e)=>numberField('residential_lease_months',e.target.value)}/></label><label className="field"><span>Índice de reajuste</span><select disabled={!canEdit} value={form.adjustment_index} onChange={(e)=>setForm((current)=>({...current,adjustment_index:e.target.value as AdjustmentIndex}))}>{adjustmentIndexes.map((index)=><option key={index.value} value={index.value}>{index.label}</option>)}</select></label><label className="field"><span>Multa rescisória (aluguéis)</span><input disabled={!canEdit} min={0} max={12} step="0.5" type="number" value={form.termination_fine_months} onChange={(e)=>numberField('termination_fine_months',e.target.value)}/></label><label className="field"><span>Administração padrão (%)</span><input disabled={!canEdit} min={0} max={100} step="0.1" type="number" value={form.default_admin_fee_percent} onChange={(e)=>numberField('default_admin_fee_percent',e.target.value)}/></label><label className="field"><span>Repasse ao proprietário (dias úteis)</span><input disabled={!canEdit} min={0} max={20} type="number" value={form.owner_repasse_business_days} onChange={(e)=>numberField('owner_repasse_business_days',e.target.value)}/></label></div></article>
-        <article className="panel settings-card-refined"><div className="settings-card-title"><div className="settings-card-icon"><ShieldCheck size={18}/></div><div><span className="eyebrow">Controle</span><h2>Prazos críticos</h2><p>Alertas e janelas padrão de operação.</p></div></div><div className="form-grid two-columns refined-form-grid"><label className="field"><span>Contestação de vistoria (dias)</span><input disabled={!canEdit} min={1} max={30} type="number" value={form.inspection_contest_days} onChange={(e)=>numberField('inspection_contest_days',e.target.value)}/></label><label className="field"><span>Inadimplência crítica a partir do dia</span><input disabled={!canEdit} min={1} max={90} type="number" value={form.delinquency_critical_day} onChange={(e)=>numberField('delinquency_critical_day',e.target.value)}/></label></div></article>
+        <article className="panel settings-card-refined"><div className="settings-card-title"><div className="settings-card-icon"><ShieldCheck size={18}/></div><div><span className="eyebrow">Controle</span><h2>Prazos críticos e régua de cobrança</h2><p>Marcos automáticos da inadimplência. A ordem deve respeitar primeiro contato ≤ acompanhamento ≤ garantia.</p></div></div><div className="form-grid two-columns refined-form-grid"><label className="field"><span>Contestação de vistoria (dias)</span><input disabled={!canEdit} min={1} max={30} type="number" value={form.inspection_contest_days} onChange={(e)=>numberField('inspection_contest_days',e.target.value)}/></label><label className="field"><span>Primeiro contato após vencimento (D+)</span><input disabled={!canEdit} min={1} max={90} type="number" value={form.delinquency_first_contact_day} onChange={(e)=>numberField('delinquency_first_contact_day',e.target.value)}/></label><label className="field"><span>Acompanhamento da cobrança (D+)</span><input disabled={!canEdit} min={1} max={90} type="number" value={form.delinquency_followup_day} onChange={(e)=>numberField('delinquency_followup_day',e.target.value)}/></label><label className="field"><span>Marco crítico / garantia (D+)</span><input disabled={!canEdit} min={1} max={90} type="number" value={form.delinquency_critical_day} onChange={(e)=>numberField('delinquency_critical_day',e.target.value)}/></label></div></article>
       </div>
-      <aside className="operations-settings-side"><article className="panel settings-principle-card"><ShieldCheck size={20}/><div><span className="eyebrow">Princípio estrutural</span><h2>Configuração não reescreve histórico</h2><p>Cada contrato guarda sua própria regra na data da contratação.</p></div></article></aside>
+      <aside className="operations-settings-side"><article className="panel settings-principle-card"><ShieldCheck size={20}/><div><span className="eyebrow">Princípio estrutural</span><h2>Configuração não reescreve histórico</h2><p>Cada contrato guarda sua própria regra na data da contratação; a régua operacional usa os marcos configurados e mantém cada ação registrada no histórico.</p></div></article></aside>
     </form>
 
     <article className="panel economic-indices-card"><div className="settings-card-title"><div className="settings-card-icon"><Database size={18}/></div><div><span className="eyebrow">Séries oficiais</span><h2>Índices econômicos</h2><p>Histórico oficial desde janeiro/2025, com média móvel dos últimos 12 meses.</p></div></div><div className="economic-index-grid">{adjustmentIndexes.map(({value,label})=>{const current=indices.find((item)=>item.index_code===value);const state=syncInfo[value];return <div className="economic-index-item" key={value}><div className="economic-index-name"><strong>{value}</strong><span>{label.split(' — ')[1]}</span></div><div className="economic-index-current"><span>Última competência</span><strong>{current?competenceLabel(current.competence):'—'}</strong><small>{current?rate(Number(current.monthly_rate)):'Sem valor local'}{state?.status==='awaiting_publication'?' · aguardando publicação':''}</small></div><div className="economic-index-actions"><button className="button secondary compact" type="button" onClick={()=>void openHistory(value)}><History size={13}/> Histórico</button><button className="button secondary compact" type="button" disabled={!canEdit||syncing!==null} onClick={()=>void syncIndex(value)}><RefreshCw size={13}/>{syncing===value?'Consultando...':'Atualizar'}</button></div></div>})}</div></article>

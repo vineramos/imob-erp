@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
 
 
 class ThemeConfig(BaseModel):
@@ -76,7 +76,21 @@ class OperationalDefaultsConfig(BaseModel):
     termination_fine_months: float = Field(default=3, ge=0, le=12)
     inspection_contest_days: int = Field(default=5, ge=1, le=30)
     default_admin_fee_percent: float = Field(default=10, ge=0, le=100)
+    delinquency_first_contact_day: int = Field(default=1, ge=1, le=90)
+    delinquency_followup_day: int = Field(default=3, ge=1, le=90)
     delinquency_critical_day: int = Field(default=5, ge=1, le=90)
+
+    @model_validator(mode="after")
+    def validate_delinquency_ladder(self):
+        if not (
+            self.delinquency_first_contact_day
+            <= self.delinquency_followup_day
+            <= self.delinquency_critical_day
+        ):
+            raise ValueError(
+                "A régua de inadimplência deve respeitar: primeiro contato <= acompanhamento <= marco crítico."
+            )
+        return self
 
 
 class IntegrationsConfig(BaseModel):
