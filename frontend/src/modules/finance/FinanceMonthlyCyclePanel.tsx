@@ -97,7 +97,7 @@ export function FinanceMonthlyCyclePanel({onNavigateArea}:Props){
 
   useEffect(()=>{void load()},[load])
 
-  function navigate(target:string|null){
+  function navigate(target:string|null|undefined){
     if(!target)return
     if(target==='communications'||target==='contracts'){
       window.location.assign(`/app/${target}`)
