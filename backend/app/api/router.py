@@ -28,6 +28,7 @@ from app.api.routes.foundation import router as foundation_router
 from app.api.routes.health import router as health_router
 from app.api.routes.inspections import router as inspections_router
 from app.api.routes.integrations import router as integrations_router
+from app.api.routes.lease_exit import router as lease_exit_router
 from app.api.routes.leases import router as leases_router
 from app.api.routes.lease_lifecycle import router as lease_lifecycle_router
 from app.api.routes.maintenance import router as maintenance_router
@@ -73,6 +74,7 @@ api_router.include_router(property_media_router)
 api_router.include_router(contracts_router)
 api_router.include_router(leases_router)
 api_router.include_router(lease_lifecycle_router)
+api_router.include_router(lease_exit_router)
 api_router.include_router(inspections_router)
 api_router.include_router(maintenance_router)
 api_router.include_router(maintenance_v2_router)
