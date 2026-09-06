@@ -1,12 +1,15 @@
 from __future__ import annotations
 
+import json
 from datetime import datetime, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi.responses import PlainTextResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.config import get_settings
 from app.core.database import get_db
 from app.domains.communications.models import (
     CommunicationEvent,
@@ -35,6 +38,15 @@ from app.domains.leases.models import LeaseContract
 from app.domains.portfolio.models import Person
 from app.integrations.document_storage import DocumentStorageError, get_document_storage
 from app.integrations.email import EmailDeliveryError, send_email_message, smtp_configured
+from app.integrations.whatsapp import (
+    WhatsAppDeliveryError,
+    extract_whatsapp_statuses,
+    send_whatsapp_text,
+    verify_whatsapp_webhook_challenge,
+    verify_whatsapp_webhook_signature,
+    whatsapp_configured,
+    whatsapp_webhook_configured,
+)
 
 router = APIRouter(prefix="/communications", tags=["communications"])
 
@@ -94,8 +106,37 @@ def _events(db: Session, message: CommunicationMessage) -> list[CommunicationEve
     )
 
 
+def _whatsapp_block_reason(db: Session, item: CommunicationMessage) -> str | None:
+    if item.status in {"sent", "cancelled"}:
+        return "Esta comunicação já foi encerrada."
+    preference = None
+    if item.person_id is not None:
+        preference = db.scalar(
+            select(CommunicationPreference).where(
+                CommunicationPreference.organization_id == item.organization_id,
+                CommunicationPreference.person_id == item.person_id,
+            )
+        )
+    if preference is not None:
+        if not preference.transactional_enabled:
+            return "A pessoa desativou comunicações transacionais neste cadastro."
+        if not preference.whatsapp_enabled:
+            return "O canal WhatsApp está desativado para esta pessoa."
+    if not item.recipient_phone:
+        return "Destinatário sem telefone cadastrado."
+    if not whatsapp_configured():
+        return "WhatsApp Cloud API da Meta ainda não está configurada."
+    return None
+
+
+def _delivery_reason(db: Session, item: CommunicationMessage) -> str | None:
+    if item.channel == "whatsapp":
+        return _whatsapp_block_reason(db, item)
+    return delivery_block_reason(db, item, email_configured=smtp_configured())
+
+
 def _response(db: Session, item: CommunicationMessage, *, include_events: bool = False) -> CommunicationMessageResponse:
-    reason = delivery_block_reason(db, item, email_configured=smtp_configured())
+    reason = _delivery_reason(db, item)
     return CommunicationMessageResponse(
         id=item.id,
         internal_number=item.internal_number,
@@ -174,6 +215,7 @@ def _resolve_attachments(db: Session, item: CommunicationMessage) -> list[dict]:
 
 @router.get("/capabilities")
 def capabilities(context: UserContext = Depends(require_permission("communications.view"))) -> dict:
+    settings = get_settings()
     return {
         "email": {
             "provider": "smtp",
@@ -182,11 +224,13 @@ def capabilities(context: UserContext = Depends(require_permission("communicatio
             "human_confirmation_required": True,
         },
         "whatsapp": {
-            "provider": None,
-            "configured": False,
+            "provider": "meta_whatsapp_cloud",
+            "configured": whatsapp_configured(),
+            "webhook_configured": whatsapp_webhook_configured(),
+            "api_version": settings.whatsapp_graph_version,
             "supports_attachments": False,
             "human_confirmation_required": True,
-            "reason": "Provider de WhatsApp ainda não implementado.",
+            "reason": None if whatsapp_configured() else "Informe token e Phone Number ID da WhatsApp Cloud API da Meta.",
         },
     }
 
@@ -206,9 +250,68 @@ def overview(
         "total": len(rows),
         "counts": counts,
         "email_configured": smtp_configured(),
-        "whatsapp_configured": False,
+        "whatsapp_configured": whatsapp_configured(),
         "human_confirmation_required": True,
     }
+
+
+@router.get("/whatsapp/webhook", response_class=PlainTextResponse)
+def verify_whatsapp_webhook(
+    hub_mode: str | None = Query(default=None, alias="hub.mode"),
+    hub_verify_token: str | None = Query(default=None, alias="hub.verify_token"),
+    hub_challenge: str | None = Query(default=None, alias="hub.challenge"),
+) -> PlainTextResponse:
+    challenge = verify_whatsapp_webhook_challenge(
+        mode=hub_mode,
+        verify_token=hub_verify_token,
+        challenge=hub_challenge,
+    )
+    if challenge is None:
+        raise HTTPException(status_code=403, detail="Falha na verificação do webhook do WhatsApp.")
+    return PlainTextResponse(challenge)
+
+
+@router.post("/whatsapp/webhook")
+async def receive_whatsapp_webhook(request: Request, db: Session = Depends(get_db)) -> dict:
+    if not whatsapp_webhook_configured():
+        raise HTTPException(status_code=503, detail="Webhook do WhatsApp ainda não está configurado.")
+    raw_body = await request.body()
+    if not verify_whatsapp_webhook_signature(raw_body, request.headers.get("x-hub-signature-256")):
+        raise HTTPException(status_code=401, detail="Assinatura inválida do webhook do WhatsApp.")
+    try:
+        payload = json.loads(raw_body.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise HTTPException(status_code=400, detail="Payload inválido do webhook do WhatsApp.") from exc
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="Payload inválido do webhook do WhatsApp.")
+
+    matched = 0
+    status_events = extract_whatsapp_statuses(payload)
+    for provider_status in status_events:
+        item = db.scalar(
+            select(CommunicationMessage).where(
+                CommunicationMessage.provider_name == "meta_whatsapp_cloud",
+                CommunicationMessage.provider_message_id == provider_status["id"],
+            )
+        )
+        if item is None:
+            continue
+        matched += 1
+        status_name = str(provider_status["status"])
+        add_event(db, item, f"whatsapp_{status_name}", data=provider_status)
+        if status_name == "failed":
+            item.status = "failed"
+            item.failed_at = datetime.now(timezone.utc)
+            errors = provider_status.get("errors") or []
+            if errors and isinstance(errors[0], dict):
+                item.error_message = str(errors[0].get("message") or errors[0].get("title") or "Falha de entrega reportada pela Meta.")[:1000]
+            else:
+                item.error_message = "Falha de entrega reportada pela Meta."
+        elif status_name in {"sent", "delivered", "read"} and item.status == "sending":
+            item.status = "sent"
+            item.sent_at = item.sent_at or datetime.now(timezone.utc)
+    db.commit()
+    return {"received": True, "status_events": len(status_events), "matched_messages": matched}
 
 
 @router.get("/messages", response_model=list[CommunicationMessageResponse])
@@ -313,7 +416,7 @@ def update_message(
 
 
 def _send_message(db: Session, item: CommunicationMessage, request: Request, context: UserContext) -> CommunicationMessageResponse:
-    reason = delivery_block_reason(db, item, email_configured=smtp_configured())
+    reason = _delivery_reason(db, item)
     if reason:
         raise HTTPException(status_code=409, detail=reason)
     organization = db.get(Organization, context.user.organization_id)
@@ -324,22 +427,30 @@ def _send_message(db: Session, item: CommunicationMessage, request: Request, con
     item.error_message = None
     add_event(db, item, "send_started", user_id=context.user.id, data={"attempt": item.attempt_count, "channel": item.channel})
     db.flush()
-    attachments = _resolve_attachments(db, item)
+    attachments = _resolve_attachments(db, item) if item.channel == "email" else []
+    provider_name: str | None = None
+    provider_message_id: str | None = None
     try:
-        if item.channel != "email":
-            raise EmailDeliveryError("Provider do canal selecionado não está disponível.")
-        send_email_message(
-            recipient=item.recipient_email or "",
-            subject=item.subject,
-            text_body=item.body,
-            organization_name=organization_name,
-            attachments=attachments,
-        )
-    except EmailDeliveryError as exc:
+        if item.channel == "email":
+            send_email_message(
+                recipient=item.recipient_email or "",
+                subject=item.subject,
+                text_body=item.body,
+                organization_name=organization_name,
+                attachments=attachments,
+            )
+            provider_name = "smtp"
+        elif item.channel == "whatsapp":
+            result = send_whatsapp_text(recipient=item.recipient_phone or "", text_body=item.body)
+            provider_name = "meta_whatsapp_cloud"
+            provider_message_id = result.message_id
+        else:
+            raise WhatsAppDeliveryError("Provider do canal selecionado não está disponível.")
+    except (EmailDeliveryError, WhatsAppDeliveryError) as exc:
         item.status = "failed"
         item.failed_at = datetime.now(timezone.utc)
         item.error_message = str(exc)[:1000]
-        item.provider_name = "smtp" if item.channel == "email" else item.channel
+        item.provider_name = provider_name or ("smtp" if item.channel == "email" else "meta_whatsapp_cloud" if item.channel == "whatsapp" else item.channel)
         add_event(db, item, "failed", user_id=context.user.id, data={"attempt": item.attempt_count, "error": item.error_message})
         _audit(db, request, context, "communications.failed", item, after={"attempt": item.attempt_count}, reason=item.error_message)
         db.commit()
@@ -347,10 +458,14 @@ def _send_message(db: Session, item: CommunicationMessage, request: Request, con
     item.status = "sent"
     item.sent_at = datetime.now(timezone.utc)
     item.failed_at = None
-    item.provider_name = "smtp"
+    item.provider_name = provider_name
+    item.provider_message_id = provider_message_id
     item.sent_by_user_id = context.user.id
-    add_event(db, item, "sent", user_id=context.user.id, data={"attempt": item.attempt_count, "attachments_delivered": len(attachments)})
-    _audit(db, request, context, "communications.sent", item, after={"attempt": item.attempt_count, "attachments_delivered": len(attachments)})
+    event_data = {"attempt": item.attempt_count, "attachments_delivered": len(attachments), "provider": provider_name}
+    if provider_message_id:
+        event_data["provider_message_id"] = provider_message_id
+    add_event(db, item, "sent", user_id=context.user.id, data=event_data)
+    _audit(db, request, context, "communications.sent", item, after=event_data)
     db.commit()
     return _response(db, item, include_events=True)
 

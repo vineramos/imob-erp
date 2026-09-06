@@ -14,7 +14,7 @@ type Message={
   cancelled_at:string|null;created_at:string;updated_at:string;send_allowed:boolean;blocked_reason:string|null;events:MessageEvent[]
 }
 type Overview={total:number;counts:Record<string,number>;email_configured:boolean;whatsapp_configured:boolean;human_confirmation_required:boolean}
-type Capabilities={email:{configured:boolean;provider:string;supports_attachments:boolean};whatsapp:{configured:boolean;provider:string|null;reason?:string}}
+type Capabilities={email:{configured:boolean;provider:string;supports_attachments:boolean};whatsapp:{configured:boolean;provider:string|null;webhook_configured?:boolean;api_version?:string;reason?:string|null}}
 type Template={id:string;key:string;channel:string;name:string;subject_template:string;body_template:string;is_active:boolean;is_system_default:boolean;updated_at:string}
 type Preference={person_id:string;person_name:string;email:string|null;phone:string|null;email_enabled:boolean;whatsapp_enabled:boolean;transactional_enabled:boolean;preferred_channel:string;notes:string|null}
 type Tab='queue'|'history'|'templates'
@@ -149,11 +149,14 @@ export default function CommunicationsPage({permissions}:Props){
   }
 
   const rows=tab==='queue'?queue:history
+  const whatsappStatus=capabilities?.whatsapp.configured
+    ? (capabilities.whatsapp.webhook_configured?'Envio + webhook prontos':'Envio pronto · webhook pendente')
+    : 'Credenciais pendentes'
   return <section className="workspace communications-workspace">
     <div className="page-heading communications-heading"><div><span className="eyebrow">Relacionamento · operação</span><h1>Comunicações</h1><p>Fila, revisão humana, envio e histórico auditável de mensagens transacionais.</p></div><div className="heading-actions"><button className="button secondary" type="button" disabled={loading||saving} onClick={()=>void load()}><RefreshCw size={14}/> Atualizar</button>{canManage&&<button className="button secondary" type="button" onClick={startCompose}><Plus size={14}/> Nova comunicação</button>}{canManage&&<button className="button primary" type="button" disabled={saving} onClick={()=>void refreshSuggestions()}><Settings2 size={14}/> Atualizar sugestões</button>}</div></div>
 
     <div className="communication-safety"><CheckCircle2 size={17}/><div><strong>Controle humano obrigatório.</strong><span>O Imob pode preparar mensagens a partir dos eventos do ERP, mas nenhuma sugestão é enviada sozinha. O envio exige uma ação explícita de usuário autorizado.</span></div></div>
-    <div className="communication-capabilities"><span className={capabilities?.email.configured?'ready':'pending'}><Mail size={15}/><b>E-mail / SMTP</b>{capabilities?.email.configured?'Configurado':'Não configurado'}</span><span className="pending"><MessageCircle size={15}/><b>WhatsApp</b>Provider pendente</span></div>
+    <div className="communication-capabilities"><span className={capabilities?.email.configured?'ready':'pending'}><Mail size={15}/><b>E-mail / SMTP</b>{capabilities?.email.configured?'Configurado':'Não configurado'}</span><span className={capabilities?.whatsapp.configured?'ready':'pending'}><MessageCircle size={15}/><b>WhatsApp · Meta {capabilities?.whatsapp.api_version||''}</b>{whatsappStatus}</span></div>
 
     {overview&&<div className="communication-metrics"><article className="panel"><span>Aguardando</span><strong>{(overview.counts.draft||0)+(overview.counts.pending||0)}</strong><small>Revisão e confirmação humana</small></article><article className={`panel ${overview.counts.failed?'critical':''}`}><span>Falhas</span><strong>{overview.counts.failed||0}</strong><small>Disponíveis para correção/reenvio</small></article><article className="panel"><span>Enviadas</span><strong>{overview.counts.sent||0}</strong><small>Histórico preservado</small></article><article className="panel"><span>Total</span><strong>{overview.total}</strong><small>Todos os estados</small></article></div>}
     {error&&<div className="form-alert danger-alert">{error}</div>}{success&&<div className="form-alert success-alert">{success}</div>}
@@ -166,6 +169,7 @@ export default function CommunicationsPage({permissions}:Props){
       <div className="communication-recipient-grid"><label>Destinatário<input value={recipientName} disabled={!canManage||['sent','cancelled'].includes(selected.status)} onChange={e=>setRecipientName(e.target.value)}/></label><label>E-mail<input value={recipientEmail} disabled={!canManage||['sent','cancelled'].includes(selected.status)} onChange={e=>setRecipientEmail(e.target.value)}/></label><label>Telefone<input value={recipientPhone} disabled={!canManage||['sent','cancelled'].includes(selected.status)} onChange={e=>setRecipientPhone(e.target.value)}/></label><label>Canal<select value={channel} disabled={!canManage||['sent','cancelled'].includes(selected.status)} onChange={e=>setChannel(e.target.value as 'email'|'whatsapp')}><option value="email">E-mail</option><option value="whatsapp">WhatsApp</option></select></label></div>
       <label>Assunto<input value={subject} disabled={!canManage||['sent','cancelled'].includes(selected.status)} onChange={e=>setSubject(e.target.value)}/></label><label>Mensagem<textarea rows={12} value={body} disabled={!canManage||['sent','cancelled'].includes(selected.status)} onChange={e=>setBody(e.target.value)}/></label>
       {selected.attachment_manifest.length>0&&<div className="communication-attachments"><strong>Anexos e referências contextuais</strong>{selected.attachment_manifest.map((entry,index)=><span key={index}><FileText size={14}/>{String(entry.label||entry.kind||'Documento')}</span>)}</div>}
+      {selected.provider_message_id&&<div className="communication-attachments"><strong>Rastreio do provider</strong><span>{selected.provider_name||'provider'} · {selected.provider_message_id}</span></div>}
       {selected.error_message&&<div className="form-alert danger-alert"><AlertTriangle size={15}/>{selected.error_message}</div>}
       {selected.blocked_reason&&selected.status!=='sent'&&<div className="communication-blocked"><AlertTriangle size={15}/><span>{selected.blocked_reason}</span></div>}
       {selected.person_id&&canManage&&<button className="button link-button" type="button" onClick={()=>void openPreference()}>Preferências deste cliente</button>}

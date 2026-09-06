@@ -30,6 +30,16 @@ class Settings(BaseSettings):
     email_smtp_use_tls: bool = True
     email_smtp_use_ssl: bool = False
 
+    # WhatsApp Business Platform / Cloud API oficial da Meta. Token, App Secret
+    # e verify token ficam somente no ambiente/Secret Manager.
+    whatsapp_graph_version: str = "v26.0"
+    whatsapp_access_token: str = ""
+    whatsapp_phone_number_id: str = ""
+    whatsapp_waba_id: str = ""
+    whatsapp_webhook_verify_token: str = ""
+    whatsapp_app_secret: str = ""
+    whatsapp_default_country_code: str = "55"
+
     # Banco Inter Empresas. As credenciais e o certificado mTLS ficam apenas
     # no ambiente/Secret Manager. O ERP persiste somente IDs e respostas
     # operacionais necessárias para rastrear cobranças e movimentações.
@@ -83,6 +93,19 @@ class Settings(BaseSettings):
         if self.email_smtp_username.strip() and not self.email_smtp_password:
             return False
         return True
+
+    @property
+    def whatsapp_configured(self) -> bool:
+        return bool(self.whatsapp_access_token.strip() and self.whatsapp_phone_number_id.strip())
+
+    @property
+    def whatsapp_webhook_configured(self) -> bool:
+        return bool(self.whatsapp_webhook_verify_token.strip() and self.whatsapp_app_secret.strip())
+
+    @property
+    def whatsapp_messages_url(self) -> str:
+        version = self.whatsapp_graph_version.strip().lstrip("/") or "v26.0"
+        return f"https://graph.facebook.com/{version}/{self.whatsapp_phone_number_id.strip()}/messages"
 
     @property
     def inter_base_url(self) -> str:
