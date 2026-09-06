@@ -9,26 +9,26 @@ import { GlobalSearch } from './components/GlobalSearch'
 import { NotificationCenter } from './components/NotificationCenter'
 import { navigation } from './config/navigation'
 import { AgendaNotifier } from './modules/agenda/AgendaNotifier'
-import { AgendaPage } from './modules/agenda/AgendaPage'
-import { CapturesPage } from './modules/captures/CapturesPage'
-import { CommercialSiteHub } from './modules/commercial/CommercialSiteHub'
-import { ContractsHub } from './modules/contracts/ContractsHub'
-import { DashboardPage } from './modules/dashboard/DashboardPage'
-import { DocumentsPage } from './modules/documents/DocumentsPage'
-import { FinancePage } from './modules/finance/FinancePage'
-import { InspectionsPage } from './modules/inspections/InspectionsPage'
-import { MaintenancePage } from './modules/maintenance/MaintenancePage'
-import { BrokersPage } from './modules/properties/BrokersPage'
-import { PropertiesPage } from './modules/properties/PropertiesPage'
-import { ReportsPage } from './modules/reports/ReportsPage'
-import { SettingsPage } from './modules/settings/SettingsPage'
-import { ExternalPortalPage } from './public/ExternalPortalPage'
-import { PublicSitePage } from './public/PublicSitePage'
-import { TenantPortalEntry } from './public/TenantPortalEntry'
 import { useTheme } from './theme/ThemeProvider'
 import type { ThemeConfig } from './theme/theme'
 
+const AgendaPage = lazy(() => import('./modules/agenda/AgendaPage').then(module => ({ default: module.AgendaPage })))
+const CapturesPage = lazy(() => import('./modules/captures/CapturesPage').then(module => ({ default: module.CapturesPage })))
+const CommercialSiteHub = lazy(() => import('./modules/commercial/CommercialSiteHub').then(module => ({ default: module.CommercialSiteHub })))
 const CommunicationsPage = lazy(() => import('./modules/communications/CommunicationsPage'))
+const ContractsHub = lazy(() => import('./modules/contracts/ContractsHub').then(module => ({ default: module.ContractsHub })))
+const DashboardPage = lazy(() => import('./modules/dashboard/DashboardPage').then(module => ({ default: module.DashboardPage })))
+const DocumentsPage = lazy(() => import('./modules/documents/DocumentsPage').then(module => ({ default: module.DocumentsPage })))
+const FinancePage = lazy(() => import('./modules/finance/FinancePage').then(module => ({ default: module.FinancePage })))
+const InspectionsPage = lazy(() => import('./modules/inspections/InspectionsPage').then(module => ({ default: module.InspectionsPage })))
+const MaintenancePage = lazy(() => import('./modules/maintenance/MaintenancePage').then(module => ({ default: module.MaintenancePage })))
+const BrokersPage = lazy(() => import('./modules/properties/BrokersPage').then(module => ({ default: module.BrokersPage })))
+const PropertiesPage = lazy(() => import('./modules/properties/PropertiesPage').then(module => ({ default: module.PropertiesPage })))
+const ReportsPage = lazy(() => import('./modules/reports/ReportsPage').then(module => ({ default: module.ReportsPage })))
+const SettingsPage = lazy(() => import('./modules/settings/SettingsPage').then(module => ({ default: module.SettingsPage })))
+const ExternalPortalPage = lazy(() => import('./public/ExternalPortalPage').then(module => ({ default: module.ExternalPortalPage })))
+const PublicSitePage = lazy(() => import('./public/PublicSitePage').then(module => ({ default: module.PublicSitePage })))
+const TenantPortalEntry = lazy(() => import('./public/TenantPortalEntry').then(module => ({ default: module.TenantPortalEntry })))
 
 type ModuleKey = (typeof navigation)[number]['module']
 type AuthState = 'loading' | 'authenticated' | 'unauthenticated' | 'error'
@@ -60,6 +60,7 @@ function ModulePlaceholder({ module }: { module: ModuleKey }) { const item = nav
 function BrandMark({ logoUrl, initials }: { logoUrl: string; initials: string }) { return logoUrl ? <div className="brand-mark brand-mark-image"><img src={logoUrl} alt="" /></div> : <div className="brand-mark">{initials}</div> }
 function BootScreen({ message = 'Preparando seu ambiente...' }: { message?: string }) { const { theme } = useTheme(); const initials = theme.companyShortName.trim().slice(0, 2).toUpperCase() || 'IM'; return <main className="boot-screen"><BrandMark logoUrl={theme.logoUrl} initials={initials}/><strong>{theme.companyShortName || theme.companyName}</strong><span>{message}</span></main> }
 function AccessError({ message, onRetry }: { message: string; onRetry: () => void }) { return <main className="boot-screen"><div className="brand-mark">!</div><strong>Não foi possível abrir o ERP</strong><span>{message}</span><button className="button primary" type="button" onClick={onRetry}>Tentar novamente</button></main> }
+function ModuleLoading() { return <article className="panel settings-loading">Carregando módulo...</article> }
 
 function ErpApp() {
   const { theme, setTheme } = useTheme()
@@ -122,17 +123,19 @@ function ErpApp() {
     <aside className="sidebar"><div className="brand"><BrandMark logoUrl={theme.logoUrl} initials={brandInitials}/><div className="brand-copy"><strong>{theme.companyShortName || theme.companyName}</strong><span>ERP Imobiliário</span></div></div><nav className="nav-list" aria-label="Menu principal">{visibleNavigation.map(({ label, icon: Icon, module }) => <button className={`nav-item ${activeModule === module ? 'active' : ''}`} type="button" key={label} title={sidebarCollapsed ? label : undefined} onClick={() => navigateModule(module)}><Icon size={18} strokeWidth={1.75}/><span>{label}</span></button>)}</nav><div className="sidebar-footer"><span className="sidebar-label">Empresa</span><button type="button" className="company-switcher"><div className="avatar">{currentUser.organization_name.trim().slice(0, 2).toUpperCase() || brandInitials}</div><div className="company-copy"><strong>{currentUser.organization_name}</strong><span>Ambiente principal</span></div><ChevronDown className="company-chevron" size={15}/></button></div></aside>
     <main className="main-area"><header className="topbar"><div className="topbar-left"><button className="sidebar-toggle" type="button" aria-label={sidebarCollapsed ? 'Expandir menu lateral' : 'Recolher menu lateral'} onClick={() => setSidebarCollapsed((value) => !value)}><Menu size={20}/></button><GlobalSearch onNavigate={navigateModule}/></div><div className="topbar-actions">{!authConfigured && <span className="dev-badge">DEV · Auth pendente</span>}<NotificationCenter onNavigate={navigateModule}/><button className="topbar-icon topbar-secondary-action" type="button" aria-label="Mensagens" onClick={() => navigateModule('communications')}><Mail size={18}/></button><button className="topbar-icon topbar-secondary-action" type="button" aria-label="Ajuda"><CircleHelp size={18}/></button><span className="topbar-divider"/><div className="user-summary"><div className="avatar avatar-user">{initials}</div><div><strong>{currentUser.name}</strong><span>{primaryRole}</span></div><ChevronDown size={15}/></div></div></header>
       {currentUser.permissions.includes('agenda.view') && <AgendaNotifier onOpenAgenda={() => navigateModule('agenda')}/>} 
-      {activeModule === 'dashboard' && <DashboardPage onNavigate={module => navigateModule(module)}/>}{activeModule === 'people' && <PropertiesPage permissions={currentUser.permissions} initialTab="people"/>}{activeModule === 'properties' && <PropertiesPage permissions={currentUser.permissions} initialTab="properties"/>}{activeModule === 'brokers' && <BrokersPage permissions={currentUser.permissions}/>}{activeModule === 'captures' && <CapturesPage permissions={currentUser.permissions}/>}{activeModule === 'crm' && <CommercialSiteHub permissions={currentUser.permissions} organizationId={currentUser.organization_id}/>}{activeModule === 'contracts' && <ContractsHub permissions={currentUser.permissions}/>}{activeModule === 'inspections' && <InspectionsPage permissions={currentUser.permissions}/>}{activeModule === 'maintenance' && <MaintenancePage permissions={currentUser.permissions}/>}{activeModule === 'finance' && <FinancePage permissions={currentUser.permissions}/>}{activeModule === 'agenda' && <AgendaPage permissions={currentUser.permissions} onNavigate={module => navigateModule(module)}/>}{activeModule === 'communications' && <Suspense fallback={<article className="panel settings-loading">Carregando comunicações...</article>}><CommunicationsPage permissions={currentUser.permissions}/></Suspense>}{activeModule === 'reports' && <ReportsPage permissions={currentUser.permissions}/>}{activeModule === 'documents' && <DocumentsPage permissions={currentUser.permissions}/>}{activeModule === 'settings' && <SettingsPage permissions={currentUser.permissions}/>} {!implemented.includes(activeModule) && <ModulePlaceholder module={activeModule}/>} 
+      <Suspense fallback={<ModuleLoading/>}>
+        {activeModule === 'dashboard' && <DashboardPage onNavigate={module => navigateModule(module)}/>}{activeModule === 'people' && <PropertiesPage permissions={currentUser.permissions} initialTab="people"/>}{activeModule === 'properties' && <PropertiesPage permissions={currentUser.permissions} initialTab="properties"/>}{activeModule === 'brokers' && <BrokersPage permissions={currentUser.permissions}/>}{activeModule === 'captures' && <CapturesPage permissions={currentUser.permissions}/>}{activeModule === 'crm' && <CommercialSiteHub permissions={currentUser.permissions} organizationId={currentUser.organization_id}/>}{activeModule === 'contracts' && <ContractsHub permissions={currentUser.permissions}/>}{activeModule === 'inspections' && <InspectionsPage permissions={currentUser.permissions}/>}{activeModule === 'maintenance' && <MaintenancePage permissions={currentUser.permissions}/>}{activeModule === 'finance' && <FinancePage permissions={currentUser.permissions}/>}{activeModule === 'agenda' && <AgendaPage permissions={currentUser.permissions} onNavigate={module => navigateModule(module)}/>}{activeModule === 'communications' && <CommunicationsPage permissions={currentUser.permissions}/>}{activeModule === 'reports' && <ReportsPage permissions={currentUser.permissions}/>}{activeModule === 'documents' && <DocumentsPage permissions={currentUser.permissions}/>}{activeModule === 'settings' && <SettingsPage permissions={currentUser.permissions}/>} {!implemented.includes(activeModule) && <ModulePlaceholder module={activeModule}/>} 
+      </Suspense>
       <EntityDeepLink route={currentRoute}/>
     </main>
   </div>
 }
 
 export default function App() {
-  if (window.location.pathname === '/portal' || window.location.pathname === '/portal/') return <TenantPortalEntry/>
+  if (window.location.pathname === '/portal' || window.location.pathname === '/portal/') return <Suspense fallback={<BootScreen message="Carregando portal..."/>}><TenantPortalEntry/></Suspense>
   const portalMatch = window.location.pathname.match(/^\/portal\/([^/]+)\/?$/)
-  if (portalMatch) return <ExternalPortalPage token={decodeURIComponent(portalMatch[1])}/>
+  if (portalMatch) return <Suspense fallback={<BootScreen message="Carregando portal..."/>}><ExternalPortalPage token={decodeURIComponent(portalMatch[1])}/></Suspense>
   const match = window.location.pathname.match(/^\/site\/([^/]+)(?:\/imoveis\/([^/]+))?\/?$/)
-  if (match) return <PublicSitePage organizationId={decodeURIComponent(match[1])} slug={match[2] ? decodeURIComponent(match[2]) : null}/>
+  if (match) return <Suspense fallback={<BootScreen message="Carregando site..."/>}><PublicSitePage organizationId={decodeURIComponent(match[1])} slug={match[2] ? decodeURIComponent(match[2]) : null}/></Suspense>
   return <ErpApp/>
 }
