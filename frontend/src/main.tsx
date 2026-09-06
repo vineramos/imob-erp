@@ -1,7 +1,6 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import App from './App'
-import { TenantPortalEntry } from './public/TenantPortalEntry'
 import { ThemeProvider } from './theme/ThemeProvider'
 import { installBrazilianInputFormatting } from './utils/brFormat'
 import { installGlobalModalEscape } from './utils/modalEscape'
@@ -33,10 +32,8 @@ installGlobalModalEscape()
 installPublicSiteLinkEnhancer()
 installAuthenticatedPdfLinkHandler()
 
-const tenantPortalRoute = /^\/portal\/?$/.test(window.location.pathname)
-
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <ThemeProvider>{tenantPortalRoute ? <TenantPortalEntry /> : <App />}</ThemeProvider>
+    <ThemeProvider><App /></ThemeProvider>
   </StrictMode>,
 )
