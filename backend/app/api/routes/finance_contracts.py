@@ -47,18 +47,29 @@ def lease_monthly_charges(
         property_item,
         administration_terms(db, context.user.organization_id, property_item.id),
     )
-    tenant_extras = sum(
+    tenant_monthly_extras = sum(
         (
             money(rule.get("amount"))
             for rule in rules
-            if bool(rule.get("active", True)) and rule.get("payer", "tenant") == "tenant"
+            if bool(rule.get("active", True))
+            and rule.get("payer", "tenant") == "tenant"
+            and rule.get("include_in_invoice", True) is not False
+            and str(rule.get("frequency") or "monthly") == "monthly"
         ),
         Decimal("0.00"),
     )
+    scheduled_extras = [
+        rule for rule in rules
+        if bool(rule.get("active", True))
+        and rule.get("payer", "tenant") == "tenant"
+        and rule.get("include_in_invoice", True) is not False
+        and str(rule.get("frequency") or "monthly") != "monthly"
+    ]
     return {
         "lease_contract_id": str(lease.id),
         "lease_code": f"LOC-{lease.internal_number:06d}",
         "configured": bool(configured),
         "monthly_charges": rules,
-        "tenant_monthly_total": str(money(lease.rent_amount) + tenant_extras),
+        "tenant_monthly_total": str(money(lease.rent_amount) + tenant_monthly_extras),
+        "scheduled_extras": scheduled_extras,
     }

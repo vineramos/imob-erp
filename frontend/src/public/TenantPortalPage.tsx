@@ -12,6 +12,9 @@ type Tab = 'home' | 'payments' | 'contract' | 'documents' | 'inspections' | 'mai
 type Me = { person_id:string; person_name:string; email:string; document_number:string|null; organization_name:string; organization_email:string|null; organization_phone:string|null }
 type Lease = { id:string; code:string; status:string; property_id:string; property_code:string; property_address:Record<string,string>; rent_amount:number; due_day:number; start_date:string; end_date:string; operational_end_date:string|null; adjustment_index:string; adjustment_period_months:number; next_adjustment_date:string; guarantee_type:string; signed_at:string|null }
 type Charge = { id:string; code:string; lease_contract_id:string; competence:string; due_date:string; amount:number; status:string; paid_at:string|null; paid_amount:number|null; boleto_line:string|null; pix_copy_paste:string|null; billing_pdf_available:boolean }
+type ChargeRule = { key:string; kind:string; label:string; amount:number; active:boolean; payer:string; beneficiary:string; beneficiary_name:string|null; frequency:'monthly'|'annual'|'one_time'; include_in_invoice:boolean; start_date:string|null; end_date:string|null }
+type ChargeItem = { key:string; kind:string; label:string; amount:number; frequency:string }
+type ChargeComposition = { leases:Record<string,ChargeRule[]>; charges:Record<string,ChargeItem[]> }
 type DocumentItem = { key:string; title:string; category:string; filename:string; content_type:string; status:string; entity_label:string|null; updated_at:string; download_path:string }
 type Inspection = { id:string; code:string; lease_contract_id:string; inspection_type:string; status:string; scheduled_at:string|null; performed_at:string|null; contest_deadline:string|null; finalized_at:string|null; report_available:boolean }
 type Maintenance = { id:string; code:string; lease_contract_id:string|null; title:string; category:string; priority:string; status:string; description:string; reported_at:string; scheduled_at:string|null; completed_at:string|null }
@@ -21,7 +24,7 @@ type Overview = {
   leases:Lease[];charges:Charge[];documents:DocumentItem[];inspections:Inspection[];maintenance:Maintenance[]
 }
 type Flash = { kind:'success'|'danger'; text:string } | null
-type PlannedInstallment = { key:string; competence:string; dueDate:string; amountLabel:string; note:string; status:string|null; adjustment:boolean }
+type PlannedInstallment = { key:string; competence:string; dueDate:string; amountLabel:string; note:string; status:string|null; adjustment:boolean; extras:ChargeRule[] }
 
 const money=(value:number)=>Number(value||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'})
 const localDate=(value:string)=>new Date(`${value.slice(0,10)}T12:00:00`)
@@ -36,11 +39,28 @@ const maintenanceStatus=(value:string)=>({requested:'Solicitado',triage:'Em aná
 const priorityLabel=(value:string)=>({low:'Baixa',normal:'Normal',high:'Alta',urgent:'Urgente'} as Record<string,string>)[value]||value
 const inspectionType=(value:string)=>value==='initial'?'Vistoria de entrada':value==='final'?'Vistoria de saída':value
 const documentCategory=(value:string)=>({contract:'Contrato',inspection:'Vistoria',maintenance:'Manutenção',finance:'Financeiro',property:'Imóvel',identity:'Cadastro',legal:'Jurídico',general:'Geral',other:'Outro'} as Record<string,string>)[value]||value
+const frequencyLabel=(value:string)=>value==='annual'?'Anual':value==='one_time'?'Parcela única':'Mensal'
 function openBlob(blob:Blob){const url=URL.createObjectURL(blob);window.open(url,'_blank','noopener,noreferrer');setTimeout(()=>URL.revokeObjectURL(url),60000)}
 function dueDateFor(year:number,month:number,dueDay:number){const last=new Date(year,month+1,0).getDate();return new Date(year,month,Math.min(dueDay,last),12)}
 function isoDate(date:Date){return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`}
+function monthDelta(anchor:string,key:string){const [ay,am]=anchor.slice(0,7).split('-').map(Number);const [ky,km]=key.split('-').map(Number);return (ky-ay)*12+km-am}
+function ruleApplies(rule:ChargeRule,lease:Lease,key:string){
+  if(!rule.active||!rule.include_in_invoice||rule.payer!=='tenant'||Number(rule.amount)<=0)return false
+  if(rule.start_date&&key<rule.start_date.slice(0,7))return false
+  if(rule.end_date&&key>rule.end_date.slice(0,7))return false
+  const anchor=(rule.start_date||lease.start_date).slice(0,7)
+  const delta=monthDelta(anchor,key)
+  if(delta<0)return false
+  if(rule.frequency==='one_time')return delta===0
+  if(rule.frequency==='annual')return delta%12===0
+  return true
+}
+function chargeBreakdown(items:ChargeItem[]|undefined){
+  if(!items?.length)return null
+  return <div className="tenant-charge-breakdown">{items.map((item,index)=><div key={`${item.key}-${index}`}><span>{item.label}{item.frequency!=='monthly'?` · ${frequencyLabel(item.frequency)}`:''}</span><strong>{money(item.amount)}</strong></div>)}</div>
+}
 
-function buildPaymentPlan(lease:Lease|null,charges:Charge[]):PlannedInstallment[]{
+function buildPaymentPlan(lease:Lease|null,charges:Charge[],composition:ChargeComposition|null):PlannedInstallment[]{
   if(!lease)return[]
   const today=new Date()
   today.setHours(0,0,0,0)
@@ -51,28 +71,31 @@ function buildPaymentPlan(lease:Lease|null,charges:Charge[]):PlannedInstallment[
   if(leaseStartMonth>cursor)cursor=leaseStartMonth
   const adjustmentKey=lease.next_adjustment_date?.slice(0,7)||''
   const chargeMap=new Map(charges.filter(item=>item.lease_contract_id===lease.id).map(item=>[item.competence.slice(0,7),item]))
+  const rules=composition?.leases[lease.id]||[]
   const rows:PlannedInstallment[]=[]
   for(let guard=0;guard<18&&cursor<=leaseEnd;guard+=1){
     const key=monthKey(cursor)
     const due=dueDateFor(cursor.getFullYear(),cursor.getMonth(),lease.due_day)
     const charge=chargeMap.get(key)
+    const extras=rules.filter(rule=>ruleApplies(rule,lease,key))
+    const extrasTotal=extras.reduce((sum,item)=>sum+Number(item.amount||0),0)
     if((due>=today||(charge&&charge.status!=='paid'))&&charge?.status!=='cancelled'){
       const adjustment=Boolean(adjustmentKey&&key===adjustmentKey)
-      let amountLabel=money(lease.rent_amount)
-      let note='Previsão conforme o aluguel vigente.'
+      let amountLabel=money(lease.rent_amount+extrasTotal)
+      let note=extras.length?`Aluguel + ${extras.map(item=>item.label).join(', ')}.`:'Previsão conforme o aluguel vigente.'
       let status:string|null=null
       if(charge){
         amountLabel=money(charge.amount)
-        note='Cobrança já gerada no financeiro.'
+        note='Cobrança já gerada no financeiro; veja a composição abaixo.'
         status=charge.status
       }else if(adjustment){
-        amountLabel=`${money(lease.rent_amount)} + reajuste ${lease.adjustment_index}`
-        note=`Reajuste contratual previsto nesta competência (${lease.adjustment_index}).`
+        amountLabel=`${money(lease.rent_amount+extrasTotal)} + reajuste ${lease.adjustment_index} no aluguel`
+        note=`Reajuste contratual previsto nesta competência (${lease.adjustment_index}); encargos permanecem separados.`
       }else if(adjustmentKey&&key>adjustmentKey){
-        amountLabel='Valor após reajuste'
-        note=`O valor dependerá do ${lease.adjustment_index} aplicado em ${monthLabel(adjustmentKey)}.`
+        amountLabel=extrasTotal?`Valor após reajuste + ${money(extrasTotal)} em encargos`:'Valor após reajuste'
+        note=`O aluguel dependerá do ${lease.adjustment_index} aplicado em ${monthLabel(adjustmentKey)}.`
       }
-      rows.push({key,competence:monthLabel(key),dueDate:isoDate(due),amountLabel,note,status,adjustment})
+      rows.push({key,competence:monthLabel(key),dueDate:isoDate(due),amountLabel,note,status,adjustment,extras})
     }
     cursor=new Date(cursor.getFullYear(),cursor.getMonth()+1,1,12)
   }
@@ -90,6 +113,7 @@ function EmptyState({icon:Icon,title,text}:{icon:typeof Home;title:string;text:s
 export function TenantPortalPage(){
   const [me,setMe]=useState<Me|null>(null)
   const [data,setData]=useState<Overview|null>(null)
+  const [composition,setComposition]=useState<ChargeComposition|null>(null)
   const [loading,setLoading]=useState(true)
   const [flash,setFlash]=useState<Flash>(null)
   const [tab,setTab]=useState<Tab>('home')
@@ -99,12 +123,14 @@ export function TenantPortalPage(){
     setLoading(true)
     setFlash(null)
     try{
-      const [profile,overview]=await Promise.all([
+      const [profile,overview,chargeComposition]=await Promise.all([
         publicApiRequest<Me>('/tenant-portal/me'),
         publicApiRequest<Overview>('/tenant-portal/overview'),
+        publicApiRequest<ChargeComposition>('/tenant-portal/charge-composition'),
       ])
       setMe(profile)
       setData(overview)
+      setComposition(chargeComposition)
     }catch(cause){
       if(cause instanceof ApiError&&cause.status===401){setMe(null);setData(null)}
       else setFlash({kind:'danger',text:cause instanceof ApiError?cause.detail:'Não foi possível carregar o portal.'})
@@ -138,7 +164,7 @@ export function TenantPortalPage(){
   const openCharges=[...data.charges].filter(item=>['generated','sent','overdue'].includes(item.status)).sort((a,b)=>a.due_date.localeCompare(b.due_date))
   const paidCharges=[...data.charges].filter(item=>item.status==='paid').sort((a,b)=>(b.paid_at||b.due_date).localeCompare(a.paid_at||a.due_date))
   const paidTotal=paidCharges.reduce((total,item)=>total+Number(item.paid_amount??item.amount??0),0)
-  const plan=buildPaymentPlan(activeLease,data.charges)
+  const plan=buildPaymentPlan(activeLease,data.charges,composition)
   const nextPlan=plan[0]||null
 
   function requestMaintenance(){
@@ -180,7 +206,7 @@ export function TenantPortalPage(){
 
           {activeLease?<article className="tenant-card tenant-property-card">
             <div className="tenant-property-hero"><div className="tenant-property-hero-icon"><Home size={24}/></div><div className="tenant-property-hero-copy"><span>{activeLease.code}</span><strong>{addressLabel(activeLease.property_address)}</strong><span>Aluguel {money(activeLease.rent_amount)} · vencimento dia {activeLease.due_day}</span></div><span className="tenant-status signed">Ativo</span></div>
-            {activeLease.next_adjustment_date&&<div className="tenant-reajuste-callout"><CalendarDays size={17}/><div><strong>Próximo reajuste previsto para {monthLabel(activeLease.next_adjustment_date)}</strong><span>Nessa competência a previsão será exibida como <b>{money(activeLease.rent_amount)} + reajuste {activeLease.adjustment_index}</b>, sem estimar um índice que ainda não é conhecido.</span></div></div>}
+            {activeLease.next_adjustment_date&&<div className="tenant-reajuste-callout"><CalendarDays size={17}/><div><strong>Próximo reajuste previsto para {monthLabel(activeLease.next_adjustment_date)}</strong><span>Nessa competência a previsão separa o aluguel dos encargos e mostra o reajuste de <b>{activeLease.adjustment_index}</b> sem estimar um índice ainda desconhecido.</span></div></div>}
           </article>:<EmptyState icon={Building2} title="Nenhuma locação ativa" text="O portal continua disponível para consultar históricos, mas novos chamados e previsões mensais exigem uma locação ativa."/>}
 
           <div className="tenant-quick-grid">
@@ -191,26 +217,26 @@ export function TenantPortalPage(){
           </div>
 
           <div className="tenant-finance-spotlight">
-            <article className="tenant-card tenant-finance-hero"><div className="tenant-finance-hero-top"><div><span>Próximas mensalidades</span><h2>{nextPlan?nextPlan.amountLabel:'Sem previsão disponível'}</h2><p>{nextPlan?`Próximo vencimento em ${dateLabel(nextPlan.dueDate)}. Veja abaixo as competências seguintes e quando ocorrerá o reajuste.`:'Uma locação ativa é necessária para montar a previsão mensal.'}</p></div><CalendarDays size={23}/></div><div className="tenant-finance-next">{plan.slice(0,3).map(item=><div key={item.key}><span>{item.competence} · vence {dateLabel(item.dueDate)}</span><strong>{item.amountLabel}</strong><small>{item.adjustment?'Reajuste previsto':item.status?chargeStatus(item.status):'Planejado'}</small></div>)}{plan.length===0&&<div><span>Previsão</span><strong>—</strong><small>Sem mensalidades futuras.</small></div>}</div><button className="tenant-text-button" onClick={()=>setTab('payments')}>Abrir visão financeira completa <ArrowRight size={12}/></button></article>
+            <article className="tenant-card tenant-finance-hero"><div className="tenant-finance-hero-top"><div><span>Próximas mensalidades</span><h2>{nextPlan?nextPlan.amountLabel:'Sem previsão disponível'}</h2><p>{nextPlan?`Próximo vencimento em ${dateLabel(nextPlan.dueDate)}. A previsão já considera os encargos programados para cada competência.`:'Uma locação ativa é necessária para montar a previsão mensal.'}</p></div><CalendarDays size={23}/></div><div className="tenant-finance-next">{plan.slice(0,3).map(item=><div key={item.key}><span>{item.competence} · vence {dateLabel(item.dueDate)}</span><strong>{item.amountLabel}</strong><small>{item.adjustment?'Reajuste previsto':item.status?chargeStatus(item.status):item.extras.length?`${item.extras.length} encargo(s) previsto(s)`:'Planejado'}</small></div>)}{plan.length===0&&<div><span>Previsão</span><strong>—</strong><small>Sem mensalidades futuras.</small></div>}</div><button className="tenant-text-button" onClick={()=>setTab('payments')}>Abrir visão financeira completa <ArrowRight size={12}/></button></article>
             <div className="tenant-finance-side"><article className="tenant-card"><div className="tenant-card-section-head"><div><span className="tenant-section-kicker">Histórico</span><h2>Últimos pagamentos</h2></div><ReceiptText size={19}/></div><div className="tenant-history-list">{paidCharges.slice(0,4).map(item=><div className="tenant-history-row" key={item.id}><div className="tenant-history-main"><strong>{monthLabel(item.competence)}</strong><span>Pago em {dateTimeLabel(item.paid_at)}</span></div><div className="tenant-history-value"><strong>{money(item.paid_amount??item.amount)}</strong><span>{item.code}</span></div><small className="tenant-inline-status paid">Pago</small></div>)}{paidCharges.length===0&&<EmptyState icon={ReceiptText} title="Ainda sem pagamentos no histórico" text="Os pagamentos liquidados aparecerão aqui automaticamente."/>}</div></article></div>
           </div>
         </>}
 
         {tab==='payments'&&<>
-          <div className="tenant-heading"><div><span className="tenant-eyebrow">Financeiro</span><h1>Pagamentos e próximas mensalidades</h1><p>Veja o que já foi pago, o que está em aberto e a previsão dos próximos meses do contrato.</p></div></div>
+          <div className="tenant-heading"><div><span className="tenant-eyebrow">Financeiro</span><h1>Pagamentos e próximas mensalidades</h1><p>Aluguel e encargos aparecem separados para você saber exatamente o que compõe cada cobrança.</p></div></div>
           <div className="tenant-finance-summary tenant-card"><div><span>Total pago no histórico</span><strong>{money(paidTotal)}</strong></div><div><span>Mensalidades pagas</span><strong>{paidCharges.length}</strong></div><div><span>Saldo em aberto</span><strong>{money(data.metrics.open_amount)}</strong></div><div><span>Próximo vencimento</span><strong>{nextPlan?dateLabel(nextPlan.dueDate):'—'}</strong></div></div>
           <div className="tenant-financial-board" style={{marginTop:16}}>
-            <article className="tenant-card wide"><div className="tenant-card-section-head"><div><span className="tenant-section-kicker">Planejamento</span><h2>Próximas mensalidades</h2><p>Previsão contratual. Valores já gerados aparecem como cobrança real; reajustes futuros permanecem identificados sem estimativa artificial.</p></div><CalendarDays size={20}/></div>{plan.length>0?<div className="tenant-plan-list">{plan.map(item=><div className={`tenant-plan-row ${item.adjustment?'adjustment':''}`} key={item.key}><div className="tenant-plan-month"><strong>{item.competence}</strong><span>Vence {dateLabel(item.dueDate)}</span></div><div className="tenant-plan-value"><strong>{item.amountLabel}</strong><span>{item.note}</span></div>{item.adjustment?<span className="tenant-adjustment-badge">Reajuste previsto</span>:item.status?<small className={`tenant-inline-status ${item.status}`}>{chargeStatus(item.status)}</small>:<small className="tenant-inline-status">Planejado</small>}</div>)}</div>:<EmptyState icon={CalendarDays} title="Sem próximas mensalidades" text="Não há uma locação ativa com mensalidades futuras para projetar."/>}</article>
+            <article className="tenant-card wide"><div className="tenant-card-section-head"><div><span className="tenant-section-kicker">Planejamento</span><h2>Próximas mensalidades</h2><p>Mensais, anuais e parcelas únicas entram somente na competência programada. Reajustes futuros permanecem identificados sem estimativa artificial.</p></div><CalendarDays size={20}/></div>{plan.length>0?<div className="tenant-plan-list">{plan.map(item=><div className={`tenant-plan-row ${item.adjustment?'adjustment':''}`} key={item.key}><div className="tenant-plan-month"><strong>{item.competence}</strong><span>Vence {dateLabel(item.dueDate)}</span></div><div className="tenant-plan-value"><strong>{item.amountLabel}</strong><span>{item.note}</span>{item.extras.length>0&&<small>{item.extras.map(extra=>`${extra.label} (${frequencyLabel(extra.frequency)}): ${money(extra.amount)}`).join(' · ')}</small>}</div>{item.adjustment?<span className="tenant-adjustment-badge">Reajuste previsto</span>:item.status?<small className={`tenant-inline-status ${item.status}`}>{chargeStatus(item.status)}</small>:<small className="tenant-inline-status">Planejado</small>}</div>)}</div>:<EmptyState icon={CalendarDays} title="Sem próximas mensalidades" text="Não há uma locação ativa com mensalidades futuras para projetar."/>}</article>
 
-            <article className="tenant-card"><div className="tenant-card-section-head"><div><span className="tenant-section-kicker">Pendências</span><h2>Em aberto</h2></div><KeyRound size={19}/></div>{openCharges.length>0?<div className="tenant-open-list">{openCharges.map(charge=><div className="tenant-open-row" key={charge.id}><div className="tenant-open-main"><strong>{monthLabel(charge.competence)} · {money(charge.amount)}</strong><span>Vencimento {dateLabel(charge.due_date)} · {charge.code}</span></div><small className={`tenant-inline-status ${charge.status}`}>{chargeStatus(charge.status)}</small><div className="tenant-open-actions">{charge.pix_copy_paste&&<button onClick={()=>void copy(charge.pix_copy_paste!,'Pix')}><Copy size={13}/> Pix</button>}{charge.boleto_line&&<button onClick={()=>void copy(charge.boleto_line!,'Linha digitável')}><Copy size={13}/> Linha</button>}{charge.billing_pdf_available&&<button onClick={()=>void openBilling(charge)}><Download size={13}/> PDF</button>}</div></div>)}</div>:<EmptyState icon={CheckCircle2} title="Nenhuma cobrança em aberto" text="Não existem cobranças pendentes no histórico disponível."/>}</article>
+            <article className="tenant-card"><div className="tenant-card-section-head"><div><span className="tenant-section-kicker">Pendências</span><h2>Em aberto</h2></div><KeyRound size={19}/></div>{openCharges.length>0?<div className="tenant-open-list">{openCharges.map(charge=><div className="tenant-open-row" key={charge.id}><div className="tenant-open-main"><strong>{monthLabel(charge.competence)} · {money(charge.amount)}</strong><span>Vencimento {dateLabel(charge.due_date)} · {charge.code}</span>{chargeBreakdown(composition?.charges[charge.id])}</div><small className={`tenant-inline-status ${charge.status}`}>{chargeStatus(charge.status)}</small><div className="tenant-open-actions">{charge.pix_copy_paste&&<button onClick={()=>void copy(charge.pix_copy_paste!,'Pix')}><Copy size={13}/> Pix</button>}{charge.boleto_line&&<button onClick={()=>void copy(charge.boleto_line!,'Linha digitável')}><Copy size={13}/> Linha</button>}{charge.billing_pdf_available&&<button onClick={()=>void openBilling(charge)}><Download size={13}/> PDF</button>}</div></div>)}</div>:<EmptyState icon={CheckCircle2} title="Nenhuma cobrança em aberto" text="Não existem cobranças pendentes no histórico disponível."/>}</article>
 
-            <article className="tenant-card"><div className="tenant-card-section-head"><div><span className="tenant-section-kicker">Histórico de pagamento</span><h2>Mensalidades pagas</h2></div><ReceiptText size={19}/></div>{paidCharges.length>0?<div className="tenant-history-list">{paidCharges.map(charge=><div className="tenant-history-row" key={charge.id}><div className="tenant-history-main"><strong>{monthLabel(charge.competence)}</strong><span>Vencimento {dateLabel(charge.due_date)} · pago em {dateTimeLabel(charge.paid_at)}</span></div><div className="tenant-history-value"><strong>{money(charge.paid_amount??charge.amount)}</strong><span>{charge.code}</span></div><small className="tenant-inline-status paid">Pago</small></div>)}</div>:<EmptyState icon={ReceiptText} title="Histórico ainda vazio" text="Quando uma mensalidade for liquidada, ela aparecerá aqui com competência, valor e data de pagamento."/>}</article>
+            <article className="tenant-card"><div className="tenant-card-section-head"><div><span className="tenant-section-kicker">Histórico de pagamento</span><h2>Mensalidades pagas</h2></div><ReceiptText size={19}/></div>{paidCharges.length>0?<div className="tenant-history-list">{paidCharges.map(charge=><div className="tenant-history-row" key={charge.id}><div className="tenant-history-main"><strong>{monthLabel(charge.competence)}</strong><span>Vencimento {dateLabel(charge.due_date)} · pago em {dateTimeLabel(charge.paid_at)}</span>{chargeBreakdown(composition?.charges[charge.id])}</div><div className="tenant-history-value"><strong>{money(charge.paid_amount??charge.amount)}</strong><span>{charge.code}</span></div><small className="tenant-inline-status paid">Pago</small></div>)}</div>:<EmptyState icon={ReceiptText} title="Histórico ainda vazio" text="Quando uma mensalidade for liquidada, ela aparecerá aqui com competência, composição, valor e data de pagamento."/>}</article>
           </div>
         </>}
 
         {tab==='contract'&&<>
-          <div className="tenant-heading"><div><span className="tenant-eyebrow">Contrato</span><h1>Dados da locação</h1><p>Condições principais e histórico dos contratos vinculados ao seu cadastro.</p></div></div>
-          <div className="tenant-stack">{data.leases.map(lease=><article className="tenant-card" key={lease.id}><div className="tenant-card-head"><div><span>{lease.status==='signed'?'Contrato vigente':'Histórico'}</span><h2>{lease.code}</h2></div><span className={`tenant-status ${lease.status}`}>{leaseStatus(lease.status)}</span></div><p className="tenant-address">{addressLabel(lease.property_address)}</p><div className="tenant-detail-grid"><div><span>Aluguel atual</span><strong>{money(lease.rent_amount)}</strong></div><div><span>Vencimento</span><strong>Dia {lease.due_day}</strong></div><div><span>Início</span><strong>{dateLabel(lease.start_date)}</strong></div><div><span>Término previsto</span><strong>{dateLabel(lease.operational_end_date||lease.end_date)}</strong></div><div><span>Índice de reajuste</span><strong>{lease.adjustment_index}</strong></div><div><span>Próximo reajuste</span><strong>{dateLabel(lease.next_adjustment_date)}</strong></div><div><span>Garantia</span><strong>{lease.guarantee_type}</strong></div><div><span>Assinatura</span><strong>{dateTimeLabel(lease.signed_at)}</strong></div></div>{lease.status==='signed'&&lease.next_adjustment_date&&<div className="tenant-reajuste-callout"><CalendarDays size={17}/><div><strong>{monthLabel(lease.next_adjustment_date)} · {money(lease.rent_amount)} + reajuste {lease.adjustment_index}</strong><span>O índice efetivo só será incorporado ao valor quando estiver disponível e for processado pela imobiliária.</span></div></div>}</article>)}{data.leases.length===0&&<EmptyState icon={Building2} title="Nenhum contrato vinculado" text="Não encontramos contratos de locação associados a este acesso."/>}</div>
+          <div className="tenant-heading"><div><span className="tenant-eyebrow">Contrato</span><h1>Dados da locação</h1><p>Condições principais e composição financeira dos contratos vinculados ao seu cadastro.</p></div></div>
+          <div className="tenant-stack">{data.leases.map(lease=><article className="tenant-card" key={lease.id}><div className="tenant-card-head"><div><span>{lease.status==='signed'?'Contrato vigente':'Histórico'}</span><h2>{lease.code}</h2></div><span className={`tenant-status ${lease.status}`}>{leaseStatus(lease.status)}</span></div><p className="tenant-address">{addressLabel(lease.property_address)}</p><div className="tenant-detail-grid"><div><span>Aluguel atual</span><strong>{money(lease.rent_amount)}</strong></div><div><span>Vencimento</span><strong>Dia {lease.due_day}</strong></div><div><span>Início</span><strong>{dateLabel(lease.start_date)}</strong></div><div><span>Término previsto</span><strong>{dateLabel(lease.operational_end_date||lease.end_date)}</strong></div><div><span>Índice de reajuste</span><strong>{lease.adjustment_index}</strong></div><div><span>Próximo reajuste</span><strong>{dateLabel(lease.next_adjustment_date)}</strong></div><div><span>Garantia</span><strong>{lease.guarantee_type}</strong></div><div><span>Assinatura</span><strong>{dateTimeLabel(lease.signed_at)}</strong></div></div>{(composition?.leases[lease.id]||[]).filter(item=>item.active).length>0&&<div className="tenant-card" style={{marginTop:14}}><div className="tenant-card-section-head"><div><span className="tenant-section-kicker">Composição financeira</span><h2>Encargos previstos</h2></div><ReceiptText size={18}/></div><div className="tenant-charge-breakdown">{(composition?.leases[lease.id]||[]).filter(item=>item.active).map(item=><div key={item.key}><span>{item.label} · {frequencyLabel(item.frequency)}{item.include_in_invoice?' · junto na cobrança':' · fora da cobrança'}</span><strong>{money(item.amount)}</strong></div>)}</div></div>}{lease.status==='signed'&&lease.next_adjustment_date&&<div className="tenant-reajuste-callout"><CalendarDays size={17}/><div><strong>{monthLabel(lease.next_adjustment_date)} · reajuste {lease.adjustment_index} sobre o aluguel</strong><span>Os encargos são controlados separadamente e não são confundidos com o valor do aluguel.</span></div></div>}</article>)}{data.leases.length===0&&<EmptyState icon={Building2} title="Nenhum contrato vinculado" text="Não encontramos contratos de locação associados a este acesso."/>}</div>
         </>}
 
         {tab==='documents'&&<>

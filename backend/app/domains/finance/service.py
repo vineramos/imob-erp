@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.domains.contracts.models import AdministrationContract
+from app.domains.finance.core_models import FinancialTitle
 from app.domains.finance.models import FinancialSettlement, OwnerRepasse, RentCharge
 from app.domains.foundation.defaults import OPERATIONAL_DEFAULTS
 from app.domains.foundation.models import OrganizationSettings
@@ -102,7 +103,16 @@ def administration_terms(db: Session, organization_id: UUID, property_id: UUID) 
 def configured_monthly_charge_rules(lease: LeaseContract) -> list[dict]:
     rules = dict(lease.rules_snapshot or {})
     raw = rules.get("monthly_charges") or []
-    return [dict(item) for item in raw if isinstance(item, dict)]
+    normalized: list[dict] = []
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        row = dict(item)
+        row.setdefault("frequency", "monthly")
+        row.setdefault("include_in_invoice", True)
+        row.setdefault("beneficiary_name", None)
+        normalized.append(row)
+    return normalized
 
 
 def suggested_monthly_charge_rules(property_item: Property, terms: dict) -> list[dict]:
@@ -117,6 +127,9 @@ def suggested_monthly_charge_rules(property_item: Property, terms: dict) -> list
             "active": iptu > 0,
             "payer": "tenant",
             "beneficiary": "owner",
+            "beneficiary_name": "Proprietário",
+            "frequency": "monthly",
+            "include_in_invoice": True,
             "start_date": None,
             "end_date": None,
         },
@@ -128,6 +141,9 @@ def suggested_monthly_charge_rules(property_item: Property, terms: dict) -> list
             "active": condo > 0,
             "payer": "tenant",
             "beneficiary": "third_party",
+            "beneficiary_name": "Condomínio",
+            "frequency": "monthly",
+            "include_in_invoice": True,
             "start_date": None,
             "end_date": None,
         },
@@ -139,6 +155,9 @@ def suggested_monthly_charge_rules(property_item: Property, terms: dict) -> list
             "active": False,
             "payer": "tenant",
             "beneficiary": "third_party",
+            "beneficiary_name": "Seguradora",
+            "frequency": "monthly",
+            "include_in_invoice": True,
             "start_date": None,
             "end_date": None,
         },
@@ -150,6 +169,9 @@ def suggested_monthly_charge_rules(property_item: Property, terms: dict) -> list
             "active": False,
             "payer": "tenant",
             "beneficiary": "third_party",
+            "beneficiary_name": "Seguradora",
+            "frequency": "annual",
+            "include_in_invoice": True,
             "start_date": None,
             "end_date": None,
         },
@@ -167,8 +189,10 @@ def _parse_date(value) -> date | None:
         return None
 
 
-def _rule_applies(rule: dict, competence: date) -> bool:
+def charge_rule_applies(rule: dict, competence: date, *, lease_start: date) -> bool:
     if not bool(rule.get("active", True)) or money(rule.get("amount")) <= 0:
+        return False
+    if rule.get("include_in_invoice", True) is False:
         return False
     start = _parse_date(rule.get("start_date"))
     end = _parse_date(rule.get("end_date"))
@@ -178,6 +202,15 @@ def _rule_applies(rule: dict, competence: date) -> bool:
         return False
     if end and end < period_start:
         return False
+    anchor = start or lease_start
+    delta = months_since(month_start(anchor), period_start)
+    if delta < 0:
+        return False
+    frequency = str(rule.get("frequency") or "monthly")
+    if frequency == "one_time":
+        return delta == 0
+    if frequency == "annual":
+        return delta % 12 == 0
     return True
 
 
@@ -190,13 +223,16 @@ def charge_items(lease: LeaseContract, property_item: Property, terms: dict, com
             "amount": str(money(lease.rent_amount)),
             "payer": "tenant",
             "beneficiary": "owner",
+            "beneficiary_name": "Proprietário",
+            "frequency": "monthly",
+            "include_in_invoice": True,
             "source": "lease_contract",
         }
     ]
     configured = configured_monthly_charge_rules(lease)
     if configured:
         for rule in configured:
-            if rule.get("payer", "tenant") != "tenant" or not _rule_applies(rule, competence):
+            if rule.get("payer", "tenant") != "tenant" or not charge_rule_applies(rule, competence, lease_start=lease.start_date):
                 continue
             beneficiary = str(rule.get("beneficiary") or "third_party")
             if beneficiary not in {"owner", "agency", "third_party"}:
@@ -205,20 +241,23 @@ def charge_items(lease: LeaseContract, property_item: Property, terms: dict, com
                 {
                     "key": str(rule.get("key") or "other"),
                     "kind": str(rule.get("kind") or "other"),
-                    "label": str(rule.get("label") or "Encargo mensal"),
+                    "label": str(rule.get("label") or "Encargo"),
                     "amount": str(money(rule.get("amount"))),
                     "payer": "tenant",
                     "beneficiary": beneficiary,
-                    "source": "lease_monthly_rule",
+                    "beneficiary_name": (str(rule.get("beneficiary_name") or "").strip() or None),
+                    "frequency": str(rule.get("frequency") or "monthly"),
+                    "include_in_invoice": True,
+                    "source": "lease_charge_rule",
                 }
             )
         return items
 
-    # Compatibilidade com contratos assinados antes da composição mensal versionada.
+    # Compatibilidade com contratos assinados antes da composição versionada.
     if terms.get("iptu_operational_payer") == "tenant" and property_item.iptu_amount:
-        items.append({"key": "iptu", "kind": "iptu", "label": "IPTU", "amount": str(money(property_item.iptu_amount)), "payer": "tenant", "beneficiary": "owner", "source": "legacy_property"})
+        items.append({"key": "iptu", "kind": "iptu", "label": "IPTU", "amount": str(money(property_item.iptu_amount)), "payer": "tenant", "beneficiary": "owner", "beneficiary_name": "Proprietário", "frequency": "monthly", "include_in_invoice": True, "source": "legacy_property"})
     if terms.get("condo_operational_payer") == "agency" and property_item.condo_amount:
-        items.append({"key": "condo", "kind": "condo", "label": "Condomínio", "amount": str(money(property_item.condo_amount)), "payer": "tenant", "beneficiary": "agency", "source": "legacy_property"})
+        items.append({"key": "condo", "kind": "condo", "label": "Condomínio", "amount": str(money(property_item.condo_amount)), "payer": "tenant", "beneficiary": "agency", "beneficiary_name": "Imobiliária", "frequency": "monthly", "include_in_invoice": True, "source": "legacy_property"})
     return items
 
 
@@ -312,6 +351,48 @@ def generate_charges(
     return created, skipped_existing, skipped_ineligible
 
 
+def _create_third_party_titles(db: Session, charge: RentCharge, paid_at: datetime) -> None:
+    for item in list(charge.charge_items or []):
+        if item.get("key") == "rent" or item.get("beneficiary") != "third_party":
+            continue
+        amount = money(item.get("amount"))
+        if amount <= 0:
+            continue
+        label = str(item.get("label") or "Encargo da locação")
+        counterparty = str(item.get("beneficiary_name") or label).strip() or label
+        title = FinancialTitle(
+            organization_id=charge.organization_id,
+            direction="payable",
+            fund_scope="third_party",
+            source_type="manual",
+            source_id=charge.id,
+            property_id=charge.property_id,
+            lease_contract_id=charge.lease_contract_id,
+            category="Encargo de locação",
+            description=f"{label} · COB-{charge.internal_number:06d}",
+            counterparty_name=counterparty,
+            competence=charge.competence,
+            due_date=paid_at.date(),
+            amount=amount,
+            settled_amount=Decimal("0.00"),
+            status="pending",
+            notes="Obrigação automática criada após o recebimento da cobrança do locatário.",
+            source_snapshot={
+                "automatic": True,
+                "origin": "lease_charge_component",
+                "charge_id": str(charge.id),
+                "charge_code": f"COB-{charge.internal_number:06d}",
+                "charge_item_key": item.get("key"),
+                "kind": item.get("kind"),
+                "label": label,
+                "frequency": item.get("frequency") or "monthly",
+                "beneficiary_name": counterparty,
+            },
+            created_by_user_id=charge.created_by_user_id,
+        )
+        db.add(title)
+
+
 def calculate_settlement(db: Session, charge: RentCharge, paid_at: datetime) -> FinancialSettlement:
     if charge.settlement is not None:
         return charge.settlement
@@ -330,6 +411,10 @@ def calculate_settlement(db: Session, charge: RentCharge, paid_at: datetime) -> 
     intermediation_fee = Decimal("0.00")
     if 1 <= installment_number <= installments and intermediation_percent > 0:
         intermediation_fee = money(rent * intermediation_percent / Decimal("100") / Decimal(installments))
+
+    # Quando a intermediação consome o primeiro aluguel, a administração começa na competência seguinte.
+    if intermediation_fee > 0 and intermediation_fee >= rent:
+        admin_fee = Decimal("0.00")
 
     requested_agency_fees = admin_fee + intermediation_fee
     agency_fee_withheld = money(min(rent, requested_agency_fees))
@@ -363,6 +448,8 @@ def calculate_settlement(db: Session, charge: RentCharge, paid_at: datetime) -> 
     )
     db.add(settlement)
     db.flush()
+
+    _create_third_party_titles(db, charge, paid_at)
 
     owners = [owner for owner in list(charge.owner_snapshot or []) if owner.get("person_id")]
     repasse_days = int(terms.get("owner_repasse_business_days") or 0)

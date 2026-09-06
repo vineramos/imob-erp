@@ -14,6 +14,7 @@ SignerCommunication = Literal["email", "sms", "whatsapp", "none"]
 MonthlyChargeKind = Literal["iptu", "condo", "guarantee_insurance", "fire_insurance", "other"]
 MonthlyChargePayer = Literal["tenant", "owner", "agency"]
 MonthlyChargeBeneficiary = Literal["owner", "agency", "third_party"]
+MonthlyChargeFrequency = Literal["monthly", "annual", "one_time"]
 
 
 class LeaseSignerPayload(BaseModel):
@@ -38,6 +39,9 @@ class LeaseMonthlyChargePayload(BaseModel):
     active: bool = True
     payer: MonthlyChargePayer = "tenant"
     beneficiary: MonthlyChargeBeneficiary = "third_party"
+    beneficiary_name: str | None = Field(default=None, max_length=180)
+    frequency: MonthlyChargeFrequency = "monthly"
+    include_in_invoice: bool = True
     start_date: date | None = None
     end_date: date | None = None
 
@@ -79,7 +83,7 @@ class LeaseContractTerms(BaseModel):
             raise ValueError("Não repita o mesmo e-mail na lista de signatários.")
         charge_keys = [charge.key for charge in self.monthly_charges]
         if len(charge_keys) != len(set(charge_keys)):
-            raise ValueError("Não repita a mesma chave na composição mensal da locação.")
+            raise ValueError("Não repita a mesma chave na composição da locação.")
         for charge in self.monthly_charges:
             if charge.start_date and charge.start_date < self.start_date:
                 raise ValueError(f"A vigência de {charge.label} não pode começar antes da locação.")

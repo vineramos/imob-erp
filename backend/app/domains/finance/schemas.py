@@ -36,9 +36,15 @@ class RepassePaymentRequest(BaseModel):
 
 class ChargeItem(BaseModel):
     key: str
+    kind: str = "other"
     label: str
     amount: Decimal
+    payer: str = "tenant"
     beneficiary: Literal["owner", "agency", "third_party"]
+    beneficiary_name: str | None = None
+    frequency: Literal["monthly", "annual", "one_time"] = "monthly"
+    include_in_invoice: bool = True
+    source: str | None = None
 
 
 class RepasseResponse(BaseModel):

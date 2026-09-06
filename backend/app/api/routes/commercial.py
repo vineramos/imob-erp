@@ -13,11 +13,13 @@ from sqlalchemy.orm import Session, selectinload
 from app.core.database import get_db
 from app.domains.agenda.logic import access_map, ensure_agenda_structure, require_schedule_access, user_available
 from app.domains.agenda.models import AgendaTask
+from app.domains.finance.service import administration_terms, money, suggested_monthly_charge_rules
 from app.domains.foundation.access import UserContext, require_permission
 from app.domains.foundation.audit import write_audit
 from app.domains.foundation.models import AppUser, OrganizationSettings
 from app.domains.leases.models import LeaseContract, LeaseContractVersion
 from app.domains.leases.pdf import lease_contract_code
+from app.domains.leases.schemas import LeaseMonthlyChargePayload
 from app.domains.portfolio.models import Person, PersonRole, Property, PropertyOwner
 from app.domains.portfolio.site_models import CommercialProposal, CommercialVisit, PublicSiteInquiry
 
@@ -54,6 +56,11 @@ class ProposalUpdate(BaseModel):
     reason: str | None = Field(default=None, max_length=1000)
 
 
+class ProposalLeaseConversion(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    monthly_charges: list[LeaseMonthlyChargePayload] = Field(default_factory=list, max_length=30)
+
+
 def _metadata(request: Request) -> tuple[str | None, str | None]:
     forwarded = request.headers.get("x-forwarded-for", "").split(",", 1)[0].strip()
     return forwarded or (request.client.host if request.client else None), request.headers.get("user-agent")
@@ -75,12 +82,28 @@ def _inquiry(db: Session, org_id: UUID, inquiry_id: UUID) -> PublicSiteInquiry:
     return item
 
 
+def _proposal_record(db: Session, org_id: UUID, proposal_id: UUID) -> CommercialProposal:
+    item = db.scalar(select(CommercialProposal).where(CommercialProposal.id == proposal_id, CommercialProposal.organization_id == org_id))
+    if item is None:
+        raise HTTPException(404, "Proposta comercial não encontrada.")
+    return item
+
+
 def _property(db: Session, inquiry: PublicSiteInquiry) -> Property:
     if inquiry.property_id is None:
         raise HTTPException(409, "O imóvel original deste interesse não está mais disponível no cadastro.")
     item = db.scalar(select(Property).options(selectinload(Property.owners).selectinload(PropertyOwner.person)).where(Property.id == inquiry.property_id, Property.organization_id == inquiry.organization_id))
     if item is None:
         raise HTTPException(409, "O imóvel original deste interesse não está mais disponível no cadastro.")
+    return item
+
+
+def _proposal_property(db: Session, proposal: CommercialProposal) -> Property:
+    if proposal.property_id is None:
+        raise HTTPException(409, "A proposta não possui imóvel vinculado.")
+    item = db.scalar(select(Property).options(selectinload(Property.owners).selectinload(PropertyOwner.person)).where(Property.id == proposal.property_id, Property.organization_id == proposal.organization_id))
+    if item is None:
+        raise HTTPException(409, "O imóvel da proposta não está mais disponível no cadastro.")
     return item
 
 
@@ -174,13 +197,37 @@ def _add_months(value: date, months: int) -> date:
     return date(year, month, min(value.day, calendar.monthrange(year, month)[1]))
 
 
-def _lease_from_proposal(db: Session, proposal: CommercialProposal, context: UserContext) -> LeaseContract:
+def _suggested_conversion_charges(db: Session, proposal: CommercialProposal, prop: Property) -> list[dict]:
+    end_date = _add_months(proposal.start_date, proposal.term_months)
+    rows = suggested_monthly_charge_rules(prop, administration_terms(db, proposal.organization_id, prop.id))
+    result: list[dict] = []
+    for row in rows:
+        item = dict(row)
+        item["start_date"] = proposal.start_date.isoformat()
+        item["end_date"] = end_date.isoformat()
+        result.append(item)
+    return result
+
+
+def _validate_conversion_charges(proposal: CommercialProposal, charges: list[LeaseMonthlyChargePayload]) -> list[dict]:
+    end_date = _add_months(proposal.start_date, proposal.term_months)
+    result: list[dict] = []
+    for charge in charges:
+        if charge.start_date and charge.start_date < proposal.start_date:
+            raise HTTPException(422, f"A vigência de {charge.label} não pode começar antes da locação.")
+        if charge.end_date and charge.end_date > end_date:
+            raise HTTPException(422, f"A vigência de {charge.label} não pode terminar depois da locação.")
+        result.append(charge.model_dump(mode="json"))
+    return result
+
+
+def _lease_from_proposal(db: Session, proposal: CommercialProposal, context: UserContext, charges: list[dict]) -> LeaseContract:
     if proposal.property_id is None or proposal.person_id is None:
         raise HTTPException(409, "A proposta não possui imóvel e interessado vinculados.")
-    prop = db.scalar(select(Property).options(selectinload(Property.owners).selectinload(PropertyOwner.person)).where(Property.id == proposal.property_id, Property.organization_id == proposal.organization_id))
+    prop = _proposal_property(db, proposal)
     tenant = db.scalar(select(Person).where(Person.id == proposal.person_id, Person.organization_id == proposal.organization_id, Person.is_active.is_(True)))
-    if prop is None or tenant is None:
-        raise HTTPException(409, "Imóvel ou interessado da proposta não está mais disponível.")
+    if tenant is None:
+        raise HTTPException(409, "O interessado da proposta não está mais disponível.")
     if not prop.owners or sum((row.ownership_percent for row in prop.owners), Decimal("0")) != Decimal("100"):
         raise HTTPException(422, "O imóvel precisa ter proprietário(s) totalizando 100% antes do contrato.")
     if db.scalar(select(LeaseContract.id).where(LeaseContract.organization_id == proposal.organization_id, LeaseContract.property_id == prop.id, LeaseContract.status.not_in(("cancelled", "closed"))).limit(1)):
@@ -191,10 +238,6 @@ def _lease_from_proposal(db: Session, proposal: CommercialProposal, context: Use
     owners = [{"person_id": str(row.person_id), "name": row.person.name, "document_number": row.person.document_number, "email": row.person.email, "phone": row.person.phone, "ownership_percent": str(row.ownership_percent)} for row in prop.owners]
     tenants = [{"person_id": str(tenant.id), "name": tenant.name, "document_number": tenant.document_number, "email": tenant.email, "phone": tenant.phone}]
     signers = [{"role": role, "name": party.get("name") or "", "email": party.get("email") or "", "document_number": party.get("document_number"), "phone": party.get("phone"), "sign_order": 1, "communication": "email"} for role, parties in (("owner", owners), ("tenant", tenants)) for party in parties]
-    charges = []
-    for key, kind, label, amount in (("condo", "condo", "Condomínio", prop.condo_amount), ("iptu", "iptu", "IPTU", prop.iptu_amount)):
-        if amount is not None and Decimal(amount) > 0:
-            charges.append({"key": key, "kind": kind, "label": label, "amount": str(amount), "active": True, "payer": "tenant", "beneficiary": "third_party", "start_date": proposal.start_date.isoformat(), "end_date": end_date.isoformat()})
     rules = {"rent_amount": str(proposal.rent_amount), "due_day": 10, "adjustment_index": "IPCA", "adjustment_period_months": 12, "adjustment_base_date": proposal.start_date.isoformat(), "next_adjustment_date": next_adjustment.isoformat(), "term_months": proposal.term_months, "start_date": proposal.start_date.isoformat(), "end_date": end_date.isoformat(), "termination_fine_months": "3", "inspection_contest_days": 5, "guarantee_type": proposal.guarantee_type, "guarantee_details": {}, "monthly_charges": charges, "notes": proposal.notes}
     settings = db.scalar(select(OrganizationSettings).where(OrganizationSettings.organization_id == proposal.organization_id))
     provider = str(((settings.integrations if settings else {}) or {}).get("signature_provider") or "clicksign")
@@ -274,9 +317,7 @@ def create_proposal(inquiry_id: UUID, payload: ProposalCreate, request: Request,
 
 @router.patch("/crm/proposals/{proposal_id}")
 def update_proposal(proposal_id: UUID, payload: ProposalUpdate, request: Request, context: UserContext = Depends(require_permission("crm.manage")), db: Session = Depends(get_db)):
-    proposal = db.scalar(select(CommercialProposal).where(CommercialProposal.id == proposal_id, CommercialProposal.organization_id == context.user.organization_id))
-    if proposal is None:
-        raise HTTPException(404, "Proposta comercial não encontrada.")
+    proposal = _proposal_record(db, context.user.organization_id, proposal_id)
     if proposal.status in {"converted", "won", "rejected", "withdrawn"}:
         raise HTTPException(409, "Esta proposta já está encerrada.")
     if payload.status in {"rejected", "withdrawn"} and not (payload.reason or "").strip():
@@ -291,19 +332,39 @@ def update_proposal(proposal_id: UUID, payload: ProposalUpdate, request: Request
     return _proposal(db, proposal)
 
 
-@router.post("/crm/proposals/{proposal_id}/convert-to-lease", status_code=status.HTTP_201_CREATED)
-def convert_proposal(proposal_id: UUID, request: Request, context: UserContext = Depends(require_permission("crm.manage")), db: Session = Depends(get_db)):
+@router.get("/crm/proposals/{proposal_id}/lease-composition")
+def proposal_lease_composition(proposal_id: UUID, context: UserContext = Depends(require_permission("crm.manage")), db: Session = Depends(get_db)):
     if not context.has("contracts.create"):
         raise HTTPException(403, "Permissão necessária: contracts.create")
-    proposal = db.scalar(select(CommercialProposal).where(CommercialProposal.id == proposal_id, CommercialProposal.organization_id == context.user.organization_id))
-    if proposal is None:
-        raise HTTPException(404, "Proposta comercial não encontrada.")
+    proposal = _proposal_record(db, context.user.organization_id, proposal_id)
+    if proposal.status != "accepted":
+        raise HTTPException(409, "A proposta precisa estar aceita para preparar a composição da locação.")
+    prop = _proposal_property(db, proposal)
+    charges = _suggested_conversion_charges(db, proposal, prop)
+    monthly_extras = sum((money(item.get("amount")) for item in charges if item.get("active") and item.get("payer") == "tenant" and item.get("include_in_invoice", True) is not False and item.get("frequency") == "monthly"), Decimal("0.00"))
+    return {
+        "proposal_id": str(proposal.id),
+        "rent_amount": str(money(proposal.rent_amount)),
+        "start_date": proposal.start_date,
+        "end_date": _add_months(proposal.start_date, proposal.term_months),
+        "monthly_charges": charges,
+        "tenant_monthly_total": str(money(proposal.rent_amount) + monthly_extras),
+    }
+
+
+@router.post("/crm/proposals/{proposal_id}/convert-to-lease", status_code=status.HTTP_201_CREATED)
+def convert_proposal(proposal_id: UUID, payload: ProposalLeaseConversion | None, request: Request, context: UserContext = Depends(require_permission("crm.manage")), db: Session = Depends(get_db)):
+    if not context.has("contracts.create"):
+        raise HTTPException(403, "Permissão necessária: contracts.create")
+    proposal = _proposal_record(db, context.user.organization_id, proposal_id)
     if proposal.status != "accepted":
         raise HTTPException(409, "A proposta precisa estar aceita antes de gerar o contrato.")
-    lease = _lease_from_proposal(db, proposal, context)
+    prop = _proposal_property(db, proposal)
+    charges = _validate_conversion_charges(proposal, payload.monthly_charges) if payload is not None else _suggested_conversion_charges(db, proposal, prop)
+    lease = _lease_from_proposal(db, proposal, context, charges)
     proposal.status, proposal.lease_contract_id = "converted", lease.id
     inquiry = _inquiry(db, context.user.organization_id, proposal.inquiry_id)
     inquiry.status = "converted"
-    _audit(db, request, context, "crm.proposal.converted_to_lease", "commercial_proposal", proposal.id, before={"status": "accepted"}, after={"status": "converted", "lease_contract_id": str(lease.id), "lease_code": lease_contract_code(lease), "property_status": "unchanged_until_signature"})
+    _audit(db, request, context, "crm.proposal.converted_to_lease", "commercial_proposal", proposal.id, before={"status": "accepted"}, after={"status": "converted", "lease_contract_id": str(lease.id), "lease_code": lease_contract_code(lease), "property_status": "unchanged_until_signature", "charge_count": len(charges)})
     db.commit(); db.refresh(proposal)
-    return {"proposal": _proposal(db, proposal), "lease_contract_id": lease.id, "lease_code": lease_contract_code(lease), "lease_status": lease.status, "message": "Contrato de locação criado em rascunho. O imóvel permanece no estoque até a assinatura final."}
+    return {"proposal": _proposal(db, proposal), "lease_contract_id": lease.id, "lease_code": lease_contract_code(lease), "lease_status": lease.status, "message": "Contrato de locação criado em rascunho com a composição financeira definida. O imóvel permanece no estoque até a assinatura final."}
