@@ -24,7 +24,7 @@ from app.domains.finance.schemas import (
     RepasseResponse,
     SettlementResponse,
 )
-from app.domains.finance.service import generate_charges, money, record_payment, refresh_overdue
+from app.domains.finance.service import charge_item_agency_retention, generate_charges, money, record_payment, refresh_overdue
 from app.domains.foundation.access import UserContext, require_permission
 from app.domains.foundation.audit import write_audit
 from app.domains.foundation.models import Organization
@@ -83,6 +83,10 @@ def _property_code(item: RentCharge) -> str:
     return str((item.property_snapshot or {}).get("code") or "—")
 
 
+def _charge_agency_retention(item: RentCharge) -> Decimal:
+    return money(sum((charge_item_agency_retention(row) for row in list(item.charge_items or [])), Decimal("0.00")))
+
+
 def _repasse_response(db: Session, item: OwnerRepasse, charge: RentCharge | None = None) -> RepasseResponse:
     charge = charge or db.get(RentCharge, item.charge_id)
     return RepasseResponse(
@@ -113,6 +117,7 @@ def _settlement_response(db: Session, item: FinancialSettlement, charge: RentCha
         intermediation_fee_calculated=item.intermediation_fee_calculated,
         agency_fee_withheld=item.agency_fee_withheld,
         agency_reimbursement_amount=item.agency_reimbursement_amount,
+        agency_retention_amount=_charge_agency_retention(charge),
         owner_entitlement_amount=item.owner_entitlement_amount,
         third_party_amount=item.third_party_amount,
         calculated_at=item.calculated_at,
@@ -178,7 +183,10 @@ def finance_dashboard(
         overdue_amount=sum((money(item.gross_amount) for item in overdue), Decimal("0.00")),
         critical_overdue_amount=sum((money(item.gross_amount) for item in critical), Decimal("0.00")),
         received_amount=sum((money(item.paid_amount) for item in paid_competence), Decimal("0.00")),
-        agency_revenue_amount=sum((money(s.agency_fee_withheld) for s in settlements), Decimal("0.00")),
+        agency_revenue_amount=sum(
+            (money(item.settlement.agency_fee_withheld) + _charge_agency_retention(item) for item in paid_competence if item.settlement),
+            Decimal("0.00"),
+        ),
         pending_repasse_amount=sum((money(item.amount) for item in all_pending_repasses), Decimal("0.00")),
         charges_open=len(open_items),
         charges_overdue=len(overdue),
@@ -283,6 +291,7 @@ def receive_charge(
         )
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+    retention = _charge_agency_retention(item)
     _audit(
         db, request, context,
         action="finance.charge.received",
@@ -292,6 +301,8 @@ def receive_charge(
             "code": _charge_code(item),
             "paid_amount": str(item.paid_amount),
             "agency_fee_withheld": str(settlement.agency_fee_withheld),
+            "agency_retention_amount": str(retention),
+            "third_party_amount": str(settlement.third_party_amount),
             "owner_entitlement": str(settlement.owner_entitlement_amount),
         },
     )
