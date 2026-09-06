@@ -15,6 +15,7 @@ MonthlyChargeKind = Literal["iptu", "condo", "guarantee_insurance", "fire_insura
 MonthlyChargePayer = Literal["tenant", "owner", "agency"]
 MonthlyChargeBeneficiary = Literal["owner", "agency", "third_party"]
 MonthlyChargeFrequency = Literal["monthly", "annual", "one_time"]
+MonthlyChargeRetentionType = Literal["none", "percent", "fixed"]
 
 
 class LeaseSignerPayload(BaseModel):
@@ -42,13 +43,26 @@ class LeaseMonthlyChargePayload(BaseModel):
     beneficiary_name: str | None = Field(default=None, max_length=180)
     frequency: MonthlyChargeFrequency = "monthly"
     include_in_invoice: bool = True
+    agency_retention_type: MonthlyChargeRetentionType = "none"
+    agency_retention_value: Decimal = Field(default=Decimal("0"), ge=0, le=Decimal("999999999999.99"))
     start_date: date | None = None
     end_date: date | None = None
 
     @model_validator(mode="after")
-    def validate_period(self):
+    def validate_period_and_retention(self):
         if self.start_date and self.end_date and self.end_date < self.start_date:
             raise ValueError("A vigência final do encargo não pode ser anterior à inicial.")
+        if self.agency_retention_type == "percent" and self.agency_retention_value > Decimal("100"):
+            raise ValueError("A retenção percentual da imobiliária não pode ser superior a 100%.")
+        if self.agency_retention_type == "fixed" and self.agency_retention_value > self.amount:
+            raise ValueError("A retenção fixa da imobiliária não pode ser maior que o valor cobrado do locatário.")
+        if self.agency_retention_type != "none":
+            if self.kind not in {"guarantee_insurance", "fire_insurance"}:
+                raise ValueError("A retenção da imobiliária só pode ser configurada para seguro fiança ou seguro incêndio.")
+            if self.beneficiary != "third_party":
+                raise ValueError("Seguros com retenção precisam ter o terceiro/seguradora como destinatário.")
+        elif self.agency_retention_value != Decimal("0"):
+            raise ValueError("Defina o tipo de retenção (% ou R$) para informar um valor de retenção.")
         return self
 
 
