@@ -33,6 +33,8 @@ OPERATIONAL_DEFAULTS = {
     "termination_fine_months": 3,
     "inspection_contest_days": 5,
     "default_admin_fee_percent": 10,
+    "delinquency_first_contact_day": 1,
+    "delinquency_followup_day": 3,
     "delinquency_critical_day": 5,
 }
 

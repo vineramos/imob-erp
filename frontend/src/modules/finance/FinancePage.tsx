@@ -1,4 +1,4 @@
-import { BarChart3, ExternalLink, Landmark, LayoutDashboard, LockKeyhole, Percent, PlugZap, ReceiptText, Send, ShieldCheck, Tags, TrendingUp, WalletCards } from 'lucide-react'
+import { AlertTriangle, BarChart3, ExternalLink, Landmark, LayoutDashboard, LockKeyhole, Percent, PlugZap, ReceiptText, Send, ShieldCheck, Tags, TrendingUp, WalletCards } from 'lucide-react'
 import { useState } from 'react'
 import { FinanceBankControlPanel } from './FinanceBankControlPanel'
 import { FinanceBankSetupPanel } from './FinanceBankSetupPanel'
@@ -7,6 +7,7 @@ import { FinanceBillingPanel } from './FinanceBillingPanel'
 import { FinanceClassificationsPanel } from './FinanceClassificationsPanel'
 import { FinanceCommissionsPanel } from './FinanceCommissionsPanel'
 import { FinanceCorePanel } from './FinanceCorePanel'
+import { FinanceDelinquencyPanel } from './FinanceDelinquencyPanel'
 import { FinanceInterPanel } from './FinanceInterPanel'
 import { FinancePage as FinanceRentPage } from './FinanceRentPage'
 import { FinancePortalsPanel } from './FinancePortalsPanel'
@@ -14,13 +15,14 @@ import { FinanceReportsPanel } from './FinanceReportsPanel'
 import { FinanceTreasuryPanel } from './FinanceTreasuryPanel'
 import { MaintenanceFinancePanel } from './MaintenanceFinancePanel'
 
-type Area = 'overview'|'billing'|'treasury'|'banking'|'bank-setup'|'bank-control'|'inter'|'reports'|'commissions'|'classifications'|'portals'|'rent'|'maintenance'
+type Area = 'overview'|'billing'|'delinquency'|'treasury'|'banking'|'bank-setup'|'bank-control'|'inter'|'reports'|'commissions'|'classifications'|'portals'|'rent'|'maintenance'
 
 export function FinancePage({permissions}:{permissions:string[]}){
   const [area,setArea]=useState<Area>('overview')
   return <><div className="workspace finance-area-switch"><div className="panel finance-tabs finance-root-tabs">
     <button type="button" className={area==='overview'?'active':''} onClick={()=>setArea('overview')}><LayoutDashboard size={15}/> Visão geral</button>
     <button type="button" className={area==='billing'?'active':''} onClick={()=>setArea('billing')}><Send size={15}/> Cobranças</button>
+    <button type="button" className={area==='delinquency'?'active':''} onClick={()=>setArea('delinquency')}><AlertTriangle size={15}/> Inadimplência</button>
     <button type="button" className={area==='treasury'?'active':''} onClick={()=>setArea('treasury')}><TrendingUp size={15}/> Tesouraria</button>
     <button type="button" className={area==='banking'?'active':''} onClick={()=>setArea('banking')}><WalletCards size={15}/> Bancos</button>
     <button type="button" className={area==='bank-setup'?'active':''} onClick={()=>setArea('bank-setup')}><PlugZap size={15}/> Contas e APIs</button>
@@ -33,5 +35,5 @@ export function FinancePage({permissions}:{permissions:string[]}){
     <button type="button" className={area==='rent'?'active':''} onClick={()=>setArea('rent')}><Landmark size={15}/> Locações</button>
     <button type="button" className={area==='maintenance'?'active':''} onClick={()=>setArea('maintenance')}><ReceiptText size={15}/> Manutenções</button>
   </div></div>
-  {area==='overview'?<FinanceCorePanel permissions={permissions} onNavigateSource={source=>setArea(source==='maintenance'?'maintenance':'rent')}/>:area==='billing'?<FinanceBillingPanel permissions={permissions}/>:area==='treasury'?<FinanceTreasuryPanel permissions={permissions}/>:area==='banking'?<FinanceBankingPanel permissions={permissions}/>:area==='bank-setup'?<FinanceBankSetupPanel permissions={permissions}/>:area==='bank-control'?<FinanceBankControlPanel permissions={permissions}/>:area==='inter'?<FinanceInterPanel permissions={permissions}/>:area==='reports'?<FinanceReportsPanel permissions={permissions}/>:area==='commissions'?<FinanceCommissionsPanel permissions={permissions}/>:area==='classifications'?<FinanceClassificationsPanel permissions={permissions}/>:area==='portals'?<FinancePortalsPanel permissions={permissions}/>:area==='rent'?<FinanceRentPage permissions={permissions}/>:<MaintenanceFinancePanel permissions={permissions}/>}</>
+  {area==='overview'?<FinanceCorePanel permissions={permissions} onNavigateSource={source=>setArea(source==='maintenance'?'maintenance':'rent')}/>:area==='billing'?<FinanceBillingPanel permissions={permissions}/>:area==='delinquency'?<FinanceDelinquencyPanel permissions={permissions}/>:area==='treasury'?<FinanceTreasuryPanel permissions={permissions}/>:area==='banking'?<FinanceBankingPanel permissions={permissions}/>:area==='bank-setup'?<FinanceBankSetupPanel permissions={permissions}/>:area==='bank-control'?<FinanceBankControlPanel permissions={permissions}/>:area==='inter'?<FinanceInterPanel permissions={permissions}/>:area==='reports'?<FinanceReportsPanel permissions={permissions}/>:area==='commissions'?<FinanceCommissionsPanel permissions={permissions}/>:area==='classifications'?<FinanceClassificationsPanel permissions={permissions}/>:area==='portals'?<FinancePortalsPanel permissions={permissions}/>:area==='rent'?<FinanceRentPage permissions={permissions}/>:<MaintenanceFinancePanel permissions={permissions}/>}</>
 }
