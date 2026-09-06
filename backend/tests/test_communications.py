@@ -99,14 +99,14 @@ def test_suggestions_are_human_controlled_idempotent_and_tenant_safe(client, ide
     _enable_permissions(identity)
     tenant_id, charge_id = _tenant_and_overdue_charge(identity)
 
-    first = client.post("/communications/suggestions/refresh", json={"include_overdue_charges": True, "include_contracts": False, "include_owner_repasses": False})
+    first = client.post("/api/communications/suggestions/refresh", json={"include_overdue_charges": True, "include_contracts": False, "include_owner_repasses": False})
     assert first.status_code == 200
     assert first.json()["created"] == 1
-    second = client.post("/communications/suggestions/refresh", json={"include_overdue_charges": True, "include_contracts": False, "include_owner_repasses": False})
+    second = client.post("/api/communications/suggestions/refresh", json={"include_overdue_charges": True, "include_contracts": False, "include_owner_repasses": False})
     assert second.status_code == 200
     assert second.json()["created"] == 0
 
-    messages = client.get("/communications/messages").json()
+    messages = client.get("/api/communications/messages").json()
     assert len(messages) == 1
     message = messages[0]
     assert message["person_id"] == str(tenant_id)
@@ -118,16 +118,16 @@ def test_suggestions_are_human_controlled_idempotent_and_tenant_safe(client, ide
     assert message["attempt_count"] == 0
 
     # Sem SMTP real, o ERP não finge que enviou.
-    blocked = client.post(f"/communications/messages/{message['id']}/send")
+    blocked = client.post(f"/api/communications/messages/{message['id']}/send")
     assert blocked.status_code == 409
-    current = client.get(f"/communications/messages/{message['id']}").json()
+    current = client.get(f"/api/communications/messages/{message['id']}").json()
     assert current["status"] == "pending"
     assert current["attempt_count"] == 0
 
     delivered = []
     monkeypatch.setattr(communication_routes, "smtp_configured", lambda: True)
     monkeypatch.setattr(communication_routes, "send_email_message", lambda **kwargs: delivered.append(kwargs))
-    sent = client.post(f"/communications/messages/{message['id']}/send")
+    sent = client.post(f"/api/communications/messages/{message['id']}/send")
     assert sent.status_code == 200
     payload = sent.json()
     assert payload["status"] == "sent"
@@ -135,7 +135,7 @@ def test_suggestions_are_human_controlled_idempotent_and_tenant_safe(client, ide
     assert payload["sent_by_user_id"] == str(identity["user_id"])
     assert delivered and delivered[0]["recipient"] == "locatario@example.invalid"
     assert any(event["event_type"] == "sent" for event in payload["events"])
-    assert client.patch(f"/communications/messages/{message['id']}", json={"subject": "alteração indevida"}).status_code == 409
+    assert client.patch(f"/api/communications/messages/{message['id']}", json={"subject": "alteração indevida"}).status_code == 409
 
 
 def test_preferences_and_unavailable_whatsapp_block_external_delivery(client, identity, monkeypatch):
@@ -145,41 +145,41 @@ def test_preferences_and_unavailable_whatsapp_block_external_delivery(client, id
     calls = []
     monkeypatch.setattr(communication_routes, "send_email_message", lambda **kwargs: calls.append(kwargs))
 
-    created = client.post("/communications/messages", json={
+    created = client.post("/api/communications/messages", json={
         "person_id": str(tenant_id), "recipient_role": "tenant", "channel": "email", "category": "manual",
         "subject": "Teste", "body": "Mensagem de teste controlada"
     })
     assert created.status_code == 201
     message_id = created.json()["id"]
 
-    preference = client.put(f"/communications/preferences/{tenant_id}", json={
+    preference = client.put(f"/api/communications/preferences/{tenant_id}", json={
         "email_enabled": False, "whatsapp_enabled": False, "transactional_enabled": True, "preferred_channel": "email", "notes": "Não enviar e-mail"
     })
     assert preference.status_code == 200
-    blocked = client.post(f"/communications/messages/{message_id}/send")
+    blocked = client.post(f"/api/communications/messages/{message_id}/send")
     assert blocked.status_code == 409
     assert "desativado" in blocked.json()["detail"].lower()
     assert calls == []
 
-    whatsapp = client.post("/communications/messages", json={
+    whatsapp = client.post("/api/communications/messages", json={
         "recipient_name": "Contato WhatsApp", "recipient_phone": "41999990000", "recipient_role": "other",
         "channel": "whatsapp", "category": "manual", "subject": "", "body": "Mensagem futura"
     })
     assert whatsapp.status_code == 201
     whats_id = whatsapp.json()["id"]
-    blocked_whatsapp = client.post(f"/communications/messages/{whats_id}/send")
+    blocked_whatsapp = client.post(f"/api/communications/messages/{whats_id}/send")
     assert blocked_whatsapp.status_code == 409
     assert "whatsapp" in blocked_whatsapp.json()["detail"].lower()
-    assert client.get("/communications/capabilities").json()["whatsapp"]["configured"] is False
+    assert client.get("/api/communications/capabilities").json()["whatsapp"]["configured"] is False
 
 
 def test_templates_are_safe_and_customizable(client, identity):
     _enable_permissions(identity)
-    templates = client.get("/communications/templates")
+    templates = client.get("/api/communications/templates")
     assert templates.status_code == 200
     rows = templates.json()
     overdue = next(item for item in rows if item["key"] == "rent_overdue")
-    updated = client.put(f"/communications/templates/{overdue['id']}", json={
+    updated = client.put(f"/api/communications/templates/{overdue['id']}", json={
         "name": "Cobrança amigável",
         "subject_template": "{{charge_code}} · {{organization_name}}",
         "body_template": "Olá, {{recipient_name}}. Valor: {{amount}}. Campo desconhecido permanece: {{nao_existe}}.",
