@@ -52,6 +52,32 @@ def months_since(start: date, competence: date) -> int:
     return (competence.year - start.year) * 12 + competence.month - start.month
 
 
+def charge_item_agency_retention(item: dict) -> Decimal:
+    """Retorna a parcela do encargo que pertence à imobiliária.
+
+    O valor cobrado do locatário permanece em ``amount``. A retenção apenas
+    divide internamente esse valor entre imobiliária e terceiro/seguradora.
+    """
+    if item.get("beneficiary") != "third_party":
+        return Decimal("0.00")
+    amount = money(item.get("amount"))
+    retention_type = str(item.get("agency_retention_type") or "none")
+    retention_value = Decimal(str(item.get("agency_retention_value") or 0))
+    if retention_type == "percent":
+        calculated = money(amount * retention_value / Decimal("100"))
+    elif retention_type == "fixed":
+        calculated = money(retention_value)
+    else:
+        calculated = Decimal("0.00")
+    return money(max(Decimal("0.00"), min(amount, calculated)))
+
+
+def charge_item_third_party_net(item: dict) -> Decimal:
+    if item.get("beneficiary") != "third_party":
+        return Decimal("0.00")
+    return money(max(Decimal("0.00"), money(item.get("amount")) - charge_item_agency_retention(item)))
+
+
 def operational_defaults(db: Session, organization_id: UUID) -> dict:
     row = db.scalar(select(OrganizationSettings).where(OrganizationSettings.organization_id == organization_id))
     return {**OPERATIONAL_DEFAULTS, **(dict(row.operational_defaults or {}) if row else {})}
@@ -111,6 +137,8 @@ def configured_monthly_charge_rules(lease: LeaseContract) -> list[dict]:
         row.setdefault("frequency", "monthly")
         row.setdefault("include_in_invoice", True)
         row.setdefault("beneficiary_name", None)
+        row.setdefault("agency_retention_type", "none")
+        row.setdefault("agency_retention_value", "0.00")
         normalized.append(row)
     return normalized
 
@@ -118,8 +146,13 @@ def configured_monthly_charge_rules(lease: LeaseContract) -> list[dict]:
 def suggested_monthly_charge_rules(property_item: Property, terms: dict) -> list[dict]:
     iptu = money(property_item.iptu_amount)
     condo = money(property_item.condo_amount)
+    base = {
+        "agency_retention_type": "none",
+        "agency_retention_value": "0.00",
+    }
     return [
         {
+            **base,
             "key": "iptu",
             "kind": "iptu",
             "label": "IPTU",
@@ -134,6 +167,7 @@ def suggested_monthly_charge_rules(property_item: Property, terms: dict) -> list
             "end_date": None,
         },
         {
+            **base,
             "key": "condo",
             "kind": "condo",
             "label": "Condomínio",
@@ -148,6 +182,7 @@ def suggested_monthly_charge_rules(property_item: Property, terms: dict) -> list
             "end_date": None,
         },
         {
+            **base,
             "key": "guarantee_insurance",
             "kind": "guarantee_insurance",
             "label": "Seguro fiança",
@@ -162,6 +197,7 @@ def suggested_monthly_charge_rules(property_item: Property, terms: dict) -> list
             "end_date": None,
         },
         {
+            **base,
             "key": "fire_insurance",
             "kind": "fire_insurance",
             "label": "Seguro incêndio",
@@ -226,6 +262,10 @@ def charge_items(lease: LeaseContract, property_item: Property, terms: dict, com
             "beneficiary_name": "Proprietário",
             "frequency": "monthly",
             "include_in_invoice": True,
+            "agency_retention_type": "none",
+            "agency_retention_value": "0.00",
+            "agency_retention_amount": "0.00",
+            "third_party_net_amount": "0.00",
             "source": "lease_contract",
         }
     ]
@@ -237,17 +277,32 @@ def charge_items(lease: LeaseContract, property_item: Property, terms: dict, com
             beneficiary = str(rule.get("beneficiary") or "third_party")
             if beneficiary not in {"owner", "agency", "third_party"}:
                 beneficiary = "third_party"
+            amount = money(rule.get("amount"))
+            retention_type = str(rule.get("agency_retention_type") or "none")
+            retention_value = money(rule.get("agency_retention_value"))
+            draft = {
+                "amount": str(amount),
+                "beneficiary": beneficiary,
+                "agency_retention_type": retention_type,
+                "agency_retention_value": str(retention_value),
+            }
+            retention_amount = charge_item_agency_retention(draft)
+            third_party_net = money(amount - retention_amount) if beneficiary == "third_party" else Decimal("0.00")
             items.append(
                 {
                     "key": str(rule.get("key") or "other"),
                     "kind": str(rule.get("kind") or "other"),
                     "label": str(rule.get("label") or "Encargo"),
-                    "amount": str(money(rule.get("amount"))),
+                    "amount": str(amount),
                     "payer": "tenant",
                     "beneficiary": beneficiary,
                     "beneficiary_name": (str(rule.get("beneficiary_name") or "").strip() or None),
                     "frequency": str(rule.get("frequency") or "monthly"),
                     "include_in_invoice": True,
+                    "agency_retention_type": retention_type,
+                    "agency_retention_value": str(retention_value),
+                    "agency_retention_amount": str(retention_amount),
+                    "third_party_net_amount": str(third_party_net),
                     "source": "lease_charge_rule",
                 }
             )
@@ -255,9 +310,9 @@ def charge_items(lease: LeaseContract, property_item: Property, terms: dict, com
 
     # Compatibilidade com contratos assinados antes da composição versionada.
     if terms.get("iptu_operational_payer") == "tenant" and property_item.iptu_amount:
-        items.append({"key": "iptu", "kind": "iptu", "label": "IPTU", "amount": str(money(property_item.iptu_amount)), "payer": "tenant", "beneficiary": "owner", "beneficiary_name": "Proprietário", "frequency": "monthly", "include_in_invoice": True, "source": "legacy_property"})
+        items.append({"key": "iptu", "kind": "iptu", "label": "IPTU", "amount": str(money(property_item.iptu_amount)), "payer": "tenant", "beneficiary": "owner", "beneficiary_name": "Proprietário", "frequency": "monthly", "include_in_invoice": True, "agency_retention_type": "none", "agency_retention_value": "0.00", "agency_retention_amount": "0.00", "third_party_net_amount": "0.00", "source": "legacy_property"})
     if terms.get("condo_operational_payer") == "agency" and property_item.condo_amount:
-        items.append({"key": "condo", "kind": "condo", "label": "Condomínio", "amount": str(money(property_item.condo_amount)), "payer": "tenant", "beneficiary": "agency", "beneficiary_name": "Imobiliária", "frequency": "monthly", "include_in_invoice": True, "source": "legacy_property"})
+        items.append({"key": "condo", "kind": "condo", "label": "Condomínio", "amount": str(money(property_item.condo_amount)), "payer": "tenant", "beneficiary": "agency", "beneficiary_name": "Imobiliária", "frequency": "monthly", "include_in_invoice": True, "agency_retention_type": "none", "agency_retention_value": "0.00", "agency_retention_amount": "0.00", "third_party_net_amount": "0.00", "source": "legacy_property"})
     return items
 
 
@@ -355,9 +410,11 @@ def _create_third_party_titles(db: Session, charge: RentCharge, paid_at: datetim
     for item in list(charge.charge_items or []):
         if item.get("key") == "rent" or item.get("beneficiary") != "third_party":
             continue
-        amount = money(item.get("amount"))
+        amount = charge_item_third_party_net(item)
         if amount <= 0:
             continue
+        charged_amount = money(item.get("amount"))
+        retention_amount = charge_item_agency_retention(item)
         label = str(item.get("label") or "Encargo da locação")
         counterparty = str(item.get("beneficiary_name") or label).strip() or label
         title = FinancialTitle(
@@ -376,7 +433,7 @@ def _create_third_party_titles(db: Session, charge: RentCharge, paid_at: datetim
             amount=amount,
             settled_amount=Decimal("0.00"),
             status="pending",
-            notes="Obrigação automática criada após o recebimento da cobrança do locatário.",
+            notes="Obrigação automática criada após o recebimento da cobrança do locatário, líquida da retenção da imobiliária.",
             source_snapshot={
                 "automatic": True,
                 "origin": "lease_charge_component",
@@ -387,6 +444,11 @@ def _create_third_party_titles(db: Session, charge: RentCharge, paid_at: datetim
                 "label": label,
                 "frequency": item.get("frequency") or "monthly",
                 "beneficiary_name": counterparty,
+                "charged_amount": str(charged_amount),
+                "agency_retention_type": item.get("agency_retention_type") or "none",
+                "agency_retention_value": str(item.get("agency_retention_value") or "0.00"),
+                "agency_retention_amount": str(retention_amount),
+                "third_party_net_amount": str(amount),
             },
             created_by_user_id=charge.created_by_user_id,
         )
@@ -427,7 +489,7 @@ def calculate_settlement(db: Session, charge: RentCharge, paid_at: datetime) -> 
         Decimal("0.00"),
     )
     third_party = sum(
-        (money(item.get("amount")) for item in charge.charge_items if item.get("beneficiary") == "third_party"),
+        (charge_item_third_party_net(item) for item in charge.charge_items if item.get("beneficiary") == "third_party"),
         Decimal("0.00"),
     )
     owner_entitlement = money(max(Decimal("0.00"), rent - agency_fee_withheld) + owner_reimbursements)
