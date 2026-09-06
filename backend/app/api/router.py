@@ -31,6 +31,8 @@ from app.api.routes.lease_lifecycle import router as lease_lifecycle_router
 from app.api.routes.maintenance import router as maintenance_router
 from app.api.routes.maintenance_v2 import router as maintenance_v2_router
 from app.api.routes.notifications import router as notifications_router
+from app.api.routes.owner_portal import context_router as portal_context_router
+from app.api.routes.owner_portal import router as owner_portal_router
 from app.api.routes.person_bank_details import router as person_bank_details_router
 from app.api.routes.person_profile import router as person_profile_router
 from app.api.routes.portfolio import router as portfolio_router
@@ -95,6 +97,8 @@ api_router.include_router(tenant_portal_recovery_router)
 api_router.include_router(tenant_portal_password_router)
 api_router.include_router(tenant_portal_account_router)
 api_router.include_router(tenant_portal_router)
+api_router.include_router(portal_context_router)
+api_router.include_router(owner_portal_router)
 api_router.include_router(inter_webhook_router)
 api_router.include_router(signature_events_router)
 api_router.include_router(integrations_router)
