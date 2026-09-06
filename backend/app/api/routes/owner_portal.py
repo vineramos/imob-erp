@@ -247,7 +247,7 @@ def _repasse_payload(
     intermediation = _money(settlement.intermediation_fee_calculated if settlement else 0) * pct
     agency_fee = _money(settlement.agency_fee_withheld if settlement else 0) * pct
     amount = _money(repasse.amount)
-    other_adjustments = (rent_share - agency_fee - amount).quantize(CENT, rounding=ROUND_HALF_UP)
+    other_adjustments = (amount - (rent_share - agency_fee)).quantize(CENT, rounding=ROUND_HALF_UP)
     return {
         "id": str(repasse.id),
         "charge_id": str(repasse.charge_id),

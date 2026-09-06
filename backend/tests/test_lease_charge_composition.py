@@ -2,8 +2,10 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from uuid import UUID
 
+from app.api.routes.owner_portal import _repasse_payload
 from app.core.database import SessionLocal
 from app.domains.finance.core_models import FinancialTitle
+from app.domains.finance.models import FinancialSettlement, OwnerRepasse, RentCharge
 from app.domains.leases.models import LeaseContract
 from tests.helpers import (
     _run_signature_flow,
@@ -90,6 +92,13 @@ def test_lease_charge_composition_generates_only_scheduled_items_and_third_party
         assert {item.counterparty_name for item in titles} == {"Condomínio Teste", "Seguradora Fiança", "Seguradora Incêndio"}
         assert all(item.direction == "payable" and item.fund_scope == "third_party" and item.status == "pending" for item in titles)
         assert all((item.source_snapshot or {}).get("origin") == "lease_charge_component" for item in titles)
+
+        repasse = db.get(OwnerRepasse, UUID(settlement["repasses"][0]["id"]))
+        charge_model = db.get(RentCharge, UUID(charge["id"]))
+        settlement_model = db.get(FinancialSettlement, UUID(settlement["id"]))
+        assert repasse is not None and charge_model is not None and settlement_model is not None
+        owner_view = _repasse_payload(repasse, charge_model, settlement_model)
+        assert decimal(owner_view["other_adjustments"]) == Decimal("120.00")
 
         lease = db.get(LeaseContract, UUID(created["id"]))
         assert lease is not None
