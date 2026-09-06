@@ -4,6 +4,7 @@ from app.api.routes.agenda import router as agenda_router
 from app.api.routes.agenda_history import router as agenda_history_router
 from app.api.routes.auth_proxy import router as auth_proxy_router
 from app.api.routes.branding import router as branding_router
+from app.api.routes.commercial import router as commercial_router
 from app.api.routes.contracts import router as contracts_router
 from app.api.routes.deep_links import router as deep_links_router
 from app.api.routes.document_context import router as document_context_router
@@ -50,10 +51,12 @@ from app.api.routes.tenant_portal_recovery import router as tenant_portal_recove
 from app.domains.agenda.source_chain_rules import install_source_chain_rule
 from app.domains.agenda.timezone_rules import install_event_collection_timezone_rule
 from app.domains.finance.settlement_rules import install_settlement_rule
+from app.domains.portfolio.commercial_rules import install_commercial_lease_rule
 
 install_source_chain_rule()
 install_event_collection_timezone_rule()
 install_settlement_rule()
+install_commercial_lease_rule()
 
 api_router = APIRouter()
 api_router.include_router(health_router)
@@ -103,3 +106,4 @@ api_router.include_router(inter_webhook_router)
 api_router.include_router(signature_events_router)
 api_router.include_router(integrations_router)
 api_router.include_router(publication_router)
+api_router.include_router(commercial_router)

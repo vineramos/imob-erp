@@ -1,8 +1,21 @@
-import { CalendarCheck2, Mail, MessageCircle, Phone, RefreshCw, Search, UserRoundCheck } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import {
+  CalendarCheck2,
+  CalendarPlus2,
+  Check,
+  FileCheck2,
+  FilePlus2,
+  Mail,
+  MessageCircle,
+  Phone,
+  RefreshCw,
+  Search,
+  UserRoundCheck,
+  X,
+} from 'lucide-react'
+import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react'
 import { ApiError, apiRequest } from '../../api/client'
 
-type InquiryStatus = 'new' | 'contacted' | 'visit_scheduled' | 'qualified' | 'lost'
+type InquiryStatus = 'new' | 'contacted' | 'visit_scheduled' | 'qualified' | 'proposal' | 'converted' | 'won' | 'lost'
 type SiteInquiry = {
   id: string
   property_id: string | null
@@ -18,31 +31,131 @@ type SiteInquiry = {
   created_at: string
   updated_at: string
 }
+type CommercialVisit = {
+  id: string
+  code: string
+  inquiry_id: string
+  property_id: string | null
+  person_id: string | null
+  agenda_task_id: string | null
+  responsible_user_id: string | null
+  responsible_name: string | null
+  starts_at: string
+  ends_at: string
+  status: 'scheduled' | 'completed' | 'cancelled' | 'no_show'
+  notes: string | null
+  created_at: string
+  updated_at: string
+}
+type CommercialProposal = {
+  id: string
+  code: string
+  inquiry_id: string
+  property_id: string | null
+  person_id: string | null
+  responsible_user_id: string | null
+  status: 'submitted' | 'accepted' | 'rejected' | 'withdrawn' | 'converted' | 'won'
+  rent_amount: number
+  start_date: string
+  term_months: number
+  guarantee_type: 'insurance' | 'deposit' | 'capitalization' | 'guarantor' | 'none'
+  notes: string | null
+  closed_reason: string | null
+  accepted_at: string | null
+  lease_contract_id: string | null
+  lease_code: string | null
+  created_at: string
+  updated_at: string
+}
+type CommercialFunnel = {
+  inquiry: SiteInquiry
+  person: { id: string; name: string; document_number: string | null; email: string | null; phone: string | null } | null
+  property_status: string | null
+  property_publication_enabled: boolean
+  suggested_rent_amount: number | null
+  visits: CommercialVisit[]
+  proposals: CommercialProposal[]
+}
+type ProposalConversion = {
+  proposal: CommercialProposal
+  lease_contract_id: string
+  lease_code: string
+  lease_status: string
+  message: string
+}
 
 type Props = { permissions: string[] }
 
 const statusLabels: Record<InquiryStatus, string> = {
-  new: 'Novo', contacted: 'Contatado', visit_scheduled: 'Visita agendada', qualified: 'Qualificado', lost: 'Perdido',
+  new: 'Novo',
+  contacted: 'Contatado',
+  visit_scheduled: 'Visita agendada',
+  qualified: 'Qualificado',
+  proposal: 'Proposta',
+  converted: 'Contrato gerado',
+  won: 'Locado',
+  lost: 'Perdido',
+}
+const manualStatusOptions: InquiryStatus[] = ['new', 'contacted', 'qualified', 'lost']
+const visitStatusLabels: Record<CommercialVisit['status'], string> = {
+  scheduled: 'Agendada', completed: 'Realizada', cancelled: 'Cancelada', no_show: 'Não compareceu',
+}
+const proposalStatusLabels: Record<CommercialProposal['status'], string> = {
+  submitted: 'Enviada', accepted: 'Aceita', rejected: 'Recusada', withdrawn: 'Retirada', converted: 'Contrato gerado', won: 'Locado',
+}
+const guaranteeLabels: Record<CommercialProposal['guarantee_type'], string> = {
+  insurance: 'Seguro fiança', deposit: 'Caução', capitalization: 'Título de capitalização', guarantor: 'Fiador', none: 'Sem garantia',
 }
 
 function dateTime(value: string) {
   return new Date(value).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })
 }
-
+function money(value: number | null) {
+  return value == null ? '—' : Number(value).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+}
 function whatsappLink(phone: string) {
   let digits = phone.replace(/\D/g, '')
   if (!digits.startsWith('55') && (digits.length === 10 || digits.length === 11)) digits = `55${digits}`
   return `https://wa.me/${digits}`
 }
+function tomorrowLocal() {
+  const value = new Date()
+  value.setDate(value.getDate() + 1)
+  value.setMinutes(0, 0, 0)
+  if (value.getHours() < 9) value.setHours(9)
+  return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}-${String(value.getDate()).padStart(2, '0')}T${String(value.getHours()).padStart(2, '0')}:00`
+}
+function startDateDefault() {
+  const value = new Date()
+  value.setDate(value.getDate() + 15)
+  return value.toISOString().slice(0, 10)
+}
 
 export function SiteInquiriesPanel({ permissions }: Props) {
   const canManage = permissions.includes('crm.manage')
+  const canCreateContract = permissions.includes('contracts.create')
   const [items, setItems] = useState<SiteInquiry[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState<'all' | InquiryStatus>('all')
   const [updatingId, setUpdatingId] = useState<string | null>(null)
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [funnel, setFunnel] = useState<CommercialFunnel | null>(null)
+  const [modalLoading, setModalLoading] = useState(false)
+  const [modalError, setModalError] = useState('')
+  const [modalSuccess, setModalSuccess] = useState('')
+  const [visitOpen, setVisitOpen] = useState(false)
+  const [visitStartsAt, setVisitStartsAt] = useState(tomorrowLocal)
+  const [visitDuration, setVisitDuration] = useState(60)
+  const [visitNotes, setVisitNotes] = useState('')
+  const [proposalOpen, setProposalOpen] = useState(false)
+  const [proposalRent, setProposalRent] = useState<number | null>(null)
+  const [proposalStart, setProposalStart] = useState(startDateDefault)
+  const [proposalTerm, setProposalTerm] = useState(30)
+  const [proposalGuarantee, setProposalGuarantee] = useState<CommercialProposal['guarantee_type']>('insurance')
+  const [proposalNotes, setProposalNotes] = useState('')
+  const [busy, setBusy] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true); setError('')
@@ -52,11 +165,17 @@ export function SiteInquiriesPanel({ permissions }: Props) {
   }, [])
 
   useEffect(() => { void load() }, [load])
+  useEffect(() => {
+    if (!selectedId) return
+    const close = (event: KeyboardEvent) => { if (event.key === 'Escape' && !busy) setSelectedId(null) }
+    window.addEventListener('keydown', close)
+    return () => window.removeEventListener('keydown', close)
+  }, [selectedId, busy])
 
   const metrics = useMemo(() => ({
     new: items.filter((item) => item.status === 'new').length,
     visits: items.filter((item) => item.status === 'visit_scheduled').length,
-    active: items.filter((item) => ['contacted', 'qualified'].includes(item.status)).length,
+    active: items.filter((item) => ['contacted', 'qualified', 'proposal', 'converted'].includes(item.status)).length,
   }), [items])
 
   const filtered = useMemo(() => {
@@ -68,8 +187,26 @@ export function SiteInquiriesPanel({ permissions }: Props) {
     })
   }, [filter, items, query])
 
+  async function loadFunnel(inquiryId: string, resetMessage = true) {
+    if (resetMessage) { setModalError(''); setModalSuccess('') }
+    setModalLoading(true)
+    try {
+      const next = await apiRequest<CommercialFunnel>(`/crm/site-inquiries/${inquiryId}/funnel`)
+      setFunnel(next)
+      setItems((current) => current.map((row) => row.id === inquiryId ? { ...row, status: next.inquiry.status } : row))
+      if (resetMessage) setProposalRent(next.suggested_rent_amount == null ? null : Number(next.suggested_rent_amount))
+    } catch (cause) {
+      setModalError(cause instanceof ApiError ? cause.detail : 'Não foi possível abrir o atendimento comercial.')
+    } finally { setModalLoading(false) }
+  }
+
+  async function openFunnel(inquiryId: string) {
+    setSelectedId(inquiryId); setFunnel(null); setVisitOpen(false); setProposalOpen(false); setProposalRent(null)
+    await loadFunnel(inquiryId)
+  }
+
   async function changeStatus(item: SiteInquiry, nextStatus: InquiryStatus) {
-    if (!canManage || nextStatus === item.status) return
+    if (!canManage || nextStatus === item.status || !manualStatusOptions.includes(nextStatus)) return
     setUpdatingId(item.id); setError('')
     try {
       const updated = await apiRequest<SiteInquiry>(`/crm/site-inquiries/${item.id}`, { method: 'PATCH', body: JSON.stringify({ status: nextStatus }) })
@@ -78,16 +215,115 @@ export function SiteInquiriesPanel({ permissions }: Props) {
     finally { setUpdatingId(null) }
   }
 
+  async function scheduleVisit(event: FormEvent) {
+    event.preventDefault()
+    if (!selectedId || !visitStartsAt) return
+    setBusy(true); setModalError(''); setModalSuccess('')
+    try {
+      const starts = new Date(visitStartsAt)
+      if (Number.isNaN(starts.getTime())) throw new Error('Data inválida')
+      await apiRequest<CommercialVisit>(`/crm/site-inquiries/${selectedId}/visits`, {
+        method: 'POST',
+        body: JSON.stringify({ starts_at: starts.toISOString(), duration_minutes: visitDuration, notes: visitNotes || null }),
+      })
+      setVisitOpen(false); setVisitNotes(''); setVisitStartsAt(tomorrowLocal())
+      setModalSuccess('Visita agendada e incluída automaticamente na Agenda.')
+      await loadFunnel(selectedId, false)
+    } catch (cause) {
+      setModalError(cause instanceof ApiError ? cause.detail : 'Não foi possível agendar a visita.')
+    } finally { setBusy(false) }
+  }
+
+  async function closeVisit(visit: CommercialVisit, nextStatus: 'completed' | 'cancelled' | 'no_show') {
+    if (!selectedId) return
+    const note = nextStatus === 'completed' ? null : window.prompt(nextStatus === 'no_show' ? 'Observação sobre o não comparecimento:' : 'Motivo do cancelamento:')
+    if (nextStatus !== 'completed' && note === null) return
+    setBusy(true); setModalError(''); setModalSuccess('')
+    try {
+      await apiRequest<CommercialVisit>(`/crm/visits/${visit.id}`, { method: 'PATCH', body: JSON.stringify({ status: nextStatus, notes: note }) })
+      setModalSuccess(nextStatus === 'completed' ? 'Visita marcada como realizada.' : 'Visita encerrada e Agenda sincronizada.')
+      await loadFunnel(selectedId, false)
+    } catch (cause) { setModalError(cause instanceof ApiError ? cause.detail : 'Não foi possível atualizar a visita.') }
+    finally { setBusy(false) }
+  }
+
+  async function createProposal(event: FormEvent) {
+    event.preventDefault()
+    if (!selectedId || proposalRent == null || !proposalStart) return
+    setBusy(true); setModalError(''); setModalSuccess('')
+    try {
+      await apiRequest<CommercialProposal>(`/crm/site-inquiries/${selectedId}/proposals`, {
+        method: 'POST',
+        body: JSON.stringify({ rent_amount: proposalRent, start_date: proposalStart, term_months: proposalTerm, guarantee_type: proposalGuarantee, notes: proposalNotes || null }),
+      })
+      setProposalOpen(false); setProposalNotes('')
+      setModalSuccess('Proposta criada com os dados do interessado e do imóvel, sem novo cadastro.')
+      await loadFunnel(selectedId, false)
+    } catch (cause) { setModalError(cause instanceof ApiError ? cause.detail : 'Não foi possível criar a proposta.') }
+    finally { setBusy(false) }
+  }
+
+  async function proposalAction(proposal: CommercialProposal, nextStatus: 'accepted' | 'rejected' | 'withdrawn') {
+    if (!selectedId) return
+    let reason: string | null = null
+    if (nextStatus !== 'accepted') {
+      reason = window.prompt(nextStatus === 'rejected' ? 'Motivo da recusa:' : 'Motivo da retirada:')
+      if (!reason?.trim()) return
+    }
+    setBusy(true); setModalError(''); setModalSuccess('')
+    try {
+      await apiRequest<CommercialProposal>(`/crm/proposals/${proposal.id}`, { method: 'PATCH', body: JSON.stringify({ status: nextStatus, reason }) })
+      setModalSuccess(nextStatus === 'accepted' ? 'Proposta aceita. O imóvel continua publicado até o contrato ser assinado.' : 'Proposta encerrada.')
+      await loadFunnel(selectedId, false)
+    } catch (cause) { setModalError(cause instanceof ApiError ? cause.detail : 'Não foi possível atualizar a proposta.') }
+    finally { setBusy(false) }
+  }
+
+  async function convertToLease(proposal: CommercialProposal) {
+    if (!selectedId) return
+    setBusy(true); setModalError(''); setModalSuccess('')
+    try {
+      const result = await apiRequest<ProposalConversion>(`/crm/proposals/${proposal.id}/convert-to-lease`, { method: 'POST' })
+      setModalSuccess(`${result.lease_code} criado em rascunho. O imóvel só sai do estoque após a assinatura final.`)
+      await loadFunnel(selectedId, false)
+    } catch (cause) { setModalError(cause instanceof ApiError ? cause.detail : 'Não foi possível gerar o contrato.') }
+    finally { setBusy(false) }
+  }
+
+  const selected = items.find((item) => item.id === selectedId) ?? null
+
   return <section className="workspace commercial-workspace site-inquiries-workspace">
-    <div className="page-heading portfolio-heading"><div><span className="eyebrow">Comercial · Site público</span><h1>Interesses recebidos</h1><p>Leads enviados pela página de cada imóvel, já vinculados ao anúncio que originou o contato.</p></div><button className="button secondary" type="button" onClick={() => void load()}><RefreshCw size={14}/> Atualizar</button></div>
-    <div className="dashboard-metrics commercial-metrics"><article className="panel metric-card"><span>Novos</span><strong>{metrics.new}</strong><small>aguardando primeiro contato</small></article><article className="panel metric-card"><span>Em atendimento</span><strong>{metrics.active}</strong><small>contatados ou qualificados</small></article><article className="panel metric-card"><span>Visitas</span><strong>{metrics.visits}</strong><small>agendadas pelo comercial</small></article></div>
+    <div className="page-heading portfolio-heading"><div><span className="eyebrow">Comercial · Site público</span><h1>Interesses recebidos</h1><p>Do primeiro contato ao contrato, sem redigitar o interessado ou o imóvel.</p></div><button className="button secondary" type="button" onClick={() => void load()}><RefreshCw size={14}/> Atualizar</button></div>
+    <div className="dashboard-metrics commercial-metrics"><article className="panel metric-card"><span>Novos</span><strong>{metrics.new}</strong><small>aguardando primeiro contato</small></article><article className="panel metric-card"><span>Em atendimento</span><strong>{metrics.active}</strong><small>contato, proposta ou contrato</small></article><article className="panel metric-card"><span>Visitas</span><strong>{metrics.visits}</strong><small>agendadas pelo comercial</small></article></div>
     {error && <div className="form-alert danger-alert" role="alert">{error}</div>}
     <div className="portfolio-toolbar panel commercial-toolbar commercial-toolbar-wide site-inquiries-toolbar"><div className="portfolio-tabs"><button className={filter === 'all' ? 'active' : ''} type="button" onClick={() => setFilter('all')}>Todos <span>{items.length}</span></button><button className={filter === 'new' ? 'active' : ''} type="button" onClick={() => setFilter('new')}>Novos <span>{metrics.new}</span></button><button className={filter === 'visit_scheduled' ? 'active' : ''} type="button" onClick={() => setFilter('visit_scheduled')}>Visitas <span>{metrics.visits}</span></button></div><label className="portfolio-search"><Search size={14}/><input placeholder="Imóvel, nome, telefone ou e-mail..." value={query} onChange={(event) => setQuery(event.target.value)}/></label></div>
     {loading ? <article className="panel settings-loading">Carregando interesses...</article> : <div className="site-inquiries-list">{filtered.map((item) => <article className={`panel site-inquiry-card status-${item.status}`} key={item.id}>
       <div className="site-inquiry-property"><span className="eyebrow">IMÓVEL #{item.property_code}</span><strong>{item.property_title}</strong><small>Recebido em {dateTime(item.created_at)}</small></div>
       <div className="site-inquiry-contact"><strong>{item.name}</strong><div>{item.phone && <><a href={whatsappLink(item.phone)} target="_blank" rel="noreferrer"><MessageCircle size={13}/> WhatsApp</a><a href={`tel:${item.phone}`}><Phone size={13}/> Ligar</a></>}{item.email && <a href={`mailto:${item.email}?subject=Interesse no imóvel ${item.property_code}`}><Mail size={13}/> E-mail</a>}</div><small>Preferência: {item.preferred_contact === 'email' ? 'e-mail' : item.preferred_contact === 'phone' ? 'ligação' : 'WhatsApp'}</small></div>
       <div className="site-inquiry-message"><span>Mensagem</span><p>{item.message || 'Sem mensagem adicional.'}</p></div>
-      <div className="site-inquiry-status">{canManage ? <label><span>Status do atendimento</span><select value={item.status} disabled={updatingId === item.id} onChange={(event) => void changeStatus(item, event.target.value as InquiryStatus)}>{(Object.keys(statusLabels) as InquiryStatus[]).map((key) => <option key={key} value={key}>{statusLabels[key]}</option>)}</select></label> : <span className="status-badge neutral">{statusLabels[item.status]}</span>}{item.status === 'visit_scheduled' ? <CalendarCheck2 size={18}/> : item.status === 'qualified' ? <UserRoundCheck size={18}/> : null}</div>
+      <div className="site-inquiry-status"><span className={`status-badge ${item.status === 'won' ? 'success' : item.status === 'lost' ? 'danger' : 'neutral'}`}>{statusLabels[item.status] ?? item.status}</span>{canManage && <label><span>Ajuste manual</span><select value={manualStatusOptions.includes(item.status) ? item.status : ''} disabled={updatingId === item.id} onChange={(event) => event.target.value && void changeStatus(item, event.target.value as InquiryStatus)}><option value="">Etapa automática</option>{manualStatusOptions.map((key) => <option key={key} value={key}>{statusLabels[key]}</option>)}</select></label>}<button className="button secondary compact-button" type="button" onClick={() => void openFunnel(item.id)}>Abrir atendimento</button>{item.status === 'visit_scheduled' ? <CalendarCheck2 size={18}/> : item.status === 'qualified' ? <UserRoundCheck size={18}/> : null}</div>
     </article>)}{filtered.length === 0 && <article className="panel portfolio-empty"><Search size={26}/><strong>Nenhum interesse neste filtro.</strong><span>Novos contatos enviados pelo site aparecerão aqui.</span></article>}</div>}
+
+    {selectedId && <div className="portfolio-modal-backdrop" onMouseDown={(event) => { if (event.currentTarget === event.target && !busy) setSelectedId(null) }}>
+      <div className="panel portfolio-modal commercial-funnel-modal" role="dialog" aria-modal="true">
+        <div className="portfolio-modal-header"><div><span className="eyebrow">Atendimento comercial · {selected ? `#${selected.property_code}` : ''}</span><h2>{selected?.name || 'Atendimento'}</h2><p>{selected?.property_title}</p></div><button className="portfolio-modal-close" type="button" aria-label="Fechar" disabled={busy} onClick={() => setSelectedId(null)}><X size={17}/></button></div>
+        <div className="commercial-funnel-body">
+          {modalError && <div className="form-alert danger-alert" role="alert">{modalError}</div>}{modalSuccess && <div className="form-alert success-alert">{modalSuccess}</div>}
+          {modalLoading && !funnel ? <div className="settings-loading">Carregando atendimento...</div> : funnel && <>
+            <section className="funnel-summary-grid"><article className="funnel-summary-card"><span>Interessado</span><strong>{funnel.person?.name || funnel.inquiry.name}</strong><small>{funnel.person ? 'Cadastro vinculado automaticamente' : 'Será cadastrado no próximo passo'}</small></article><article className="funnel-summary-card"><span>Imóvel</span><strong>#{funnel.inquiry.property_code}</strong><small>{funnel.property_status || 'indisponível'} · {funnel.property_publication_enabled ? 'publicado' : 'fora do site'}</small></article><article className="funnel-summary-card"><span>Aluguel de referência</span><strong>{money(funnel.suggested_rent_amount)}</strong><small>valor atual do estoque</small></article></section>
+
+            {canManage && funnel.inquiry.status !== 'won' && funnel.inquiry.status !== 'lost' && <div className="funnel-actions"><button className="button secondary" type="button" onClick={() => { setVisitOpen((value) => !value); setProposalOpen(false) }}><CalendarPlus2 size={15}/> Agendar visita</button><button className="button secondary" type="button" onClick={() => { setProposalOpen((value) => !value); setVisitOpen(false); if (proposalRent == null && funnel.suggested_rent_amount != null) setProposalRent(Number(funnel.suggested_rent_amount)) }}><FilePlus2 size={15}/> Criar proposta</button></div>}
+
+            {visitOpen && <form className="funnel-inline-form" onSubmit={(event) => void scheduleVisit(event)}><div className="funnel-inline-heading"><div><span className="eyebrow">Visita</span><strong>Agendar no calendário comercial</strong></div><button type="button" className="portfolio-modal-close" onClick={() => setVisitOpen(false)}><X size={15}/></button></div><div className="funnel-form-grid"><label className="field"><span>Data e hora</span><input required type="datetime-local" value={visitStartsAt} onChange={(event) => setVisitStartsAt(event.target.value)}/></label><label className="field"><span>Duração</span><select value={visitDuration} onChange={(event) => setVisitDuration(Number(event.target.value))}><option value={30}>30 min</option><option value={45}>45 min</option><option value={60}>1 hora</option><option value={90}>1h30</option><option value={120}>2 horas</option></select></label></div><label className="field"><span>Observações</span><textarea rows={2} maxLength={2000} value={visitNotes} onChange={(event) => setVisitNotes(event.target.value)} placeholder="Orientações para a visita..."/></label><div className="funnel-inline-actions"><button className="button primary" disabled={busy} type="submit"><CalendarCheck2 size={14}/> Confirmar visita</button></div></form>}
+
+            {proposalOpen && <form className="funnel-inline-form" onSubmit={(event) => void createProposal(event)}><div className="funnel-inline-heading"><div><span className="eyebrow">Proposta</span><strong>Condições comerciais</strong></div><button type="button" className="portfolio-modal-close" onClick={() => setProposalOpen(false)}><X size={15}/></button></div><div className="funnel-form-grid proposal-grid"><label className="field"><span>Aluguel proposto</span><input required min="0.01" step="0.01" type="number" value={proposalRent ?? ''} onChange={(event) => setProposalRent(event.target.value ? Number(event.target.value) : null)}/></label><label className="field"><span>Início pretendido</span><input required type="date" value={proposalStart} onChange={(event) => setProposalStart(event.target.value)}/></label><label className="field"><span>Prazo</span><select value={proposalTerm} onChange={(event) => setProposalTerm(Number(event.target.value))}><option value={12}>12 meses</option><option value={24}>24 meses</option><option value={30}>30 meses</option><option value={36}>36 meses</option></select></label><label className="field"><span>Garantia</span><select value={proposalGuarantee} onChange={(event) => setProposalGuarantee(event.target.value as CommercialProposal['guarantee_type'])}>{Object.entries(guaranteeLabels).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label></div><label className="field"><span>Observações</span><textarea rows={2} maxLength={3000} value={proposalNotes} onChange={(event) => setProposalNotes(event.target.value)} placeholder="Condições adicionais da proposta..."/></label><div className="funnel-inline-actions"><button className="button primary" disabled={busy} type="submit"><FileCheck2 size={14}/> Criar proposta</button></div></form>}
+
+            <section className="canonical-modal-section funnel-section"><div className="funnel-section-heading"><div><span className="eyebrow">Visitas</span><h3>Histórico de visitas</h3></div><span>{funnel.visits.length}</span></div>{funnel.visits.length === 0 ? <p className="funnel-empty-copy">Nenhuma visita agendada.</p> : <div className="funnel-timeline">{funnel.visits.map((visit) => <article key={visit.id}><div><strong>{visit.code} · {dateTime(visit.starts_at)}</strong><span>{visit.responsible_name || 'Responsável comercial'} · {visitStatusLabels[visit.status]}</span>{visit.notes && <small>{visit.notes}</small>}</div>{canManage && visit.status === 'scheduled' && <div className="funnel-row-actions"><button type="button" className="mini-action success" disabled={busy} onClick={() => void closeVisit(visit, 'completed')}><Check size={13}/> Realizada</button><button type="button" className="mini-action" disabled={busy} onClick={() => void closeVisit(visit, 'no_show')}>Não compareceu</button><button type="button" className="mini-action danger" disabled={busy} onClick={() => void closeVisit(visit, 'cancelled')}>Cancelar</button></div>}</article>)}</div>}</section>
+
+            <section className="canonical-modal-section funnel-section"><div className="funnel-section-heading"><div><span className="eyebrow">Propostas</span><h3>Negociação e conversão</h3></div><span>{funnel.proposals.length}</span></div>{funnel.proposals.length === 0 ? <p className="funnel-empty-copy">Nenhuma proposta criada.</p> : <div className="funnel-proposals">{funnel.proposals.map((proposal) => <article key={proposal.id}><div className="funnel-proposal-main"><div><strong>{proposal.code}</strong><span>{money(proposal.rent_amount)} · {proposal.term_months} meses · {guaranteeLabels[proposal.guarantee_type]}</span><small>Início {new Date(`${proposal.start_date}T12:00:00`).toLocaleDateString('pt-BR')}</small></div><span className={`status-badge ${proposal.status === 'accepted' || proposal.status === 'won' ? 'success' : proposal.status === 'rejected' || proposal.status === 'withdrawn' ? 'danger' : 'neutral'}`}>{proposalStatusLabels[proposal.status]}</span></div>{proposal.closed_reason && <p>{proposal.closed_reason}</p>}{proposal.lease_code && <div className="funnel-contract-link"><FileCheck2 size={14}/><strong>{proposal.lease_code}</strong><button type="button" onClick={() => window.location.assign('/app/contracts')}>Abrir contratos</button></div>}{canManage && proposal.status === 'submitted' && <div className="funnel-row-actions"><button type="button" className="mini-action success" disabled={busy} onClick={() => void proposalAction(proposal, 'accepted')}><Check size={13}/> Aceitar</button><button type="button" className="mini-action danger" disabled={busy} onClick={() => void proposalAction(proposal, 'rejected')}>Recusar</button><button type="button" className="mini-action" disabled={busy} onClick={() => void proposalAction(proposal, 'withdrawn')}>Retirada</button></div>}{canManage && canCreateContract && proposal.status === 'accepted' && <div className="funnel-row-actions"><button type="button" className="button primary compact-button" disabled={busy} onClick={() => void convertToLease(proposal)}><FilePlus2 size={14}/> Gerar contrato</button><small>O anúncio só sai do ar após a assinatura final.</small></div>}</article>)}</div>}</section>
+          </>}
+        </div>
+      </div>
+    </div>}
   </section>
 }
