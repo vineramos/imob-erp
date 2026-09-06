@@ -1,4 +1,4 @@
-import { Building2, CheckCircle2, Home, KeyRound, ShieldCheck, XCircle } from 'lucide-react'
+import { Building2, CheckCircle2, Home, KeyRound, RefreshCw, ShieldCheck, XCircle } from 'lucide-react'
 import { FormEvent, useEffect, useState } from 'react'
 import { ApiError, publicApiRequest, TENANT_PORTAL_AUTH_EVENT } from '../api/client'
 import { OwnerPortalPage } from './OwnerPortalPage'
@@ -44,6 +44,7 @@ export function TenantPortalEntry() {
     if(!context||context.roles.length===0)return <PortalWithoutRole onLogout={async()=>{await publicApiRequest('/tenant-portal/auth/logout',{method:'POST'});setAuthState('anonymous')}}/>
     if(context.roles.length>1&&!selectedRole)return <PortalRoleChooser name={context.person_name} onChoose={setSelectedRole} onLogout={async()=>{await publicApiRequest('/tenant-portal/auth/logout',{method:'POST'});setAuthState('anonymous')}}/>
     if(selectedRole==='owner')return <OwnerPortalPage onSwitchRole={context.roles.length>1?()=>setSelectedRole(null):undefined}/>
+    if(context.roles.length>1)return <><button type="button" className="portal-floating-role-switch" onClick={()=>setSelectedRole(null)}><RefreshCw size={14}/><span>Trocar área</span></button><TenantPortalPage /></>
     return <TenantPortalPage />
   }
   return <PortalAuth onAuthenticated={()=>void resolvePortal()} onTemporaryLogin={(nextIdentifier,token,name)=>{setIdentifier(nextIdentifier);setChangeToken(token);setPersonName(name);setAuthState('changing')}}/>
