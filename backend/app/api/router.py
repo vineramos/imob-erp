@@ -57,12 +57,14 @@ from app.api.routes.tenant_portal_recovery import router as tenant_portal_recove
 from app.domains.agenda.communication_rules import install_communication_agenda_rule
 from app.domains.agenda.source_chain_rules import install_source_chain_rule
 from app.domains.agenda.timezone_rules import install_event_collection_timezone_rule
+from app.domains.communications.operational_event_rules import install_operational_communication_rules
 from app.domains.finance.settlement_rules import install_settlement_rule
 from app.domains.portfolio.commercial_rules import install_commercial_lease_rule
 
 install_source_chain_rule()
 install_event_collection_timezone_rule()
 install_communication_agenda_rule()
+install_operational_communication_rules()
 install_settlement_rule()
 install_commercial_lease_rule()
 
