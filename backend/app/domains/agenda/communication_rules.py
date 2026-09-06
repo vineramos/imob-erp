@@ -17,10 +17,29 @@ CATEGORY_LABELS = {
     "owner_repasse_overdue": "Repasse pendente",
     "inspection_schedule": "Agendamento de vistoria",
     "maintenance_update": "Atualização de manutenção",
+    "lease_exit_requested": "Desocupação solicitada",
+    "lease_exit_keys_returned": "Chaves devolvidas",
+    "lease_exit_financial_pending": "Pendência do acerto final",
+    "lease_exit_financial_resolved": "Atualização do acerto final",
+    "lease_exit_closed": "Locação encerrada",
+    "lease_exit_cancelled": "Desocupação cancelada",
 }
 
-FINANCE_CATEGORIES = frozenset({"rent_overdue", "owner_repasse_paid", "owner_repasse_overdue"})
-OPERATIONS_CATEGORIES = frozenset({"inspection_schedule", "maintenance_update"})
+FINANCE_CATEGORIES = frozenset({
+    "rent_overdue",
+    "owner_repasse_paid",
+    "owner_repasse_overdue",
+    "lease_exit_financial_pending",
+    "lease_exit_financial_resolved",
+})
+OPERATIONS_CATEGORIES = frozenset({
+    "inspection_schedule",
+    "maintenance_update",
+    "lease_exit_requested",
+    "lease_exit_keys_returned",
+    "lease_exit_closed",
+    "lease_exit_cancelled",
+})
 HIGH_PRIORITY_CATEGORIES = frozenset({"rent_overdue", "owner_repasse_overdue"})
 
 
