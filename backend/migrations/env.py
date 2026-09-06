@@ -11,6 +11,7 @@ from app.domains.documents import models as document_models  # noqa: F401
 from app.domains.finance import advanced_models as finance_advanced_models  # noqa: F401
 from app.domains.finance import bank_control_models as finance_bank_control_models  # noqa: F401
 from app.domains.finance import bank_models as finance_bank_models  # noqa: F401
+from app.domains.finance import bank_setup_models as finance_bank_setup_models  # noqa: F401
 from app.domains.finance import core_models as finance_core_models  # noqa: F401
 from app.domains.finance import models as finance_models  # noqa: F401
 from app.domains.finance import treasury_models as finance_treasury_models  # noqa: F401

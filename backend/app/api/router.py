@@ -15,6 +15,7 @@ from app.api.routes.finance_advanced import public_router as portal_router
 from app.api.routes.finance_advanced import router as finance_advanced_router
 from app.api.routes.finance_advanced import webhook_router as inter_webhook_router
 from app.api.routes.finance_bank_control import router as finance_bank_control_router
+from app.api.routes.finance_bank_setup import router as finance_bank_setup_router
 from app.api.routes.finance_banking import router as finance_banking_router
 from app.api.routes.finance_cashflow import router as finance_cashflow_router
 from app.api.routes.finance_contracts import router as finance_contracts_router
@@ -77,6 +78,7 @@ api_router.include_router(maintenance_router)
 api_router.include_router(maintenance_v2_router)
 api_router.include_router(finance_router)
 api_router.include_router(finance_banking_router)
+api_router.include_router(finance_bank_setup_router)
 api_router.include_router(finance_cashflow_router)
 api_router.include_router(finance_contracts_router)
 api_router.include_router(finance_core_router)
