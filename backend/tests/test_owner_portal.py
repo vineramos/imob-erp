@@ -140,7 +140,7 @@ def test_owner_portal_hides_internal_maintenance_cost_and_documents(client, iden
     quote_id = str(uuid4())
     with SessionLocal() as db:
         item = MaintenanceRequest(
-            organization_id=UUID(identity["organization_id"]),
+            organization_id=identity["organization_id"],
             property_id=UUID(journey["property"]["id"]),
             lease_contract_id=UUID(journey["lease"]["id"]),
             requester_person_id=UUID(journey["tenant"]["id"]),
