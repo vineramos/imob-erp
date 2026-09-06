@@ -4,7 +4,7 @@ import secrets
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -15,11 +15,10 @@ from app.domains.foundation.access import UserContext, require_permission
 from app.domains.leases.models import LeaseContract
 from app.domains.portal.models import PortalAccount, PortalSession, PortalTemporaryCredential
 from app.domains.portal.security import hash_password, new_session_token, normalize_email, token_digest, verify_password
-from app.domains.portfolio.models import Person
+from app.domains.portfolio.models import Person, Property, PropertyOwner
 
 public_router = APIRouter(prefix="/tenant-portal/auth", tags=["tenant-portal"])
 admin_router = APIRouter(prefix="/finance/advanced/portal", tags=["finance-advanced"])
-
 COOKIE_NAME = "imob_portal_session"
 SESSION_DAYS = 30
 LOCK_MINUTES = 15
@@ -51,24 +50,32 @@ def _document_identifier(value: str | None) -> str:
 
 
 def _new_temporary_password() -> str:
-    return "-".join(
-        "".join(secrets.choice(TEMP_ALPHABET) for _ in range(4))
-        for _ in range(3)
-    )
+    return "-".join("".join(secrets.choice(TEMP_ALPHABET) for _ in range(4)) for _ in range(3))
 
 
 def _has_tenant_lease(db: Session, person: Person) -> bool:
-    rows = db.scalars(
-        select(LeaseContract).where(LeaseContract.organization_id == person.organization_id)
-    ).all()
+    rows = db.scalars(select(LeaseContract).where(LeaseContract.organization_id == person.organization_id)).all()
     person_id = str(person.id)
     return any(
-        any(
-            isinstance(entry, dict) and str(entry.get("person_id") or "") == person_id
-            for entry in list(lease.tenant_snapshot or [])
-        )
+        any(isinstance(entry, dict) and str(entry.get("person_id") or "") == person_id for entry in list(lease.tenant_snapshot or []))
         for lease in rows
     )
+
+
+def _has_owner_property(db: Session, person: Person) -> bool:
+    return db.scalar(
+        select(PropertyOwner.id)
+        .join(Property, Property.id == PropertyOwner.property_id)
+        .where(
+            PropertyOwner.person_id == person.id,
+            Property.organization_id == person.organization_id,
+        )
+        .limit(1)
+    ) is not None
+
+
+def _has_portal_role(db: Session, person: Person) -> bool:
+    return _has_tenant_lease(db, person) or _has_owner_property(db, person)
 
 
 def _active_access(db: Session, person: Person) -> PortalAccess | None:
@@ -95,7 +102,7 @@ def _person_for_identifier(db: Session, identifier: str) -> Person | None:
             func.regexp_replace(func.coalesce(Person.document_number, ""), "[^0-9]", "", "g") == normalized,
         )
     ).all()
-    eligible = [person for person in people if _active_access(db, person) is not None and _has_tenant_lease(db, person)]
+    eligible = [person for person in people if _active_access(db, person) is not None and _has_portal_role(db, person)]
     return eligible[0] if len(eligible) == 1 else None
 
 
@@ -128,15 +135,7 @@ def _set_session_cookie(response: Response, request: Request, raw_token: str) ->
     )
 
 
-def _create_session(
-    db: Session,
-    *,
-    account: PortalAccount,
-    access: PortalAccess,
-    request: Request,
-    response: Response,
-    now: datetime,
-) -> None:
+def _create_session(db: Session, *, account: PortalAccount, access: PortalAccess, request: Request, response: Response, now: datetime) -> None:
     raw_token = new_session_token()
     db.add(
         PortalSession(
@@ -203,7 +202,6 @@ def issue_temporary_password(
         raise HTTPException(status_code=404, detail="Acesso externo não encontrado.")
     if not access.is_active or access.revoked_at is not None:
         raise HTTPException(status_code=409, detail="Reative o acesso externo antes de gerar uma nova senha temporária.")
-
     person = db.scalar(
         select(Person).where(
             Person.id == access.person_id,
@@ -213,13 +211,11 @@ def issue_temporary_password(
     )
     if person is None:
         raise HTTPException(status_code=404, detail="Pessoa vinculada ao acesso não encontrada.")
-    if not _has_tenant_lease(db, person):
-        raise HTTPException(status_code=422, detail="A pessoa não possui contrato de locação como inquilino.")
-
+    if not _has_portal_role(db, person):
+        raise HTTPException(status_code=422, detail="A pessoa não possui vínculo como proprietário ou locatário.")
     identifier = _document_identifier(person.document_number)
     if len(identifier) not in {11, 14}:
-        raise HTTPException(status_code=422, detail="Cadastre um CPF ou CNPJ válido na pessoa antes de liberar o Portal do Inquilino.")
-
+        raise HTTPException(status_code=422, detail="Cadastre um CPF ou CNPJ válido na pessoa antes de liberar o Portal do Cliente.")
     now = datetime.now(timezone.utc)
     for credential in db.scalars(
         select(PortalTemporaryCredential).where(
@@ -228,7 +224,6 @@ def issue_temporary_password(
         )
     ).all():
         credential.used_at = now
-
     temporary_password = _new_temporary_password()
     credential = PortalTemporaryCredential(
         organization_id=context.user.organization_id,
@@ -241,7 +236,6 @@ def issue_temporary_password(
         issued_by_user_id=context.user.id,
     )
     db.add(credential)
-
     account = _account_for_person(db, person)
     if account is not None:
         account.password_hash = hash_password(secrets.token_urlsafe(48))
@@ -249,7 +243,6 @@ def issue_temporary_password(
         account.locked_until = None
         for session in db.scalars(select(PortalSession).where(PortalSession.account_id == account.id)).all():
             db.delete(session)
-
     db.commit()
     return {
         "access_id": str(access.id),
@@ -264,12 +257,7 @@ def issue_temporary_password(
 
 
 @public_router.post("/document-login")
-def document_login(
-    payload: DocumentLoginRequest,
-    request: Request,
-    response: Response,
-    db: Session = Depends(get_db),
-) -> dict:
+def document_login(payload: DocumentLoginRequest, request: Request, response: Response, db: Session = Depends(get_db)) -> dict:
     now = datetime.now(timezone.utc)
     person = _person_for_identifier(db, payload.identifier)
     if person is None:
@@ -277,7 +265,6 @@ def document_login(
     access = _active_access(db, person)
     if access is None:
         raise HTTPException(status_code=403, detail="O acesso ao portal está desativado pela imobiliária.")
-
     temporary = _latest_temporary(db, person, now)
     if temporary is not None:
         if temporary.attempts >= temporary.max_attempts:
@@ -298,7 +285,6 @@ def document_login(
             "change_token": raw_change_token,
             "change_token_expires_in_seconds": CHANGE_TOKEN_MINUTES * 60,
         }
-
     account = _account_for_person(db, person)
     if account is None or not account.is_active:
         raise HTTPException(status_code=401, detail="CPF/CNPJ ou senha inválidos.")
@@ -311,14 +297,9 @@ def document_login(
             account.failed_attempts = 0
         db.commit()
         raise HTTPException(status_code=401, detail="CPF/CNPJ ou senha inválidos.")
-
     _create_session(db, account=account, access=access, request=request, response=response, now=now)
     db.commit()
-    return {
-        "person_name": person.name,
-        "login_identifier": person.document_number,
-        "must_change_password": False,
-    }
+    return {"person_name": person.name, "login_identifier": person.document_number, "must_change_password": False}
 
 
 @public_router.post("/temporary-change")
@@ -335,7 +316,6 @@ def change_temporary_password(
     access = _active_access(db, person)
     if access is None:
         raise HTTPException(status_code=403, detail="O acesso ao portal está desativado pela imobiliária.")
-
     credential = _latest_temporary(db, person, now)
     if (
         credential is None
@@ -347,7 +327,6 @@ def change_temporary_password(
         raise HTTPException(status_code=422, detail="A solicitação de troca de senha não é mais válida. Entre novamente com a senha temporária.")
     if verify_password(payload.password, credential.password_hash):
         raise HTTPException(status_code=422, detail="Escolha uma senha diferente da senha temporária.")
-
     account = _account_for_person(db, person)
     real_email = normalize_email(person.email or "")
     login_storage = real_email or _document_identifier(person.document_number)
@@ -359,7 +338,6 @@ def change_temporary_password(
     )
     if conflict is not None:
         raise HTTPException(status_code=409, detail="Este identificador já está vinculado a outra conta de portal.")
-
     if account is None:
         account = PortalAccount(
             organization_id=person.organization_id,
@@ -383,7 +361,6 @@ def change_temporary_password(
         account.password_changed_at = now
         for session in db.scalars(select(PortalSession).where(PortalSession.account_id == account.id)).all():
             db.delete(session)
-
     credential.used_at = now
     credential.change_token_hash = None
     credential.change_token_expires_at = None
