@@ -3,13 +3,14 @@ from __future__ import annotations
 import hashlib
 import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import event, inspect
+from sqlalchemy import event, inspect, select
 from sqlalchemy.orm import Session
 
 from app.core import database
+from app.domains.communications.models import CommunicationMessage
 from app.domains.communications.service import _create_suggestion, _person_from_snapshot, ensure_default_templates
 from app.domains.foundation.models import Organization
 from app.domains.inspections.models import Inspection, InspectionVersion
@@ -43,6 +44,12 @@ def _actor_from_maintenance(item: MaintenanceRequest):
     return item.completed_by_user_id or item.approved_by_user_id or item.created_by_user_id
 
 
+def _as_utc(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
 def _remember(session: Session, payload: dict) -> None:
     rows = session.info.setdefault(_SESSION_EVENTS_KEY, [])
     signature = (payload.get("kind"), payload.get("source_id"), payload.get("event"), payload.get("event_at"))
@@ -68,7 +75,7 @@ def _collect_operational_events(session: Session, flush_context, instances) -> N
                     "organization_id": str(item.organization_id),
                     "source_id": str(item.id),
                     "event": "scheduled",
-                    "event_at": item.scheduled_at.astimezone(timezone.utc).isoformat(),
+                    "event_at": _as_utc(item.scheduled_at).isoformat(),
                     "user_id": str(_actor_from_inspection(session, item) or ""),
                 },
             )
@@ -97,16 +104,14 @@ def _collect_operational_events(session: Session, flush_context, instances) -> N
                 "organization_id": str(item.organization_id),
                 "source_id": str(item.id),
                 "event": item.status,
-                "event_at": event_at.astimezone(timezone.utc).isoformat(),
+                "event_at": _as_utc(event_at).isoformat(),
                 "user_id": str(_actor_from_maintenance(item) or ""),
             },
         )
 
 
 def _local_datetime(value: datetime) -> str:
-    if value.tzinfo is None:
-        value = value.replace(tzinfo=timezone.utc)
-    return value.astimezone(LOCAL_ZONE).strftime("%d/%m/%Y às %H:%M")
+    return _as_utc(value).astimezone(LOCAL_ZONE).strftime("%d/%m/%Y às %H:%M")
 
 
 def _recipient_token(recipient: tuple) -> str:
@@ -114,26 +119,26 @@ def _recipient_token(recipient: tuple) -> str:
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
 
 
-def _append_safe_event_detail(message, detail: str) -> None:
+def _append_safe_event_detail(message: CommunicationMessage, detail: str) -> None:
     message.body = f"{message.body.rstrip()}\n\nDados do evento no ERP: {detail}"
 
 
-def _inspection_suggestions(db: Session, payload: dict) -> int:
+def _inspection_suggestions(db: Session, payload: dict) -> list[CommunicationMessage]:
     try:
         organization_id = uuid.UUID(payload["organization_id"])
         source_id = uuid.UUID(payload["source_id"])
         event_at = datetime.fromisoformat(payload["event_at"])
         user_id = uuid.UUID(payload["user_id"]) if payload.get("user_id") else None
     except (KeyError, TypeError, ValueError):
-        return 0
+        return []
     item = db.get(Inspection, source_id)
     if item is None or item.organization_id != organization_id or item.status == "cancelled":
-        return 0
+        return []
     organization = db.get(Organization, organization_id)
     organization_name = organization.display_name if organization else "Imobiliária"
     lease_snapshot = dict(item.lease_snapshot or {})
     tenants = [entry for entry in list(lease_snapshot.get("tenants") or []) if isinstance(entry, dict)]
-    created = 0
+    created: list[CommunicationMessage] = []
     for entry in tenants:
         recipient = _person_from_snapshot(db, organization_id, entry)
         token = _recipient_token(recipient)
@@ -148,7 +153,7 @@ def _inspection_suggestions(db: Session, payload: dict) -> int:
             source_module="inspections",
             source_type="inspection",
             source_id=str(item.id),
-            dedupe_key=f"inspection_schedule:{item.id}:{event_at.astimezone(timezone.utc).isoformat()}:{token}",
+            dedupe_key=f"inspection_schedule:{item.id}:{_as_utc(event_at).isoformat()}:{token}",
         )
         if message is None:
             continue
@@ -157,7 +162,7 @@ def _inspection_suggestions(db: Session, payload: dict) -> int:
             message,
             f"{inspection_code(item)} · contrato {lease_code} · agendada para {_local_datetime(event_at)}.",
         )
-        created += 1
+        created.append(message)
     return created
 
 
@@ -198,7 +203,7 @@ def _maintenance_event_detail(item: MaintenanceRequest, event_name: str, event_a
     return f"{code} · {title} · chamado cancelado em {moment}."
 
 
-def _maintenance_suggestions(db: Session, payload: dict) -> int:
+def _maintenance_suggestions(db: Session, payload: dict) -> list[CommunicationMessage]:
     try:
         organization_id = uuid.UUID(payload["organization_id"])
         source_id = uuid.UUID(payload["source_id"])
@@ -206,14 +211,14 @@ def _maintenance_suggestions(db: Session, payload: dict) -> int:
         event_at = datetime.fromisoformat(payload["event_at"])
         user_id = uuid.UUID(payload["user_id"]) if payload.get("user_id") else None
     except (KeyError, TypeError, ValueError):
-        return 0
+        return []
     item = db.get(MaintenanceRequest, source_id)
     if item is None or item.organization_id != organization_id:
-        return 0
+        return []
     organization = db.get(Organization, organization_id)
     organization_name = organization.display_name if organization else "Imobiliária"
     detail = _maintenance_event_detail(item, event_name, event_at)
-    created = 0
+    created: list[CommunicationMessage] = []
     for recipient, role in _maintenance_targets(db, item):
         token = _recipient_token(recipient)
         message = _create_suggestion(
@@ -227,12 +232,97 @@ def _maintenance_suggestions(db: Session, payload: dict) -> int:
             source_module="maintenance",
             source_type="maintenance_request",
             source_id=str(item.id),
-            dedupe_key=f"maintenance_update:{item.id}:{event_name}:{event_at.astimezone(timezone.utc).isoformat()}:{token}",
+            dedupe_key=f"maintenance_update:{item.id}:{event_name}:{_as_utc(event_at).isoformat()}:{token}",
         )
         if message is None:
             continue
         _append_safe_event_detail(message, detail)
-        created += 1
+        created.append(message)
+    return created
+
+
+def _event_payload(*, kind: str, organization_id, source_id, event_name: str, event_at: datetime, user_id) -> dict:
+    return {
+        "kind": kind,
+        "organization_id": str(organization_id),
+        "source_id": str(source_id),
+        "event": event_name,
+        "event_at": _as_utc(event_at).isoformat(),
+        "user_id": str(user_id or ""),
+    }
+
+
+def _refresh_current_operational_suggestions(
+    db: Session,
+    *,
+    organization_id,
+    user_id,
+) -> list[CommunicationMessage]:
+    now = datetime.now(timezone.utc)
+    created: list[CommunicationMessage] = []
+
+    inspections = db.scalars(
+        select(Inspection).where(
+            Inspection.organization_id == organization_id,
+            Inspection.scheduled_at.is_not(None),
+            Inspection.status != "cancelled",
+        )
+    ).all()
+    for item in inspections:
+        scheduled_at = item.scheduled_at
+        if scheduled_at is None:
+            continue
+        scheduled_utc = _as_utc(scheduled_at)
+        if scheduled_utc < now - timedelta(days=1) or scheduled_utc > now + timedelta(days=120):
+            continue
+        created.extend(
+            _inspection_suggestions(
+                db,
+                _event_payload(
+                    kind="inspection_schedule",
+                    organization_id=organization_id,
+                    source_id=item.id,
+                    event_name="scheduled",
+                    event_at=scheduled_at,
+                    user_id=user_id,
+                ),
+            )
+        )
+
+    maintenance_rows = db.scalars(
+        select(MaintenanceRequest).where(
+            MaintenanceRequest.organization_id == organization_id,
+            MaintenanceRequest.status.in_(("scheduled", "in_progress", "completed", "cancelled")),
+        )
+    ).all()
+    for item in maintenance_rows:
+        event_at = {
+            "scheduled": item.scheduled_at,
+            "in_progress": item.started_at,
+            "completed": item.completed_at,
+            "cancelled": item.cancelled_at,
+        }.get(item.status)
+        if event_at is None:
+            continue
+        event_utc = _as_utc(event_at)
+        if item.status == "scheduled" and (event_utc < now - timedelta(days=1) or event_utc > now + timedelta(days=120)):
+            continue
+        if item.status in {"completed", "cancelled"} and event_utc < now - timedelta(days=7):
+            continue
+        created.extend(
+            _maintenance_suggestions(
+                db,
+                _event_payload(
+                    kind="maintenance_update",
+                    organization_id=organization_id,
+                    source_id=item.id,
+                    event_name=item.status,
+                    event_at=event_at,
+                    user_id=user_id,
+                ),
+            )
+        )
+
     return created
 
 
@@ -259,6 +349,47 @@ def _discard_operational_events(session: Session) -> None:
     session.info.pop(_SESSION_EVENTS_KEY, None)
 
 
+def _install_refresh_wrapper() -> None:
+    from app.api.routes import communications as communication_routes
+
+    current = communication_routes.refresh_suggestions
+    if getattr(current, "_operational_refresh_installed", False):
+        return
+
+    def refresh_suggestions(
+        db: Session,
+        *,
+        organization_id,
+        user_id,
+        include_overdue_charges: bool = True,
+        include_contracts: bool = True,
+        include_owner_repasses: bool = True,
+        today=None,
+    ) -> list[CommunicationMessage]:
+        created = list(
+            current(
+                db,
+                organization_id=organization_id,
+                user_id=user_id,
+                include_overdue_charges=include_overdue_charges,
+                include_contracts=include_contracts,
+                include_owner_repasses=include_owner_repasses,
+                today=today,
+            )
+        )
+        created.extend(
+            _refresh_current_operational_suggestions(
+                db,
+                organization_id=organization_id,
+                user_id=user_id,
+            )
+        )
+        return created
+
+    setattr(refresh_suggestions, "_operational_refresh_installed", True)
+    communication_routes.refresh_suggestions = refresh_suggestions
+
+
 def install_operational_communication_rules() -> None:
     global _INSTALLED
     if _INSTALLED:
@@ -266,4 +397,5 @@ def install_operational_communication_rules() -> None:
     event.listen(Session, "before_flush", _collect_operational_events)
     event.listen(Session, "after_commit", _publish_operational_events)
     event.listen(Session, "after_rollback", _discard_operational_events)
+    _install_refresh_wrapper()
     _INSTALLED = True
