@@ -19,13 +19,14 @@ class Settings(BaseSettings):
     clicksign_environment: str = "sandbox"
     clicksign_webhook_secret: str = ""
 
-    # E-mail transacional. Senha SMTP fica somente no ambiente/Secret Manager.
+    # E-mail transacional da Central de Comunicações e do Portal. Senha SMTP
+    # fica somente no ambiente/Secret Manager. Nome vazio usa o nome da organização.
     email_smtp_host: str = ""
     email_smtp_port: int = 587
     email_smtp_username: str = ""
     email_smtp_password: str = ""
     email_smtp_from_email: str = ""
-    email_smtp_from_name: str = "Portal do Inquilino"
+    email_smtp_from_name: str = ""
     email_smtp_use_tls: bool = True
     email_smtp_use_ssl: bool = False
 

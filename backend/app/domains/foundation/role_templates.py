@@ -24,6 +24,7 @@ ROLE_TEMPLATES: tuple[RoleTemplate, ...] = (
             "maintenance.view", "maintenance.manage", "inspections.view", "inspections.manage",
             "documents.view", "documents.manage", "agenda.view", "agenda.manage",
             "reports.view", "reports.export",
+            "communications.view", "communications.manage", "communications.send",
         }),
     ),
     RoleTemplate(
@@ -35,6 +36,7 @@ ROLE_TEMPLATES: tuple[RoleTemplate, ...] = (
             "finance.charge.create", "finance.reconcile", "finance.payment.prepare",
             "finance.repasse.execute", "documents.view", "agenda.view", "agenda.manage",
             "reports.view", "reports.export",
+            "communications.view", "communications.manage", "communications.send",
         }),
     ),
     RoleTemplate(
