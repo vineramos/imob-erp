@@ -44,6 +44,10 @@ class ChargeItem(BaseModel):
     beneficiary_name: str | None = None
     frequency: Literal["monthly", "annual", "one_time"] = "monthly"
     include_in_invoice: bool = True
+    agency_retention_type: Literal["none", "percent", "fixed"] = "none"
+    agency_retention_value: Decimal = Decimal("0.00")
+    agency_retention_amount: Decimal = Decimal("0.00")
+    third_party_net_amount: Decimal = Decimal("0.00")
     source: str | None = None
 
 
@@ -73,6 +77,7 @@ class SettlementResponse(BaseModel):
     intermediation_fee_calculated: Decimal
     agency_fee_withheld: Decimal
     agency_reimbursement_amount: Decimal
+    agency_retention_amount: Decimal
     owner_entitlement_amount: Decimal
     third_party_amount: Decimal
     calculated_at: datetime
