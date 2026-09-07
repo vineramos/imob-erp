@@ -101,6 +101,14 @@ class ChargeResponse(BaseModel):
     critical_overdue: bool
     rent_amount: Decimal
     gross_amount: Decimal
+    late_fee_percent: Decimal = Decimal("0.00")
+    late_interest_percent_monthly: Decimal = Decimal("0.00")
+    late_interest_type: Literal["simple", "compound"] = "simple"
+    late_interest_compounding: Literal["daily", "monthly"] = "daily"
+    late_fee_amount: Decimal = Decimal("0.00")
+    late_interest_amount: Decimal = Decimal("0.00")
+    updated_amount: Decimal
+    amount_as_of: date
     charge_items: list[ChargeItem]
     sent_at: datetime | None
     paid_at: datetime | None
