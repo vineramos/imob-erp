@@ -19,7 +19,7 @@ from app.domains.finance.models import MaintenanceFinancialEntry, OwnerRepasse
 from app.domains.foundation.access import UserContext, require_permission
 from app.domains.foundation.audit import write_audit
 from app.domains.maintenance.models import MaintenanceRequest
-from app.domains.portfolio.models import Property
+from app.domains.portfolio.models import Property, PropertyOwner
 
 router = APIRouter(prefix="/finance/maintenance", tags=["finance-maintenance"])
 CENT = Decimal("0.01")
@@ -207,7 +207,34 @@ def apply_owner_repasse_deduction(
         raise HTTPException(status_code=409, detail="Este lançamento não está configurado para desconto em repasse de proprietário.")
     if entry.status == "settled":
         raise HTTPException(status_code=409, detail="Esta cobrança já foi liquidada.")
-    remaining = money(entry.amount - entry.settled_amount)
+
+    ownerships = db.scalars(
+        select(PropertyOwner)
+        .join(Property, Property.id == PropertyOwner.property_id)
+        .where(
+            PropertyOwner.property_id == entry.property_id,
+            Property.organization_id == context.user.organization_id,
+        )
+        .order_by(PropertyOwner.created_at.asc(), PropertyOwner.person_id.asc())
+    ).all()
+    if not ownerships:
+        raise HTTPException(status_code=409, detail="O imóvel não possui proprietários cadastrados para ratear a manutenção.")
+    ownership_total = sum((Decimal(str(owner.ownership_percent)) for owner in ownerships), Decimal("0.00"))
+    if ownership_total != Decimal("100"):
+        raise HTTPException(status_code=409, detail="A participação dos proprietários precisa totalizar 100% antes do abatimento.")
+
+    snapshot = dict(entry.source_snapshot or {})
+    raw_deductions = dict(snapshot.get("owner_repasse_deductions") or {})
+    deductions = {str(key): money(value) for key, value in raw_deductions.items()}
+    if money(entry.settled_amount) > 0 and not deductions:
+        raise HTTPException(
+            status_code=409,
+            detail="Este lançamento já possui liquidação anterior sem rateio por proprietário. Revise a origem antes de aplicar novo abatimento.",
+        )
+    tracked_total = money(sum(deductions.values(), Decimal("0.00")))
+    if deductions and tracked_total != money(entry.settled_amount):
+        raise HTTPException(status_code=409, detail="O histórico de abatimentos da manutenção está inconsistente e precisa de revisão.")
+
     repasses = db.scalars(
         select(OwnerRepasse)
         .where(
@@ -220,33 +247,82 @@ def apply_owner_repasse_deduction(
     ).all()
     if not repasses:
         raise HTTPException(status_code=409, detail="Ainda não há repasse pendente deste imóvel para aplicar a dedução.")
-    applied = Decimal("0.00")
-    refs: list[str] = []
-    snapshot = dict(entry.source_snapshot or {})
-    code = str(snapshot.get("maintenance_code") or "Manutenção")
+
+    by_owner: dict[UUID, list[OwnerRepasse]] = {}
     for repasse in repasses:
-        if remaining <= 0:
-            break
-        take = money(min(money(repasse.amount), remaining))
-        if take <= 0:
+        by_owner.setdefault(repasse.owner_person_id, []).append(repasse)
+
+    applied = Decimal("0.00")
+    applied_by_owner: dict[str, Decimal] = {}
+    current_refs: list[str] = []
+    target_accumulated = Decimal("0.00")
+    code = str(snapshot.get("maintenance_code") or "Manutenção")
+
+    for index, ownership in enumerate(ownerships):
+        owner_key = str(ownership.person_id)
+        if index == len(ownerships) - 1:
+            owner_target = money(entry.amount - target_accumulated)
+        else:
+            owner_target = money(entry.amount * Decimal(str(ownership.ownership_percent)) / Decimal("100"))
+            target_accumulated = money(target_accumulated + owner_target)
+        already = money(deductions.get(owner_key, Decimal("0.00")))
+        owner_remaining = money(max(Decimal("0.00"), owner_target - already))
+        if owner_remaining <= 0:
             continue
-        repasse.amount = money(repasse.amount - take)
-        note = f"Dedução {code}: R$ {take:.2f}"
-        repasse.notes = f"{repasse.notes}\n{note}".strip() if repasse.notes else note
-        if repasse.amount <= 0:
-            repasse.amount = Decimal("0.00")
-            repasse.status = "settled_zero"
-        applied += take
-        remaining = money(remaining - take)
-        refs.append(str(repasse.id))
+
+        owner_applied = Decimal("0.00")
+        for repasse in by_owner.get(ownership.person_id, []):
+            if owner_remaining <= 0:
+                break
+            take = money(min(money(repasse.amount), owner_remaining))
+            if take <= 0:
+                continue
+            repasse.amount = money(repasse.amount - take)
+            note = f"Dedução proporcional {code}: R$ {take:.2f}"
+            repasse.notes = f"{repasse.notes}\n{note}".strip() if repasse.notes else note
+            if repasse.amount <= 0:
+                repasse.amount = Decimal("0.00")
+                repasse.status = "settled_zero"
+            owner_applied = money(owner_applied + take)
+            owner_remaining = money(owner_remaining - take)
+            current_refs.append(str(repasse.id))
+
+        if owner_applied > 0:
+            deductions[owner_key] = money(already + owner_applied)
+            applied_by_owner[owner_key] = owner_applied
+            applied = money(applied + owner_applied)
+
     if applied <= 0:
-        raise HTTPException(status_code=409, detail="Não havia saldo disponível nos repasses pendentes.")
-    entry.settled_amount = money(entry.settled_amount + applied)
+        raise HTTPException(status_code=409, detail="Não havia saldo disponível nos repasses dos proprietários para o rateio devido.")
+
+    all_refs = [str(value) for value in list(snapshot.get("owner_repasse_refs") or [])]
+    for value in current_refs:
+        if value not in all_refs:
+            all_refs.append(value)
+    snapshot["owner_repasse_deductions"] = {key: str(value) for key, value in deductions.items()}
+    snapshot["owner_repasse_refs"] = all_refs
+    entry.source_snapshot = snapshot
+    entry.settled_amount = money(sum(deductions.values(), Decimal("0.00")))
     entry.status = "settled" if entry.settled_amount >= entry.amount else "partial"
     entry.settled_at = datetime.now(timezone.utc) if entry.status == "settled" else None
-    entry.payment_reference = f"repasse:{','.join(refs)}"
-    entry.notes = f"R$ {applied:.2f} abatidos de repasse(s) do imóvel."
-    _audit(db, request, context, action="finance.maintenance_owner_repasse_offset", entry=entry, after={"applied": str(applied), "status": entry.status})
+    entry.payment_reference = f"repasse:{','.join(all_refs[-4:])}"
+    entry.notes = (
+        f"R$ {applied:.2f} abatidos proporcionalmente dos repasses dos proprietários. "
+        f"Total abatido: R$ {entry.settled_amount:.2f}."
+    )
+    _audit(
+        db,
+        request,
+        context,
+        action="finance.maintenance_owner_repasse_offset",
+        entry=entry,
+        after={
+            "applied": str(applied),
+            "settled_amount": str(entry.settled_amount),
+            "status": entry.status,
+            "applied_by_owner": {key: str(value) for key, value in applied_by_owner.items()},
+        },
+    )
     db.commit()
     db.refresh(entry)
     return _entry_response(entry)
