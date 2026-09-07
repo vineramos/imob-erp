@@ -408,16 +408,17 @@ def _target_details(db: Session, organization_id: UUID, target_type: str, target
             "due_date": item.due_date,
         }
 
-    if target_type == "manual":
-        item = db.scalar(
-            select(FinancialTitle).where(
-                FinancialTitle.id == target_id,
-                FinancialTitle.organization_id == organization_id,
-                FinancialTitle.source_type == "manual",
-            )
+    if target_type in {"manual", "financial_title"}:
+        stmt = select(FinancialTitle).where(
+            FinancialTitle.id == target_id,
+            FinancialTitle.organization_id == organization_id,
         )
+        if target_type == "manual":
+            stmt = stmt.where(FinancialTitle.source_type == "manual")
+        item = db.scalar(stmt)
         if item is None:
-            raise HTTPException(status_code=404, detail="Título financeiro manual não encontrado.")
+            detail = "Título financeiro manual não encontrado." if target_type == "manual" else "Título financeiro não encontrado."
+            raise HTTPException(status_code=404, detail=detail)
         outstanding = Decimal("0.00") if item.status == "cancelled" else money(max(Decimal("0.00"), item.amount - item.settled_amount))
         return {
             "object": item,
@@ -501,16 +502,16 @@ def _open_candidates(db: Session, transaction: BankTransaction, account: BankAcc
             )
         ).all()
     )
+    financial_titles = db.scalars(
+        select(FinancialTitle).where(
+            FinancialTitle.organization_id == transaction.organization_id,
+            FinancialTitle.direction == target_direction,
+            FinancialTitle.status.in_(("pending", "partial")),
+        )
+    ).all()
     candidates.extend(
-        ("manual", item.id)
-        for item in db.scalars(
-            select(FinancialTitle).where(
-                FinancialTitle.organization_id == transaction.organization_id,
-                FinancialTitle.source_type == "manual",
-                FinancialTitle.direction == target_direction,
-                FinancialTitle.status.in_(("pending", "partial")),
-            )
-        ).all()
+        ("manual" if item.source_type == "manual" else "financial_title", item.id)
+        for item in financial_titles
     )
 
     result: list[ReconciliationCandidate] = []
