@@ -15,6 +15,7 @@ from app.api.routes.documents import _content_response, _load as load_document, 
 from app.core.database import get_db
 from app.domains.documents.context import context_catalog
 from app.domains.finance.advanced_models import BillingItem, PortalAccess
+from app.domains.finance.charge_values import charge_financial_view
 from app.domains.finance.models import RentCharge
 from app.domains.foundation.access import UserContext, require_permission
 from app.domains.foundation.models import Organization
@@ -370,15 +371,21 @@ def portal_overview(identity: PortalIdentity = Depends(require_portal_identity),
     open_amount = ZERO
     for charge in charges:
         bill = billing.get(charge.id)
+        financial = charge_financial_view(db, charge)
         if charge.status in {"generated", "sent", "overdue"}:
-            open_amount += Decimal(str(charge.gross_amount))
+            open_amount += financial.payable_amount
         charge_rows.append({
             "id": str(charge.id),
             "code": f"COB-{charge.internal_number:06d}",
             "lease_contract_id": str(charge.lease_contract_id),
             "competence": charge.competence,
             "due_date": charge.due_date,
-            "amount": float(charge.gross_amount),
+            "amount": float(financial.payable_amount),
+            "nominal_amount": float(financial.nominal_amount),
+            "late_fee_amount": float(financial.late_fee_amount),
+            "late_interest_amount": float(financial.late_interest_amount),
+            "days_overdue": financial.days_overdue,
+            "amount_updated_at": financial.as_of,
             "status": charge.status,
             "paid_at": charge.paid_at,
             "paid_amount": float(charge.paid_amount) if charge.paid_amount is not None else None,
