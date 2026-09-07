@@ -19,6 +19,7 @@ from app.domains.finance.advanced_schemas import (
     BillingRunResponse,
 )
 from app.domains.finance.advanced_service import ensure_billing_batch, money, refresh_billing_batch_counters
+from app.domains.finance.late_charges import amount_due, charge_late_payment_terms
 from app.domains.finance.models import RentCharge
 from app.domains.finance.providers import BankProviderError, InterBankProvider
 from app.domains.foundation.access import UserContext, require_permission
@@ -63,6 +64,7 @@ def _item_response(db: Session, item: BillingItem) -> BillingItemResponse:
     if charge is None:
         raise HTTPException(status_code=409, detail="Cobrança vinculada ao lote não encontrada.")
     lease = db.get(LeaseContract, charge.lease_contract_id)
+    value = charge.paid_amount if charge.status == "paid" and charge.paid_amount is not None else amount_due(db, charge)
     return BillingItemResponse(
         id=item.id,
         charge_id=charge.id,
@@ -71,7 +73,7 @@ def _item_response(db: Session, item: BillingItem) -> BillingItemResponse:
         property_code=_property_code(charge),
         tenant_name=_tenant_name(charge),
         due_date=charge.due_date,
-        amount=float(money(charge.gross_amount)),
+        amount=float(money(value)),
         charge_status=charge.status,
         provider=item.provider,
         provider_charge_id=item.provider_charge_id,
@@ -136,8 +138,14 @@ def _payer(charge: RentCharge) -> dict:
     return result
 
 
-def _issue_payload(charge: RentCharge) -> dict:
-    return {
+def _issue_payload(db: Session, charge: RentCharge) -> dict:
+    terms = charge_late_payment_terms(db, charge)
+    if terms.interest_type == "compound" and terms.interest_percent_monthly > 0:
+        raise ValueError(
+            "Este contrato usa juros compostos. O Banco Inter Cobrança V3 não possui parâmetro equivalente de capitalização composta; "
+            "altere a condição do contrato antes da assinatura ou utilize outro meio de cobrança compatível."
+        )
+    payload = {
         "seuNumero": f"C{charge.internal_number}"[:15],
         "valorNominal": float(money(charge.gross_amount)),
         "dataVencimento": charge.due_date.isoformat(),
@@ -146,6 +154,11 @@ def _issue_payload(charge: RentCharge) -> dict:
         "mensagem": {"linha1": f"Aluguel/encargos {charge.competence:%m/%Y}", "linha2": f"Imóvel {_property_code(charge)}"},
         "formasRecebimento": ["BOLETO", "PIX"],
     }
+    if terms.fee_percent > 0:
+        payload["multa"] = {"codigo": "PERCENTUAL", "taxa": float(terms.fee_percent)}
+    if terms.interest_percent_monthly > 0:
+        payload["mora"] = {"codigo": "TAXAMENSAL", "taxa": float(terms.interest_percent_monthly)}
+    return payload
 
 
 def _apply_detail(item: BillingItem, data: dict) -> None:
@@ -196,7 +209,7 @@ def issue_inter(batch_id: UUID, payload: BillingIssueRequest, request: Request, 
         if charge is None or charge.status == "cancelled":
             continue
         try:
-            payload_inter = _issue_payload(charge)
+            payload_inter = _issue_payload(db, charge)
             response = provider.issue_charge(payload_inter)
             provider_id = str(response.get("codigoSolicitacao") or "")
             if not provider_id:
