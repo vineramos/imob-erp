@@ -1,4 +1,5 @@
 from datetime import date, datetime, timedelta, timezone
+from decimal import Decimal
 from uuid import UUID
 
 from sqlalchemy import select
@@ -7,6 +8,7 @@ from app.core.database import SessionLocal
 from app.domains.agenda.models import AgendaTask
 from app.domains.finance.advanced_models import DelinquencyCase
 from app.domains.finance.delinquency_models import DelinquencyWorkflow
+from app.domains.finance.late_charges import amount_due
 from app.domains.finance.models import RentCharge
 from app.domains.leases.models import LeaseContract
 from tests.helpers import assert_response, build_signed_rental
@@ -25,6 +27,14 @@ def _set_overdue(charge_id: str, *, days: int, provider: str = "Seguradora Teste
         lease.guarantee_type = "insurance"
         lease.guarantee_details = {"provider_name": provider, "policy_number": policy, "test_mode": True}
         db.commit()
+
+
+def _updated_amount(charge_id: str, *, as_of: date | None = None) -> Decimal:
+    assert SessionLocal is not None
+    with SessionLocal() as db:
+        charge = db.get(RentCharge, UUID(charge_id))
+        assert charge is not None
+        return amount_due(db, charge, as_of=as_of or date.today())
 
 
 def _agenda(case_id: str) -> list[AgendaTask]:
@@ -129,19 +139,21 @@ def test_delinquency_ladder_promise_guarantee_portal_privacy_and_resolution(clie
     assert "promessa parcial" in partial.json()["detail"].lower()
 
     promise_date = date.today() + timedelta(days=2)
+    current_due = _updated_amount(charge["id"])
+    assert current_due > Decimal("2000.00")
     promised = assert_response(
         client.post(
             f"/api/finance/advanced/delinquency/{case_id}/promise",
             json={
                 "due_date": promise_date.isoformat(),
-                "amount": 2000,
-                "notes": "Pagamento integral prometido via PIX.",
+                "amount": str(current_due),
+                "notes": "Pagamento integral atualizado prometido via PIX.",
             },
         )
     ).json()
     assert promised["status"] == "negotiating"
     assert promised["workflow"]["promise_status"] == "pending"
-    assert promised["workflow"]["promise_amount"] == 2000
+    assert Decimal(str(promised["workflow"]["promise_amount"])) == current_due
     assert promised["workflow"]["promise_due_date"] == promise_date.isoformat()
     assert any(str(task.source_type).startswith("delinquency_promise_") for task in _agenda(case_id))
 
@@ -268,15 +280,17 @@ def test_delinquency_ladder_promise_guarantee_portal_privacy_and_resolution(clie
     assert "action_log" not in portal.text
 
     # Ao receber integralmente do locatário, o caso fecha e as tarefas pendentes da régua são concluídas.
+    paid_at = datetime.now(timezone.utc)
+    final_due = _updated_amount(charge["id"], as_of=paid_at.date())
     assert_response(
         client.post(
             f"/api/finance/charges/{charge['id']}/payment",
             json={
-                "paid_amount": 2000,
-                "paid_at": datetime.now(timezone.utc).isoformat(),
+                "paid_amount": str(final_due),
+                "paid_at": paid_at.isoformat(),
                 "payment_method": "pix",
                 "payment_reference": "PIX-INQUILINO-QUITACAO",
-                "payment_notes": "Quitação integral após inadimplência.",
+                "notes": "Quitação integral atualizada após inadimplência.",
             },
         )
     )
