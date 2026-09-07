@@ -29,6 +29,7 @@ from app.domains.finance.delinquency_service import (
     stage_days,
     suggested_action,
 )
+from app.domains.finance.late_charges import amount_due
 from app.domains.finance.models import RentCharge
 from app.domains.finance.service import money
 from app.domains.foundation.access import UserContext, require_permission
@@ -136,6 +137,7 @@ def _response(db: Session, item: DelinquencyCase) -> DelinquencyCaseResponse:
     first_days, followup_days, critical_days = stage_days(db, charge, item)
     property_code = str((charge.property_snapshot or {}).get("code") or "—")
     contacts = _tenant_contacts(charge)
+    current_amount = charge.paid_amount if charge.status == "paid" and charge.paid_amount is not None else amount_due(db, charge)
     return DelinquencyCaseResponse(
         id=item.id,
         code=f"INA-{item.internal_number:05d}",
@@ -148,7 +150,7 @@ def _response(db: Session, item: DelinquencyCase) -> DelinquencyCaseResponse:
         tenant_name=contacts[0]["name"],
         tenant_contacts=contacts,
         due_date=charge.due_date,
-        amount=float(money(charge.gross_amount)),
+        amount=float(money(current_amount)),
         days_overdue=days,
         first_contact_after_days=first_days,
         followup_after_days=followup_days,
@@ -209,12 +211,12 @@ def overview(
         for item in active if charges.get(item.charge_id) is not None
     }
     today = date.today()
-    overdue_amount = sum((money(charges[item.charge_id].gross_amount) for item in active if charges.get(item.charge_id)), Decimal("0.00"))
+    overdue_amount = sum((amount_due(db, charges[item.charge_id], as_of=today) for item in active if charges.get(item.charge_id)), Decimal("0.00"))
     critical = [
         item for item in active
         if charges.get(item.charge_id) and (today - charges[item.charge_id].due_date).days >= item.critical_after_days
     ]
-    critical_amount = sum((money(charges[item.charge_id].gross_amount) for item in critical if charges.get(item.charge_id)), Decimal("0.00"))
+    critical_amount = sum((amount_due(db, charges[item.charge_id], as_of=today) for item in critical if charges.get(item.charge_id)), Decimal("0.00"))
     return DelinquencyOverviewResponse(
         open_cases=len(active),
         critical_cases=len(critical),
@@ -298,7 +300,7 @@ def case_action(
         workflow.guarantee_status = "submitted"
         workflow.guarantee_submitted_at = workflow.guarantee_submitted_at or now
         workflow.guarantee_protocol = item.insurer_protocol
-        workflow.claimed_amount = workflow.claimed_amount or money(charge.gross_amount)
+        workflow.claimed_amount = workflow.claimed_amount or amount_due(db, charge)
         complete_agenda_tasks(db, item, source_types={"delinquency_guarantee"})
 
     if payload.status == "resolved":
@@ -349,10 +351,10 @@ def record_promise(
     if payload.due_date > today + timedelta(days=90):
         raise HTTPException(status_code=422, detail="A promessa de pagamento deve ficar dentro dos próximos 90 dias.")
 
-    full_amount = money(charge.gross_amount)
+    full_amount = amount_due(db, charge, as_of=today)
     promised = money(payload.amount) if payload.amount is not None else full_amount
     if promised != full_amount:
-        raise HTTPException(status_code=422, detail="O Imob não aceita promessa parcial para esta cobrança. Informe o valor integral em aberto.")
+        raise HTTPException(status_code=422, detail="O Imob não aceita promessa parcial para esta cobrança. Informe o valor integral atualizado em aberto.")
 
     now = datetime.now(timezone.utc)
     workflow.promise_amount = full_amount
@@ -412,10 +414,10 @@ def guarantee_action(
     if workflow.guarantee_type == "insurance" and payload.status in {"submitted", "under_review"} and not (payload.protocol or workflow.guarantee_protocol):
         raise HTTPException(status_code=422, detail="Informe o protocolo da seguradora para registrar o acionamento do seguro fiança.")
 
-    gross = money(charge.gross_amount)
+    gross = amount_due(db, charge)
     claimed = money(payload.claimed_amount) if payload.claimed_amount is not None else (workflow.claimed_amount or gross)
     if claimed > gross:
-        raise HTTPException(status_code=422, detail="O valor acionado da garantia não pode superar o valor em aberto da cobrança.")
+        raise HTTPException(status_code=422, detail="O valor acionado da garantia não pode superar o valor atualizado em aberto da cobrança.")
     approved = money(payload.approved_amount) if payload.approved_amount is not None else workflow.approved_amount
     if approved is not None and approved > claimed:
         raise HTTPException(status_code=422, detail="O valor aprovado não pode ser maior que o valor acionado.")
