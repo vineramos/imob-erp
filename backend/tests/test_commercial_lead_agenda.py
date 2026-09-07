@@ -53,7 +53,7 @@ def test_public_site_lead_creates_commercial_agenda_task_and_closes_on_first_con
         lead = leads[0]
         assert lead.status == "new"
         assert lead.source == "public_site"
-        assert lead.property_id == property_item["id"]
+        assert str(lead.property_id) == property_item["id"]
 
         tasks = db.scalars(
             select(AgendaTask).where(
