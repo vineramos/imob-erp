@@ -79,6 +79,10 @@ class OperationalDefaultsConfig(BaseModel):
     delinquency_first_contact_day: int = Field(default=1, ge=1, le=90)
     delinquency_followup_day: int = Field(default=3, ge=1, le=90)
     delinquency_critical_day: int = Field(default=5, ge=1, le=90)
+    late_fee_percent: float = Field(default=2, ge=0, le=100)
+    late_interest_percent_monthly: float = Field(default=1, ge=0, le=100)
+    late_interest_type: Literal["simple", "compound"] = "simple"
+    late_interest_compounding: Literal["daily", "monthly"] = "daily"
 
     @model_validator(mode="after")
     def validate_delinquency_ladder(self):
