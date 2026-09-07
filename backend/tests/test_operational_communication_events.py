@@ -91,7 +91,7 @@ def _lease_context(identity):
         return tenant.id, owner.id, prop.id, lease.id
 
 
-def test_inspection_schedule_and_reschedule_create_human_review_suggestions(client, identity):
+def test_inspection_schedule_and_reschedule_supersede_unsent_suggestion(client, identity):
     _enable_permissions(identity)
     tenant_id, _, property_id, lease_id = _lease_context(identity)
     first_schedule = datetime.now(timezone.utc) + timedelta(days=3)
@@ -146,10 +146,12 @@ def test_inspection_schedule_and_reschedule_create_human_review_suggestions(clie
     messages = rows.json()
     assert len(messages) == 2
     assert len({item["id"] for item in messages}) == 2
-    assert all(item["status"] == "pending" for item in messages)
+    assert sum(item["status"] == "pending" for item in messages) == 1
+    assert sum(item["status"] == "cancelled" for item in messages) == 1
+    assert next(item for item in messages if item["id"] == first["id"])["status"] == "cancelled"
 
 
-def test_maintenance_status_events_notify_involved_people_without_internal_costs(client, identity):
+def test_maintenance_reschedule_and_status_events_keep_only_current_unsent_update(client, identity):
     _enable_permissions(identity)
     tenant_id, owner_id, property_id, lease_id = _lease_context(identity)
 
@@ -197,12 +199,32 @@ def test_maintenance_status_events_notify_involved_people_without_internal_costs
     messages = rows.json()
     assert len(messages) == 2
     assert {item["person_id"] for item in messages} == {str(tenant_id), str(owner_id)}
+    assert all(item["status"] == "pending" for item in messages)
     assert all(item["source_module"] == "maintenance" for item in messages)
     assert all(item["source_type"] == "maintenance_request" for item in messages)
     assert all("serviço agendado" in item["body"] for item in messages)
     assert all("partner_cost" not in item["body"] for item in messages)
     assert all("margin" not in item["body"].lower() for item in messages)
     assert all("350.00" not in item["body"] and "500.00" not in item["body"] for item in messages)
+
+    # Alterar somente a data, sem trocar o status, também precisa gerar a
+    # comunicação atual e retirar a antiga da fila de revisão.
+    with SessionLocal() as db:
+        item = db.get(MaintenanceRequest, maintenance_id)
+        item.scheduled_at = scheduled_at + timedelta(days=1)
+        item.history = [*list(item.history or []), {
+            "event": "Serviço reagendado",
+            "at": datetime.now(timezone.utc).isoformat(),
+            "user_id": str(identity["user_id"]),
+        }]
+        db.commit()
+
+    rows = client.get("/api/communications/messages", params={"category": "maintenance_update"})
+    assert rows.status_code == 200
+    messages = rows.json()
+    assert len(messages) == 4
+    assert sum(item["status"] == "pending" for item in messages) == 2
+    assert sum(item["status"] == "cancelled" for item in messages) == 2
 
     with SessionLocal() as db:
         item = db.get(MaintenanceRequest, maintenance_id)
@@ -218,6 +240,9 @@ def test_maintenance_status_events_notify_involved_people_without_internal_costs
     rows = client.get("/api/communications/messages", params={"category": "maintenance_update"})
     assert rows.status_code == 200
     messages = rows.json()
-    assert len(messages) == 4
+    assert len(messages) == 6
     assert sum("execução iniciada" in item["body"] for item in messages) == 2
-    assert all(item["status"] == "pending" for item in messages)
+    assert sum(item["status"] == "pending" for item in messages) == 2
+    assert sum(item["status"] == "cancelled" for item in messages) == 4
+    assert all("partner_cost" not in item["body"] for item in messages)
+    assert all("margin" not in item["body"].lower() for item in messages)
