@@ -28,8 +28,8 @@ from app.domains.finance.bank_schemas import (
     ReconciliationCandidate,
 )
 from app.domains.finance.core_models import FinancialTitle
+from app.domains.finance.late_charges import amount_due, record_payment_with_late_charges
 from app.domains.finance.models import MaintenanceFinancialEntry, OwnerRepasse, RentCharge
-from app.domains.finance.service import record_payment
 from app.domains.foundation.access import UserContext, require_permission
 from app.domains.foundation.audit import write_audit
 
@@ -337,7 +337,14 @@ def _parse_ofx_rows(content: bytes) -> list[dict]:
     return rows
 
 
-def _target_details(db: Session, organization_id: UUID, target_type: str, target_id: UUID) -> dict:
+def _target_details(
+    db: Session,
+    organization_id: UUID,
+    target_type: str,
+    target_id: UUID,
+    *,
+    as_of: date | None = None,
+) -> dict:
     if target_type == "rent":
         item = db.scalar(
             select(RentCharge).where(
@@ -352,7 +359,7 @@ def _target_details(db: Session, organization_id: UUID, target_type: str, target
             for entry in list(item.tenant_snapshot or [])
             if entry.get("name")
         )
-        outstanding = Decimal("0.00") if item.status in {"paid", "cancelled"} else money(item.gross_amount)
+        outstanding = Decimal("0.00") if item.status in {"paid", "cancelled"} else amount_due(db, item, as_of=as_of)
         return {
             "object": item,
             "direction": "receivable",
@@ -516,7 +523,13 @@ def _open_candidates(db: Session, transaction: BankTransaction, account: BankAcc
 
     result: list[ReconciliationCandidate] = []
     for target_type, target_id in candidates:
-        details = _target_details(db, transaction.organization_id, target_type, target_id)
+        details = _target_details(
+            db,
+            transaction.organization_id,
+            target_type,
+            target_id,
+            as_of=transaction.transaction_date,
+        )
         if details["fund_scope"] != account.fund_scope or money(details["remaining"]) <= 0:
             continue
         score = _candidate_score(transaction, details)
@@ -844,7 +857,14 @@ def reconcile_transaction(
     if tx_response.remaining_amount <= 0:
         raise HTTPException(status_code=409, detail="Este movimento bancário já está totalmente conciliado.")
 
-    details = _target_details(db, context.user.organization_id, payload.target_type, payload.target_id)
+    settled_at = transaction.posted_at or datetime.combine(transaction.transaction_date, time(12, 0), tzinfo=timezone.utc)
+    details = _target_details(
+        db,
+        context.user.organization_id,
+        payload.target_type,
+        payload.target_id,
+        as_of=settled_at.date(),
+    )
     expected_direction = "receivable" if transaction.direction == "credit" else "payable"
     if details["direction"] != expected_direction:
         raise HTTPException(status_code=409, detail="A natureza do movimento bancário não corresponde ao título selecionado.")
@@ -863,16 +883,15 @@ def reconcile_transaction(
     if payload.target_type in {"rent", "owner_repasse"} and allocation != target_remaining:
         raise HTTPException(status_code=409, detail="Esta origem exige conciliação integral do saldo do título.")
 
-    settled_at = transaction.posted_at or datetime.combine(transaction.transaction_date, time(12, 0), tzinfo=timezone.utc)
     reference = f"EXT-{transaction.internal_number:06d}"
     target = details["object"]
 
     if payload.target_type == "rent":
         try:
-            record_payment(
+            record_payment_with_late_charges(
                 db,
                 charge=target,
-                paid_amount=target.gross_amount,
+                paid_amount=target_remaining,
                 paid_at=settled_at,
                 payment_method="transfer",
                 payment_reference=reference,
