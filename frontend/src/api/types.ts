@@ -33,7 +33,13 @@ export type OperationalDefaults = {
   termination_fine_months: number
   inspection_contest_days: number
   default_admin_fee_percent: number
+  delinquency_first_contact_day: number
+  delinquency_followup_day: number
   delinquency_critical_day: number
+  late_fee_percent: number
+  late_interest_percent_monthly: number
+  late_interest_type: 'simple' | 'compound'
+  late_interest_compounding: 'daily' | 'monthly'
 }
 
 export type IntegrationsConfig = {
