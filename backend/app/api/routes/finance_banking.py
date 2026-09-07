@@ -901,7 +901,7 @@ def reconcile_transaction(
 
     reconciliation = BankReconciliation(
         organization_id=context.user.organization_id,
-        bank_transaction_id=transaction.id,
+        transaction=transaction,
         target_type=payload.target_type,
         target_id=payload.target_id,
         target_code=details["code"],
