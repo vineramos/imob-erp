@@ -111,7 +111,8 @@ def _auto_reconcile_confirmed_rent(
         charge = db.get(RentCharge, item.charge_id)
         if charge is None or charge.status != "paid":
             continue
-        if money(charge.gross_amount) != money(transaction.amount):
+        received_amount = charge.paid_amount if charge.paid_amount is not None else charge.gross_amount
+        if money(received_amount) != money(transaction.amount):
             continue
         if _rent_already_reconciled(db, charge.id):
             continue
