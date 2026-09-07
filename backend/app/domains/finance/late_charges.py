@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from app.domains.finance.models import OwnerRepasse, RentCharge
 from app.domains.foundation.defaults import OPERATIONAL_DEFAULTS
 from app.domains.foundation.models import OrganizationSettings
-from app.domains.leases.models import LeaseContract
+from app.domains.leases.models import LeaseContract, LeaseContractVersion
 
 CENT = Decimal("0.01")
 ZERO = Decimal("0.00")
@@ -259,6 +259,21 @@ def _preserve_existing_contract_terms(contract: LeaseContract) -> None:
     contract.rules_snapshot = current
 
 
+def _preserve_version_terms(session: Session, version: LeaseContractVersion) -> None:
+    snapshot = dict(version.snapshot or {})
+    rules = dict(snapshot.get("rules") or {})
+    if isinstance(rules.get("late_payment"), dict):
+        return
+    with session.no_autoflush:
+        contract = session.get(LeaseContract, version.contract_id)
+    if contract is None:
+        return
+    current_terms = contract_late_payment_terms(contract).as_snapshot()
+    rules["late_payment"] = current_terms
+    snapshot["rules"] = rules
+    version.snapshot = snapshot
+
+
 _INSTALLED = False
 
 
@@ -269,11 +284,16 @@ def install_late_payment_contract_rule() -> None:
 
     @event.listens_for(Session, "before_flush")
     def _late_payment_before_flush(session: Session, flush_context, instances) -> None:  # noqa: ARG001
+        # Primeiro estabiliza o contrato; depois corrige eventuais snapshots de
+        # versão criados antes deste before_flush.
         for obj in list(session.new):
             if isinstance(obj, LeaseContract):
                 _apply_new_contract_defaults(session, obj)
         for obj in list(session.dirty):
             if isinstance(obj, LeaseContract) and obj not in session.new:
                 _preserve_existing_contract_terms(obj)
+        for obj in list(session.new):
+            if isinstance(obj, LeaseContractVersion):
+                _preserve_version_terms(session, obj)
 
     _INSTALLED = True
