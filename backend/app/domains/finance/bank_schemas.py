@@ -109,7 +109,7 @@ class ReconciliationCandidate(BaseModel):
 
 
 class BankReconciliationRequest(BaseModel):
-    target_type: Literal["rent", "owner_repasse", "maintenance", "manual"]
+    target_type: Literal["rent", "owner_repasse", "maintenance", "manual", "financial_title"]
     target_id: UUID
     amount: Decimal | None = Field(default=None, gt=0)
     notes: str | None = Field(default=None, max_length=1000)
