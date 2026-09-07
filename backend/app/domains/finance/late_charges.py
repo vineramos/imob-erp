@@ -9,7 +9,7 @@ from uuid import UUID
 from sqlalchemy import event, inspect, select
 from sqlalchemy.orm import Session
 
-from app.domains.finance.models import RentCharge
+from app.domains.finance.models import OwnerRepasse, RentCharge
 from app.domains.foundation.defaults import OPERATIONAL_DEFAULTS
 from app.domains.foundation.models import OrganizationSettings
 from app.domains.leases.models import LeaseContract
@@ -97,11 +97,14 @@ def contract_late_payment_terms(contract: LeaseContract) -> LatePaymentTerms:
 def organization_late_payment_terms(db: Session, organization_id: UUID) -> LatePaymentTerms:
     row = db.scalar(select(OrganizationSettings).where(OrganizationSettings.organization_id == organization_id))
     source = {**OPERATIONAL_DEFAULTS, **(dict(row.operational_defaults or {}) if row else {})}
-    return LatePaymentTerms(
-        fee_percent=money(source.get("late_fee_percent")),
-        interest_percent_monthly=money(source.get("late_interest_percent_monthly")),
-        interest_type=str(source.get("late_interest_type") or "simple"),  # type: ignore[arg-type]
-        compounding=str(source.get("late_interest_compounding") or "daily"),  # type: ignore[arg-type]
+    return _normalized_terms(
+        {
+            "fee_percent": source.get("late_fee_percent"),
+            "interest_percent_monthly": source.get("late_interest_percent_monthly"),
+            "interest_type": source.get("late_interest_type"),
+            "compounding": source.get("late_interest_compounding"),
+        },
+        default_zero=False,
     )
 
 
@@ -206,7 +209,15 @@ def record_payment_with_late_charges(
         return settlement
 
     settlement.owner_entitlement_amount = money(settlement.owner_entitlement_amount + surcharge)
-    repasses = list(settlement.repasses or [])
+    # calculate_settlement adiciona os repasses diretamente à sessão. Consultar
+    # pelo settlement_id após o flush evita depender de o relationship já estar
+    # materializado no identity map nesta mesma transação.
+    db.flush()
+    repasses = db.scalars(
+        select(OwnerRepasse)
+        .where(OwnerRepasse.settlement_id == settlement.id)
+        .order_by(OwnerRepasse.owner_name, OwnerRepasse.id)
+    ).all()
     if not repasses:
         return settlement
 
