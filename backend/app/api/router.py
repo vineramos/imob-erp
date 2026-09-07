@@ -54,6 +54,7 @@ from app.api.routes.tenant_portal import admin_router as tenant_portal_admin_rou
 from app.api.routes.tenant_portal import public_router as tenant_portal_router
 from app.api.routes.tenant_portal_account import router as tenant_portal_account_router
 from app.api.routes.tenant_portal_charges import router as tenant_portal_charges_router
+from app.api.routes.tenant_portal_experience import router as tenant_portal_experience_router
 from app.api.routes.tenant_portal_passwords import admin_router as tenant_portal_password_admin_router
 from app.api.routes.tenant_portal_passwords import public_router as tenant_portal_password_router
 from app.api.routes.tenant_portal_recovery import router as tenant_portal_recovery_router
@@ -130,6 +131,7 @@ api_router.include_router(tenant_portal_password_router)
 api_router.include_router(tenant_portal_account_router)
 api_router.include_router(tenant_portal_router)
 api_router.include_router(tenant_portal_charges_router)
+api_router.include_router(tenant_portal_experience_router)
 api_router.include_router(portal_context_router)
 api_router.include_router(owner_portal_router)
 api_router.include_router(owner_portal_reports_router)

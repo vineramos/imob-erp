@@ -13,6 +13,8 @@ router = APIRouter(prefix="/tenant-portal", tags=["tenant-portal"])
 
 
 def _safe_rule(row: dict) -> dict:
+    # O portal informa somente o que compõe a obrigação do locatário. Beneficiário,
+    # retenção e divisão econômica são dados internos e não devem chegar ao navegador.
     return {
         "key": str(row.get("key") or "other"),
         "kind": str(row.get("kind") or "other"),
@@ -20,8 +22,6 @@ def _safe_rule(row: dict) -> dict:
         "amount": float(row.get("amount") or 0),
         "active": bool(row.get("active", True)),
         "payer": str(row.get("payer") or "tenant"),
-        "beneficiary": str(row.get("beneficiary") or "third_party"),
-        "beneficiary_name": str(row.get("beneficiary_name") or "").strip() or None,
         "frequency": str(row.get("frequency") or "monthly"),
         "include_in_invoice": row.get("include_in_invoice", True) is not False,
         "start_date": row.get("start_date"),
