@@ -17,6 +17,7 @@ from app.domains.finance.advanced_models import BillingItem, PortalAccess
 from app.domains.finance.advanced_pdf import build_annual_income_pdf
 from app.domains.finance.advanced_schemas import AnnualIncomeLine, AnnualIncomeReport
 from app.domains.finance.advanced_service import annual_income_values, money
+from app.domains.finance.charge_values import charge_financial_view
 from app.domains.finance.models import OwnerRepasse, RentCharge
 from app.domains.finance.pdf import build_owner_statement_pdf
 from app.domains.foundation.access import UserContext, require_permission
@@ -248,11 +249,28 @@ def _portal_payload(db: Session, access: PortalAccess) -> dict:
     billing = {item.charge_id: item for item in db.scalars(select(BillingItem).where(BillingItem.charge_id.in_([charge.id for charge in charges]))).all()} if charges else {}
     for charge in charges:
         bill = billing.get(charge.id)
-        charges_out.append({"id": str(charge.id), "code": f"COB-{charge.internal_number:06d}", "competence": charge.competence, "due_date": charge.due_date, "property_code": _property_code(charge), "amount": float(money(charge.gross_amount)), "status": charge.status, "paid_at": charge.paid_at, "boleto_line": bill.boleto_line if bill else None, "pix_copy_paste": bill.pix_copy_paste if bill else None})
+        financial = charge_financial_view(db, charge)
+        charges_out.append({
+            "id": str(charge.id),
+            "code": f"COB-{charge.internal_number:06d}",
+            "competence": charge.competence,
+            "due_date": charge.due_date,
+            "property_code": _property_code(charge),
+            "amount": float(financial.payable_amount),
+            "nominal_amount": float(financial.nominal_amount),
+            "late_fee_amount": float(financial.late_fee_amount),
+            "late_interest_amount": float(financial.late_interest_amount),
+            "days_overdue": financial.days_overdue,
+            "amount_updated_at": financial.as_of,
+            "status": charge.status,
+            "paid_at": charge.paid_at,
+            "boleto_line": bill.boleto_line if bill else None,
+            "pix_copy_paste": bill.pix_copy_paste if bill else None,
+        })
         if charge.status == "paid" and charge.paid_at and charge.paid_at.year == date.today().year:
             tenant_year_total += money(charge.paid_amount)
         if charge.status in {"generated", "sent", "overdue"}:
-            tenant_open_amount += money(charge.gross_amount)
+            tenant_open_amount += financial.payable_amount
 
     return {
         "organization_name": organization.display_name if organization else "Imobiliária",
