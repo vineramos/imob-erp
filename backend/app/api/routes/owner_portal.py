@@ -15,7 +15,7 @@ from app.api.routes.tenant_portal import PortalIdentity, require_portal_identity
 from app.core.database import get_db
 from app.domains.contracts.models import AdministrationContract
 from app.domains.documents.context import context_catalog
-from app.domains.finance.models import FinancialSettlement, OwnerRepasse, RentCharge
+from app.domains.finance.models import FinancialSettlement, MaintenanceFinancialEntry, OwnerRepasse, RentCharge
 from app.domains.foundation.models import Organization
 from app.domains.inspections.models import Inspection
 from app.domains.leases.models import LeaseContract
@@ -172,13 +172,30 @@ def _safe_selected_quote(item: MaintenanceRequest) -> dict | None:
     )
 
 
-def _maintenance_payload(item: MaintenanceRequest) -> dict:
+def _maintenance_payload(
+    item: MaintenanceRequest,
+    owner_link: PropertyOwner,
+    financial_entry: MaintenanceFinancialEntry | None = None,
+) -> dict:
     selected = _safe_selected_quote(item)
+    ownership_percent = _money(owner_link.ownership_percent)
+    share = ownership_percent / Decimal("100")
+    owner_charge_total = None
     owner_charge = None
     if item.responsibility == "owner" and selected is not None:
         raw = selected.get("client_price_total")
         if raw is not None:
-            owner_charge = float(_money(raw))
+            owner_charge_total = _money(raw)
+            owner_charge = _money(owner_charge_total * share)
+
+    deduction_applied = ZERO
+    deduction_status = None
+    if financial_entry is not None:
+        snapshot = dict(financial_entry.source_snapshot or {})
+        deductions = dict(snapshot.get("owner_repasse_deductions") or {})
+        deduction_applied = _money(deductions.get(str(owner_link.person_id), 0))
+        deduction_status = financial_entry.status
+
     return {
         "id": str(item.id),
         "code": f"MAN-{item.internal_number:06d}",
@@ -191,7 +208,13 @@ def _maintenance_payload(item: MaintenanceRequest) -> dict:
         "description": item.description,
         "responsibility": item.responsibility,
         "approval_required": item.approval_required,
-        "owner_charge_amount": owner_charge,
+        # Compatibilidade com o frontend atual: este valor é sempre a parcela
+        # econômica do proprietário autenticado, nunca o custo interno do parceiro.
+        "owner_charge_amount": float(owner_charge) if owner_charge is not None else None,
+        "owner_charge_total_amount": float(owner_charge_total) if owner_charge_total is not None else None,
+        "ownership_percent": float(ownership_percent),
+        "owner_deduction_applied_amount": float(deduction_applied),
+        "owner_deduction_status": deduction_status,
         "owner_decision_pending": bool(
             item.responsibility == "owner" and item.status == "awaiting_approval" and item.selected_quote_id
         ),
@@ -242,12 +265,15 @@ def _repasse_payload(
     settlement: FinancialSettlement | None,
 ) -> dict:
     pct = _money(repasse.ownership_percent) / Decimal("100")
-    rent_share = _money(charge.rent_amount if charge else 0) * pct
-    admin_fee = _money(settlement.admin_fee_calculated if settlement else 0) * pct
-    intermediation = _money(settlement.intermediation_fee_calculated if settlement else 0) * pct
-    agency_fee = _money(settlement.agency_fee_withheld if settlement else 0) * pct
+    rent_share = _money(_money(charge.rent_amount if charge else 0) * pct)
+    admin_fee = _money(_money(settlement.admin_fee_calculated if settlement else 0) * pct)
+    intermediation = _money(_money(settlement.intermediation_fee_calculated if settlement else 0) * pct)
+    agency_fee = _money(_money(settlement.agency_fee_withheld if settlement else 0) * pct)
+    owner_entitlement = _money(_money(settlement.owner_entitlement_amount if settlement else 0) * pct)
     amount = _money(repasse.amount)
-    other_adjustments = (amount - (rent_share - agency_fee)).quantize(CENT, rounding=ROUND_HALF_UP)
+    # O direito econômico nasce na liquidação; deduções posteriores, como
+    # manutenção do proprietário, reduzem apenas o repasse líquido.
+    other_adjustments = _money(amount - owner_entitlement)
     return {
         "id": str(repasse.id),
         "charge_id": str(repasse.charge_id),
@@ -260,6 +286,7 @@ def _repasse_payload(
         "admin_fee": float(admin_fee),
         "intermediation_fee": float(intermediation),
         "agency_fee_withheld": float(agency_fee),
+        "owner_entitlement_amount": float(owner_entitlement),
         "other_adjustments": float(other_adjustments),
         "amount": float(amount),
         "due_date": repasse.due_date,
@@ -357,6 +384,18 @@ def owner_overview(
         .order_by(MaintenanceRequest.reported_at.desc())
         .limit(200)
     ).all())
+    maintenance_ids = [item.id for item in maintenance]
+    maintenance_finance = {
+        entry.maintenance_request_id: entry
+        for entry in db.scalars(
+            select(MaintenanceFinancialEntry).where(
+                MaintenanceFinancialEntry.organization_id == identity.account.organization_id,
+                MaintenanceFinancialEntry.maintenance_request_id.in_(maintenance_ids),
+                MaintenanceFinancialEntry.direction == "receivable",
+                MaintenanceFinancialEntry.responsibility == "owner",
+            )
+        ).all()
+    } if maintenance_ids else {}
 
     today = date.today()
     year_paid = sum(
@@ -375,21 +414,26 @@ def owner_overview(
     next_repasse = pending_repasses[0] if pending_repasses else None
 
     years = sorted(
-        {charges[item.charge_id].competence.year for item in repasses if item.charge_id in charges},
+        {
+            *(item.due_date.year for item in repasses),
+            *(item.paid_at.year for item in repasses if item.paid_at and item.status in {"paid", "settled"}),
+        },
         reverse=True,
     )
     annual_reports = []
     for year in years:
-        rows = [
+        scheduled = [item for item in repasses if item.due_date.year == year]
+        received = [
             item for item in repasses
-            if item.charge_id in charges and charges[item.charge_id].competence.year == year
+            if item.status in {"paid", "settled"} and item.paid_at and item.paid_at.year == year
         ]
+        unique_rows = {item.id: item for item in [*scheduled, *received]}
         annual_reports.append({
             "year": year,
-            "received_amount": float(sum((_money(item.amount) for item in rows if item.status in {"paid", "settled"}), ZERO)),
-            "scheduled_amount": float(sum((_money(item.amount) for item in rows), ZERO)),
-            "repasses": len(rows),
-            "properties": len({item.property_id for item in rows}),
+            "received_amount": float(sum((_money(item.amount) for item in received), ZERO)),
+            "scheduled_amount": float(sum((_money(item.amount) for item in scheduled), ZERO)),
+            "repasses": len(unique_rows),
+            "properties": len({item.property_id for item in unique_rows.values()}),
         })
 
     organization = db.get(Organization, identity.account.organization_id)
@@ -437,7 +481,14 @@ def owner_overview(
             }
             for item in inspections
         ],
-        "maintenance": [_maintenance_payload(item) for item in maintenance],
+        "maintenance": [
+            _maintenance_payload(
+                item,
+                owner_link_by_property[item.property_id],
+                maintenance_finance.get(item.id),
+            )
+            for item in maintenance
+        ],
         "annual_reports": annual_reports,
     }
 
@@ -450,7 +501,8 @@ def owner_maintenance_decision(
     db: Session = Depends(get_db),
 ) -> dict:
     owner_rows = _require_owner(db, identity)
-    property_ids = {row[0].id for row in owner_rows}
+    owner_link_by_property = {row[0].id: row[1] for row in owner_rows}
+    property_ids = set(owner_link_by_property)
     item = db.scalar(select(MaintenanceRequest).where(
         MaintenanceRequest.id == maintenance_id,
         MaintenanceRequest.organization_id == identity.account.organization_id,
@@ -489,7 +541,15 @@ def owner_maintenance_decision(
     item.quotes = quotes
     db.commit()
     db.refresh(item)
-    return _maintenance_payload(item)
+    financial_entry = db.scalar(
+        select(MaintenanceFinancialEntry).where(
+            MaintenanceFinancialEntry.organization_id == identity.account.organization_id,
+            MaintenanceFinancialEntry.maintenance_request_id == item.id,
+            MaintenanceFinancialEntry.direction == "receivable",
+            MaintenanceFinancialEntry.responsibility == "owner",
+        )
+    )
+    return _maintenance_payload(item, owner_link_by_property[item.property_id], financial_entry)
 
 
 @router.get("/documents/{document_key}/content")

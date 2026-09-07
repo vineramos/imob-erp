@@ -13,7 +13,7 @@ from app.api.routes.tenant_portal import PortalIdentity, require_portal_identity
 from app.core.database import get_db
 from app.domains.finance.advanced_pdf import build_annual_income_pdf
 from app.domains.finance.advanced_schemas import AnnualIncomeLine, AnnualIncomeReport
-from app.domains.finance.advanced_service import annual_income_values, money
+from app.domains.finance.owner_portal_service import money, owner_annual_income_values
 from app.domains.finance.pdf import build_owner_statement_pdf
 from app.domains.foundation.models import Organization
 
@@ -66,11 +66,10 @@ def owner_annual_income_pdf(
         raise HTTPException(status_code=422, detail="Ano inválido.")
     _require_owner(db, identity)
     try:
-        person, raw_lines, allocation = annual_income_values(
+        person, raw_lines, allocation = owner_annual_income_values(
             db,
             organization_id=identity.account.organization_id,
             year=year,
-            party_type="owner",
             person_id=identity.person.id,
         )
     except ValueError as exc:

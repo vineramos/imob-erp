@@ -64,18 +64,41 @@ def build_annual_income_pdf(report: AnnualIncomeReport, organization_name: str) 
     story.append(Paragraph(f"Ano-calendário: {report.year} · {report.person_name}", styles["Heading2"]))
     story.append(Paragraph(f"Critério de rateio: {report.allocation_method}", styles["SmallGray"]))
     story.append(Spacer(1, 4 * mm))
-    rows = [["Competência", "Pagamento", "Imóvel", "Aluguel", "Encargos", "Total"]]
-    for line in report.lines:
+
+    if report.party_type == "owner":
+        rows = [["Competência", "Repasse", "Imóvel", "Aluguel bruto", "Taxas", "Ajustes", "Líquido"]]
+        for line in report.lines:
+            rows.append([
+                line.competence.strftime("%m/%Y"),
+                line.payment_date.strftime("%d/%m/%Y") if line.payment_date else "—",
+                line.property_code,
+                _currency(line.rent_amount),
+                _currency(line.administration_fee),
+                _currency(line.additional_charges),
+                _currency(line.owner_net_amount),
+            ])
         rows.append([
-            line.competence.strftime("%m/%Y"),
-            line.payment_date.strftime("%d/%m/%Y") if line.payment_date else "—",
-            line.property_code,
-            _currency(line.rent_amount),
-            _currency(line.additional_charges),
-            _currency(line.total_amount),
+            "TOTAL", "", "",
+            _currency(report.total_rent),
+            _currency(report.total_administration_fee),
+            _currency(report.total_additional_charges),
+            _currency(report.total_owner_net),
         ])
-    rows.append(["TOTAL", "", "", _currency(report.total_rent), _currency(report.total_additional_charges), _currency(report.total_paid)])
-    table = Table(rows, colWidths=[25 * mm, 28 * mm, 26 * mm, 31 * mm, 31 * mm, 34 * mm], repeatRows=1)
+        table = Table(rows, colWidths=[23 * mm, 26 * mm, 23 * mm, 29 * mm, 27 * mm, 27 * mm, 30 * mm], repeatRows=1)
+    else:
+        rows = [["Competência", "Pagamento", "Imóvel", "Aluguel", "Encargos", "Total"]]
+        for line in report.lines:
+            rows.append([
+                line.competence.strftime("%m/%Y"),
+                line.payment_date.strftime("%d/%m/%Y") if line.payment_date else "—",
+                line.property_code,
+                _currency(line.rent_amount),
+                _currency(line.additional_charges),
+                _currency(line.total_amount),
+            ])
+        rows.append(["TOTAL", "", "", _currency(report.total_rent), _currency(report.total_additional_charges), _currency(report.total_paid)])
+        table = Table(rows, colWidths=[25 * mm, 28 * mm, 26 * mm, 31 * mm, 31 * mm, 34 * mm], repeatRows=1)
+
     table.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#f1f5f9")),
         ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
@@ -89,6 +112,12 @@ def build_annual_income_pdf(report: AnnualIncomeReport, organization_name: str) 
     story.append(table)
     if report.party_type == "owner":
         story.append(Spacer(1, 4 * mm))
-        story.append(Paragraph(f"Taxas de administração/intermediação atribuídas: {_currency(report.total_administration_fee)} · Valor líquido do proprietário: {_currency(report.total_owner_net)}", styles["SmallGray"]))
+        story.append(Paragraph(
+            "O informe considera o regime de caixa do proprietário: a data do repasse efetivamente pago. "
+            f"Taxas atribuídas: {_currency(report.total_administration_fee)} · "
+            f"Ajustes/deduções posteriores ao direito econômico: {_currency(report.total_additional_charges)} · "
+            f"Valor líquido efetivamente repassado: {_currency(report.total_owner_net)}.",
+            styles["SmallGray"],
+        ))
     doc.build(story)
     return buffer.getvalue()
