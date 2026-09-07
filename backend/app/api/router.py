@@ -2,6 +2,7 @@ from fastapi import APIRouter
 
 from app.api.routes.agenda import router as agenda_router
 from app.api.routes.agenda_history import router as agenda_history_router
+from app.api.routes.agenda_operations import router as agenda_operations_router
 from app.api.routes.auth_proxy import router as auth_proxy_router
 from app.api.routes.branding import router as branding_router
 from app.api.routes.commercial import router as commercial_router
@@ -57,6 +58,7 @@ from app.api.routes.tenant_portal_passwords import public_router as tenant_porta
 from app.api.routes.tenant_portal_recovery import router as tenant_portal_recovery_router
 from app.domains.agenda.commercial_lead_rules import install_commercial_lead_agenda_rule
 from app.domains.agenda.communication_rules import install_communication_agenda_rule
+from app.domains.agenda.operational_rules import install_operational_agenda_rules
 from app.domains.agenda.source_chain_rules import install_source_chain_rule
 from app.domains.agenda.timezone_rules import install_event_collection_timezone_rule
 from app.domains.communications.lease_exit_event_rules import install_lease_exit_communication_rules
@@ -68,6 +70,7 @@ install_source_chain_rule()
 install_event_collection_timezone_rule()
 install_commercial_lead_agenda_rule()
 install_communication_agenda_rule()
+install_operational_agenda_rules()
 install_operational_communication_rules()
 install_lease_exit_communication_rules()
 install_settlement_rule()
@@ -107,6 +110,7 @@ api_router.include_router(communications_router)
 api_router.include_router(tenant_portal_admin_router)
 api_router.include_router(tenant_portal_password_admin_router)
 api_router.include_router(agenda_router)
+api_router.include_router(agenda_operations_router)
 api_router.include_router(agenda_history_router)
 api_router.include_router(reports_router)
 api_router.include_router(documents_router)

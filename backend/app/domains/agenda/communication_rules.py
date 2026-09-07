@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from uuid import UUID
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -41,6 +43,24 @@ OPERATIONS_CATEGORIES = frozenset({
     "lease_exit_cancelled",
 })
 HIGH_PRIORITY_CATEGORIES = frozenset({"rent_overdue", "owner_repasse_overdue"})
+LOCAL_ZONE = ZoneInfo("America/Sao_Paulo")
+
+REVIEW_SLA_HOURS = {
+    "rent_overdue": 2,
+    "owner_repasse_overdue": 2,
+    "lease_exit_financial_pending": 4,
+    "maintenance_update": 8,
+    "inspection_schedule": 8,
+    "lease_adjustment": 24,
+    "lease_expiry": 24,
+    "lease_signed": 24,
+    "owner_repasse_paid": 24,
+    "lease_exit_requested": 8,
+    "lease_exit_keys_returned": 8,
+    "lease_exit_financial_resolved": 8,
+    "lease_exit_closed": 24,
+    "lease_exit_cancelled": 24,
+}
 
 
 def _completion_at(item: CommunicationMessage) -> datetime | None:
@@ -49,6 +69,21 @@ def _completion_at(item: CommunicationMessage) -> datetime | None:
     if item.status == "cancelled":
         return item.cancelled_at or item.updated_at
     return None
+
+
+def _same_department_assignee(
+    item: CommunicationMessage,
+    *,
+    profiles,
+    department_id: UUID,
+) -> UUID | None:
+    user_id = item.created_by_user_id
+    if user_id is None:
+        return None
+    profile = profiles.get(user_id)
+    if profile is None or profile.department_id != department_id:
+        return None
+    return user_id
 
 
 def install_communication_agenda_rule() -> None:
@@ -88,6 +123,7 @@ def install_communication_agenda_rule() -> None:
         if not rows:
             return
 
+        _, profiles, _ = logic.ensure_agenda_structure(db, organization_id)
         finance = logic.department_by_name(db, organization_id, "Financeiro")
         administrative = logic.department_by_name(db, organization_id, "Administrativo")
         operations = logic.department_by_name(db, organization_id, "Operações")
@@ -108,12 +144,20 @@ def install_communication_agenda_rule() -> None:
             priority = "high" if item.status == "failed" or item.category in HIGH_PRIORITY_CATEGORIES else "normal"
             code = f"COM-{item.internal_number:06d}"
             source = " / ".join(part for part in (item.source_module, item.source_type) if part) or "Central de Comunicações"
+            due_at = original_at + timedelta(hours=REVIEW_SLA_HOURS.get(item.category, 24))
             description = (
                 f"{category_label} · destinatário: {item.recipient_name} · canal: {item.channel}. "
-                f"Origem: {source}. Revisão humana obrigatória antes do envio."
+                f"Origem: {source}. Revisão humana obrigatória antes do envio. "
+                f"Prazo operacional para revisão: {due_at.astimezone(LOCAL_ZONE).strftime('%d/%m/%Y às %H:%M')}."
             )
             if item.status == "failed":
                 description += " Há uma falha de envio pendente de tratamento."
+
+            assigned = _same_department_assignee(
+                item,
+                profiles=profiles,
+                department_id=department.id,
+            )
 
             logic._ensure_source_chain(
                 db,
@@ -125,12 +169,15 @@ def install_communication_agenda_rule() -> None:
                 description=description,
                 original_at=original_at,
                 completion_at=_completion_at(item),
-                assigned_user_id=None,
+                assigned_user_id=assigned,
                 department_id=department.id,
                 kind="task",
                 all_day=True,
                 duration_minutes=30,
                 priority=priority,
+                due_at=due_at,
+                daily_reschedule=True,
+                mandatory_action=True,
             )
 
     setattr(sync_system_tasks, "_communication_agenda_installed", True)

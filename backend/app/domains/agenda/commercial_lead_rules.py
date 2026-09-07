@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import event, select
 from sqlalchemy.orm import Session
@@ -12,6 +13,8 @@ from app.domains.portfolio.site_models import PublicSiteInquiry
 logger = logging.getLogger(__name__)
 _SESSION_INFO_KEY = "commercial_lead_agenda_touched"
 _INSTALLED = False
+FIRST_CONTACT_SLA_HOURS = 2
+LOCAL_ZONE = ZoneInfo("America/Sao_Paulo")
 
 
 CONTACT_LABELS = {
@@ -35,9 +38,11 @@ def _sync_lead(db: Session, item: PublicSiteInquiry) -> None:
 
     commercial = logic.department_by_name(db, item.organization_id, "Comercial")
     contact_label = CONTACT_LABELS.get(item.preferred_contact, item.preferred_contact or "contato")
+    due_at = item.created_at + timedelta(hours=FIRST_CONTACT_SLA_HOURS)
     description = (
         f"Lead recebido pelo site público para o imóvel #{item.property_code}. "
-        f"Contato preferencial: {contact_label}. Revisar o interesse e registrar o primeiro atendimento no CRM."
+        f"Contato preferencial: {contact_label}. Revisar o interesse e registrar o primeiro atendimento no CRM. "
+        f"SLA do primeiro contato: até {due_at.astimezone(LOCAL_ZONE).strftime('%d/%m/%Y às %H:%M')}."
     )
     if item.message:
         description += f" Mensagem do interessado: {item.message.strip()}"
@@ -57,7 +62,10 @@ def _sync_lead(db: Session, item: PublicSiteInquiry) -> None:
         kind="task",
         all_day=True,
         duration_minutes=30,
-        priority="normal",
+        priority="high" if due_at < datetime.now(timezone.utc) and item.status == "new" else "normal",
+        due_at=due_at,
+        daily_reschedule=True,
+        mandatory_action=True,
     )
 
 

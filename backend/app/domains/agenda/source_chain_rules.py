@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from uuid import UUID
 
 from sqlalchemy import select
@@ -13,11 +13,9 @@ from app.domains.agenda.timezone_rules import local_date, local_today, profile_t
 def install_source_chain_rule() -> None:
     """Reconcilia a cadeia automática com o estado real e o dia civil da origem.
 
-    A origem é a verdade: uma conclusão anterior ao agendamento encerra a
-    ocorrência original; uma origem ainda pendente continua sendo reagendada
-    diariamente até ser concluída/cancelada. O cálculo de ontem/hoje é feito no
-    timezone do perfil responsável (America/Sao_Paulo por padrão), embora os
-    timestamps permaneçam persistidos em UTC.
+    A origem continua sendo a verdade. A extensão também suporta tarefas
+    operacionais persistentes com SLA (sem reagendamento diário) e preserva
+    atribuições manuais quando a origem não define um responsável explícito.
     """
     from app.domains.agenda import logic
 
@@ -42,11 +40,15 @@ def install_source_chain_rule() -> None:
         all_day: bool,
         duration_minutes: int,
         priority: str,
+        due_at: datetime | None = None,
+        daily_reschedule: bool = True,
+        mandatory_action: bool = True,
     ) -> None:
         zone = profile_timezone(db, organization_id, assigned_user_id)
         today = local_today(zone)
         original_date = local_date(original_at, zone)
         completion_date = local_date(completion_at, zone) if completion_at else None
+        effective_due_at = due_at or original_at
 
         existing = db.scalars(
             select(AgendaTask).where(
@@ -59,38 +61,57 @@ def install_source_chain_rule() -> None:
         ).all()
         by_sequence = {item.reschedule_sequence: item for item in existing}
 
-        # Se a origem já estava encerrada antes da data agendada, a ocorrência
-        # original é o ponto terminal da cadeia e nunca gera R1.
-        effective_completion_date = max(original_date, completion_date) if completion_date else None
-
-        if original_date > today:
-            last_date = original_date
-        elif effective_completion_date and effective_completion_date <= today:
-            last_date = effective_completion_date
+        # Cadeias de cobrança/agenda continuam sendo cobradas diariamente.
+        # Pendências de SLA persistentes ficam em uma única ocorrência até a
+        # origem ser resolvida, sem gerar ruído histórico artificial.
+        if not daily_reschedule:
+            sequence_count = 0
         else:
-            last_date = today
+            effective_completion_date = max(original_date, completion_date) if completion_date else None
+            if original_date > today:
+                last_date = original_date
+            elif effective_completion_date and effective_completion_date <= today:
+                last_date = effective_completion_date
+            else:
+                last_date = today
+            sequence_count = max(0, (last_date - original_date).days)
 
-        sequence_count = max(0, (last_date - original_date).days)
         root = by_sequence.get(0)
         previous = None
 
         for sequence in range(sequence_count + 1):
             occurrence_date = original_date + timedelta(days=sequence)
             item = by_sequence.get(sequence)
-            completed_here = bool(effective_completion_date and effective_completion_date == occurrence_date)
+            completed_here = bool(
+                completion_at
+                and (
+                    (not daily_reschedule and sequence == 0)
+                    or (daily_reschedule and max(original_date, completion_date) == occurrence_date)
+                )
+            )
+
+            starts_at = original_at if sequence == 0 else logic.noon(occurrence_date)
+            occurrence_all_day = all_day if sequence == 0 else True
+            ends_at = None if occurrence_all_day else starts_at + timedelta(minutes=duration_minutes)
+
+            next_description = description
+            if sequence > 0:
+                suffix = (
+                    f"Reagendamento automático nº {sequence}. "
+                    f"Agendamento original: {original_at.astimezone(zone).strftime('%d/%m/%Y')}."
+                )
+                next_description = f"{description + ' ' if description else ''}{suffix}"
+
+            inherited_assignee = assigned_user_id
+            if inherited_assignee is None:
+                if item is not None and item.assigned_user_id is not None:
+                    inherited_assignee = item.assigned_user_id
+                elif previous is not None and previous.assigned_user_id is not None:
+                    inherited_assignee = previous.assigned_user_id
+                elif root is not None and root.assigned_user_id is not None:
+                    inherited_assignee = root.assigned_user_id
 
             if item is None:
-                starts_at = original_at if sequence == 0 else logic.noon(occurrence_date)
-                occurrence_all_day = all_day if sequence == 0 else True
-                ends_at = None if occurrence_all_day else starts_at + timedelta(minutes=duration_minutes)
-                next_description = description
-                if sequence > 0:
-                    suffix = (
-                        f"Reagendamento automático nº {sequence}. "
-                        f"Agendamento original: {original_at.astimezone(zone).strftime('%d/%m/%Y')}."
-                    )
-                    next_description = f"{description + ' ' if description else ''}{suffix}"
-
                 item = AgendaTask(
                     organization_id=organization_id,
                     title=title,
@@ -98,18 +119,18 @@ def install_source_chain_rule() -> None:
                     kind=kind,
                     starts_at=starts_at,
                     ends_at=ends_at,
-                    due_at=None,
+                    due_at=effective_due_at,
                     all_day=occurrence_all_day,
                     priority=priority,
                     status="completed" if completed_here else "pending",
                     privacy="normal",
-                    assigned_user_id=assigned_user_id,
+                    assigned_user_id=inherited_assignee,
                     department_id=department_id,
                     source_module=source_module,
                     source_type=source_type,
                     source_id=source_id,
                     automatic=True,
-                    mandatory_action=True,
+                    mandatory_action=mandatory_action,
                     completion_source="source",
                     original_scheduled_at=original_at,
                     previous_task_id=previous.id if previous else None,
@@ -125,19 +146,37 @@ def install_source_chain_rule() -> None:
                 else:
                     item.original_task_id = root.id
                 by_sequence[sequence] = item
-            elif completed_here:
-                # Também corrige dados legados que foram marcados como missed
-                # apesar de a origem já estar concluída antes do agendamento.
-                item.status = "completed"
-                item.completed_at = completion_at
-                item.missed_justification = None
-                item.missed_at = None
-                item.immutable_history = True
+            else:
+                # Enquanto a ocorrência está aberta, a origem pode atualizar
+                # prioridade, descrição, SLA e responsável. Uma atribuição
+                # manual só é sobrescrita se a própria origem trouxer alguém.
+                if item.status in {"pending", "confirmed"} and not item.immutable_history:
+                    item.title = title
+                    item.description = next_description
+                    item.kind = kind
+                    item.starts_at = starts_at
+                    item.ends_at = ends_at
+                    item.due_at = effective_due_at
+                    item.all_day = occurrence_all_day
+                    item.priority = priority
+                    item.department_id = department_id
+                    item.mandatory_action = mandatory_action
+                    if assigned_user_id is not None:
+                        item.assigned_user_id = assigned_user_id
+                    elif item.assigned_user_id is None and inherited_assignee is not None:
+                        item.assigned_user_id = inherited_assignee
+
+                if completed_here:
+                    item.status = "completed"
+                    item.completed_at = completion_at
+                    item.missed_justification = None
+                    item.missed_at = None
+                    item.immutable_history = True
 
             previous = item
 
-        # Se a origem foi encerrada retroativamente, ocorrências abertas depois
-        # da data terminal deixam de ser exigíveis, mas o histórico é preservado.
+        # Se a origem foi encerrada retroativamente, ocorrências posteriores
+        # deixam de ser exigíveis. O histórico já consolidado não é apagado.
         if completion_at:
             for sequence, item in by_sequence.items():
                 if sequence <= sequence_count:
