@@ -1,9 +1,9 @@
 from datetime import date, datetime
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class GenerateChargesRequest(BaseModel):
@@ -164,6 +164,22 @@ class OwnerStatementResponse(BaseModel):
     total_repasse: Decimal
     total_repasse_paid: Decimal
     lines: list[OwnerStatementLine]
+
+    @model_validator(mode="after")
+    def apply_owner_share_to_entitlement(self):
+        # A liquidação guarda o direito econômico total do imóvel antes do rateio.
+        # Na prestação individual, esse total precisa respeitar a participação do
+        # proprietário. O repasse pode ser menor depois de deduções operacionais,
+        # por isso não deve ser usado como sinônimo do direito econômico original.
+        self.total_owner_entitlement = sum(
+            (
+                (line.owner_total_before_share * line.ownership_percent / Decimal("100"))
+                .quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+                for line in self.lines
+            ),
+            Decimal("0.00"),
+        )
+        return self
 
 
 class PropertyFinanceSummary(BaseModel):
