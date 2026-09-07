@@ -186,11 +186,12 @@ def _maintenance_item(item: MaintenanceFinancialEntry) -> FinanceCoreItem:
 def _manual_item(item: FinancialTitle) -> FinanceCoreItem:
     settled = money(item.settled_amount)
     status = _normalized_status(item.status, item.due_date, settled, money(item.amount))
+    is_manual = item.source_type == "manual"
     return FinanceCoreItem(
         id=item.id,
         code=f"FIN-{item.internal_number:06d}",
-        source_type="manual",
-        source_id=item.id,
+        source_type=item.source_type,
+        source_id=item.id if is_manual else (item.source_id or item.id),
         direction=item.direction,
         fund_scope=item.fund_scope,
         category=item.category,
@@ -209,7 +210,7 @@ def _manual_item(item: FinancialTitle) -> FinanceCoreItem:
         settled_at=item.settled_at,
         payment_method=item.payment_method,
         payment_reference=item.payment_reference,
-        manual=True,
+        manual=is_manual,
     )
 
 
