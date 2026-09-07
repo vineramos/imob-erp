@@ -26,6 +26,14 @@ def _money(value: Any) -> str:
     return f"R$ {number:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
 
+def _percent(value: Any) -> str:
+    try:
+        number = float(value or 0)
+    except (TypeError, ValueError):
+        number = 0
+    return f"{number:.2f}%".replace(".", ",")
+
+
 def _address(address: dict[str, Any]) -> str:
     parts = [
         address.get("street"),
@@ -51,6 +59,17 @@ def _date(value: Any) -> str:
 def _monthly_rules(contract: Any) -> list[dict[str, Any]]:
     rules = dict(getattr(contract, "rules_snapshot", {}) or {})
     return [dict(item) for item in list(rules.get("monthly_charges") or []) if isinstance(item, dict)]
+
+
+def _late_payment(contract: Any) -> dict[str, Any]:
+    rules = dict(getattr(contract, "rules_snapshot", {}) or {})
+    source = rules.get("late_payment") if isinstance(rules.get("late_payment"), dict) else {}
+    return {
+        "fee_percent": source.get("fee_percent", "0.00"),
+        "interest_percent_monthly": source.get("interest_percent_monthly", "0.00"),
+        "interest_type": str(source.get("interest_type") or "simple"),
+        "compounding": str(source.get("compounding") or "daily"),
+    }
 
 
 def build_lease_contract_pdf(*, contract: Any, organization: Any) -> bytes:
@@ -138,10 +157,14 @@ def build_lease_contract_pdf(*, contract: Any, organization: Any) -> bytes:
     ]))
     story.append(tenant_table)
 
+    late = _late_payment(contract)
+    interest_label = "simples" if late["interest_type"] == "simple" else f"compostos, capitalização {'diária' if late['compounding'] == 'daily' else 'mensal'}"
     story.append(Paragraph("5. Condições econômicas e prazo", heading))
     conditions = [
         ["Aluguel", _money(contract.rent_amount)],
         ["Vencimento", f"dia {contract.due_day} de cada mês"],
+        ["Multa por atraso", f"{_percent(late['fee_percent'])}, uma única vez a partir do dia seguinte ao vencimento"],
+        ["Juros de mora", f"{_percent(late['interest_percent_monthly'])} ao mês · juros {interest_label}"],
         ["Prazo", f"{contract.term_months} meses"],
         ["Início", _date(contract.start_date)],
         ["Término", _date(contract.end_date)],
@@ -201,21 +224,28 @@ def build_lease_contract_pdf(*, contract: Any, organization: Any) -> bytes:
     ])
 
     story.extend([
-        Paragraph("7. Regras operacionais essenciais", heading),
+        Paragraph("7. Mora e inadimplência", heading),
+        Paragraph(
+            f"O não pagamento integral até a data de vencimento sujeita o débito, a partir do dia seguinte, à multa moratória de <b>{_percent(late['fee_percent'])}</b>, aplicada uma única vez, "
+            f"e a juros de mora de <b>{_percent(late['interest_percent_monthly'])} ao mês</b>, calculados de forma <b>{escape(interest_label)}</b> sobre o valor total vencido até a data da efetiva liquidação. "
+            "O ERP mantém o valor nominal da cobrança e calcula diariamente multa, juros e valor atualizado, preservando esta condição na versão contratual assinada.",
+            body,
+        ),
+        Paragraph("8. Regras operacionais essenciais", heading),
         Paragraph(
             "O imóvel permanece sob administração conforme o contrato de administração vigente. "
             "IPTU, condomínio, seguros, consumos, repasses, inadimplência, vistoria, chaves e demais encargos "
             "seguem as regras congeladas nesta versão e os documentos operacionais vinculados ao ERP.",
             body,
         ),
-        Paragraph("8. Garantia locatícia", heading),
+        Paragraph("9. Garantia locatícia", heading),
         Paragraph(escape(str(contract.guarantee_details or {})), body),
     ])
 
     if contract.notes:
-        story.extend([Paragraph("9. Condições especiais", heading), Paragraph(escape(str(contract.notes)), body)])
+        story.extend([Paragraph("10. Condições especiais", heading), Paragraph(escape(str(contract.notes)), body)])
 
-    story.append(Paragraph("10. Signatários desta versão", heading))
+    story.append(Paragraph("11. Signatários desta versão", heading))
     signers = list(contract.signers_snapshot or [])
     if signers:
         rows = [["Papel", "Nome", "E-mail", "Ordem"]]
