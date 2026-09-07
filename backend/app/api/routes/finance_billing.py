@@ -19,6 +19,7 @@ from app.domains.finance.advanced_schemas import (
     BillingRunResponse,
 )
 from app.domains.finance.advanced_service import ensure_billing_batch, money, refresh_billing_batch_counters
+from app.domains.finance.billing_settlement import settle_confirmed_billing_item
 from app.domains.finance.late_charges import amount_due, charge_late_payment_terms
 from app.domains.finance.models import RentCharge
 from app.domains.finance.providers import BankProviderError, InterBankProvider
@@ -223,8 +224,10 @@ def issue_inter(batch_id: UUID, payload: BillingIssueRequest, request: Request, 
             item.last_error = None
             try:
                 _apply_detail(item, provider.charge(provider_id))
-            except BankProviderError:
-                pass
+                if item.confirmed_at:
+                    settle_confirmed_billing_item(db, item, paid_at=item.confirmed_at)
+            except (BankProviderError, ValueError) as exc:
+                item.last_error = str(exc)
         except (BankProviderError, ValueError) as exc:
             item.provider = "inter"
             item.last_error = str(exc)
@@ -246,8 +249,10 @@ def sync_inter(batch_id: UUID, request: Request, context: UserContext = Depends(
             continue
         try:
             _apply_detail(item, provider.charge(item.provider_charge_id))
+            if item.confirmed_at:
+                settle_confirmed_billing_item(db, item, paid_at=item.confirmed_at)
             item.last_error = None
-        except BankProviderError as exc:
+        except (BankProviderError, ValueError) as exc:
             item.last_error = str(exc)
     refresh_billing_batch_counters(db, batch)
     _audit(db, request, context, "finance.billing.inter_synced", str(batch.id), {"confirmed": batch.confirmed_count, "errors": batch.error_count})
