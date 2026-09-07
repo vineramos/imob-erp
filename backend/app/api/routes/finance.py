@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.database import get_db
+from app.domains.finance.late_charges import amount_due, charge_late_breakdown, record_payment_with_late_charges
 from app.domains.finance.models import FinancialSettlement, OwnerRepasse, RentCharge
 from app.domains.finance.pdf import build_owner_statement_pdf
 from app.domains.finance.schemas import (
@@ -24,7 +25,7 @@ from app.domains.finance.schemas import (
     RepasseResponse,
     SettlementResponse,
 )
-from app.domains.finance.service import charge_item_agency_retention, generate_charges, money, record_payment, refresh_overdue
+from app.domains.finance.service import charge_item_agency_retention, generate_charges, money, refresh_overdue
 from app.domains.foundation.access import UserContext, require_permission
 from app.domains.foundation.audit import write_audit
 from app.domains.foundation.models import Organization
@@ -127,6 +128,7 @@ def _settlement_response(db: Session, item: FinancialSettlement, charge: RentCha
 
 def _charge_response(db: Session, item: RentCharge, *, today: date | None = None) -> ChargeResponse:
     today = today or date.today()
+    breakdown = charge_late_breakdown(db, item, as_of=today)
     overdue_days = max(0, (today - item.due_date).days) if item.status not in {"paid", "cancelled"} else 0
     critical_after = int((item.admin_terms_snapshot or {}).get("delinquency_critical_day") or 5)
     return ChargeResponse(
@@ -146,6 +148,14 @@ def _charge_response(db: Session, item: RentCharge, *, today: date | None = None
         critical_overdue=item.status == "overdue" and overdue_days >= critical_after,
         rent_amount=item.rent_amount,
         gross_amount=item.gross_amount,
+        late_fee_percent=breakdown.terms.fee_percent,
+        late_interest_percent_monthly=breakdown.terms.interest_percent_monthly,
+        late_interest_type=breakdown.terms.interest_type,
+        late_interest_compounding=breakdown.terms.compounding,
+        late_fee_amount=breakdown.fee_amount,
+        late_interest_amount=breakdown.interest_amount,
+        updated_amount=item.paid_amount if item.status == "paid" and item.paid_amount is not None else breakdown.updated_amount,
+        amount_as_of=breakdown.as_of,
         charge_items=[ChargeItem(**entry) for entry in list(item.charge_items or [])],
         sent_at=item.sent_at,
         paid_at=item.paid_at,
@@ -173,15 +183,14 @@ def finance_dashboard(
     critical = [item for item in overdue if _charge_response(db, item).critical_overdue]
     paid_competence = [item for item in charges if item.status == "paid" and item.competence == competence]
     settlements = [item.settlement for item in paid_competence if item.settlement]
-    repasses = [repasse for settlement in settlements for repasse in settlement.repasses]
     all_pending_repasses = db.scalars(
         select(OwnerRepasse).where(OwnerRepasse.organization_id == context.user.organization_id, OwnerRepasse.status == "pending")
     ).all()
     return FinanceDashboardResponse(
         competence=competence,
-        open_amount=sum((money(item.gross_amount) for item in open_items), Decimal("0.00")),
-        overdue_amount=sum((money(item.gross_amount) for item in overdue), Decimal("0.00")),
-        critical_overdue_amount=sum((money(item.gross_amount) for item in critical), Decimal("0.00")),
+        open_amount=sum((amount_due(db, item) for item in open_items), Decimal("0.00")),
+        overdue_amount=sum((amount_due(db, item) for item in overdue), Decimal("0.00")),
+        critical_overdue_amount=sum((amount_due(db, item) for item in critical), Decimal("0.00")),
         received_amount=sum((money(item.paid_amount) for item in paid_competence), Decimal("0.00")),
         agency_revenue_amount=sum(
             (money(item.settlement.agency_fee_withheld) + _charge_agency_retention(item) for item in paid_competence if item.settlement),
@@ -239,10 +248,7 @@ def generate_monthly_charges(
         after={"generated": len(created), "skipped_existing": skipped_existing, "skipped_ineligible": skipped_ineligible},
     )
     db.commit()
-    loaded = [
-        _load_charge(db, context.user.organization_id, item.id)
-        for item in created
-    ]
+    loaded = [_load_charge(db, context.user.organization_id, item.id) for item in created]
     return GenerateChargesResponse(
         competence=payload.competence,
         generated=len(loaded),
@@ -280,7 +286,7 @@ def receive_charge(
 ) -> ChargeResponse:
     item = _load_charge(db, context.user.organization_id, charge_id)
     try:
-        settlement = record_payment(
+        settlement = record_payment_with_late_charges(
             db,
             charge=item,
             paid_amount=payload.paid_amount,
@@ -292,6 +298,7 @@ def receive_charge(
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     retention = _charge_agency_retention(item)
+    late = dict((item.admin_terms_snapshot or {}).get("late_payment_settlement") or {})
     _audit(
         db, request, context,
         action="finance.charge.received",
@@ -300,6 +307,8 @@ def receive_charge(
         after={
             "code": _charge_code(item),
             "paid_amount": str(item.paid_amount),
+            "late_fee_amount": late.get("late_fee_amount", "0.00"),
+            "late_interest_amount": late.get("late_interest_amount", "0.00"),
             "agency_fee_withheld": str(settlement.agency_fee_withheld),
             "agency_retention_amount": str(retention),
             "third_party_amount": str(settlement.third_party_amount),
@@ -416,7 +425,7 @@ def _owner_statement(db: Session, organization_id: UUID, owner_id: UUID, compete
             property_address=dict((charge.property_snapshot or {}).get("address") or {}),
             competence=charge.competence,
             paid_at=charge.paid_at,
-            gross_charge=charge.gross_amount,
+            gross_charge=money(charge.paid_amount or charge.gross_amount),
             rent_amount=charge.rent_amount,
             admin_fee=settlement.admin_fee_calculated,
             intermediation_fee=settlement.intermediation_fee_calculated,
@@ -432,7 +441,7 @@ def _owner_statement(db: Session, organization_id: UUID, owner_id: UUID, compete
         owner_name=owner_name,
         competence=competence,
         property_id=property_id,
-        total_received_from_tenants=sum((money(charge.gross_amount) for _, charge, _ in rows), Decimal("0.00")),
+        total_received_from_tenants=sum((money(charge.paid_amount or charge.gross_amount) for _, charge, _ in rows), Decimal("0.00")),
         total_agency_fees=sum((money(settlement.agency_fee_withheld) for _, _, settlement in rows), Decimal("0.00")),
         total_owner_entitlement=sum((money(settlement.owner_entitlement_amount) for _, _, settlement in rows), Decimal("0.00")),
         total_repasse=sum((money(repasse.amount) for repasse, _, _ in rows), Decimal("0.00")),
@@ -484,8 +493,8 @@ def property_finance_summary(
     repasses = [repasse for charge in paid if charge.settlement for repasse in charge.settlement.repasses if repasse.status == "pending"]
     return PropertyFinanceSummary(
         property_id=property_id,
-        open_amount=sum((money(item.gross_amount) for item in open_items), Decimal("0.00")),
-        overdue_amount=sum((money(item.gross_amount) for item in overdue), Decimal("0.00")),
+        open_amount=sum((amount_due(db, item) for item in open_items), Decimal("0.00")),
+        overdue_amount=sum((amount_due(db, item) for item in overdue), Decimal("0.00")),
         received_amount=sum((money(item.paid_amount) for item in paid), Decimal("0.00")),
         pending_repasse_amount=sum((money(item.amount) for item in repasses), Decimal("0.00")),
         next_due_date=min((item.due_date for item in open_items), default=None),
