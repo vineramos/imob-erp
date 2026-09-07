@@ -5,6 +5,7 @@ from app.api.routes.agenda_history import router as agenda_history_router
 from app.api.routes.agenda_operations import router as agenda_operations_router
 from app.api.routes.auth_proxy import router as auth_proxy_router
 from app.api.routes.branding import router as branding_router
+from app.api.routes.capture_workflow import router as capture_workflow_router
 from app.api.routes.commercial import router as commercial_router
 from app.api.routes.communications import router as communications_router
 from app.api.routes.contracts import router as contracts_router
@@ -58,11 +59,13 @@ from app.api.routes.tenant_portal_passwords import public_router as tenant_porta
 from app.api.routes.tenant_portal_recovery import router as tenant_portal_recovery_router
 from app.domains.agenda.commercial_lead_rules import install_commercial_lead_agenda_rule
 from app.domains.agenda.communication_rules import install_communication_agenda_rule
+from app.domains.agenda.lease_handover_rules import install_lease_handover_agenda_rule
 from app.domains.agenda.operational_rules import install_operational_agenda_rules
 from app.domains.agenda.source_chain_rules import install_source_chain_rule
 from app.domains.agenda.timezone_rules import install_event_collection_timezone_rule
 from app.domains.communications.lease_exit_event_rules import install_lease_exit_communication_rules
 from app.domains.communications.operational_event_rules import install_operational_communication_rules
+from app.domains.communications.schedule_reconciliation_rules import install_schedule_reconciliation_rules
 from app.domains.finance.settlement_rules import install_settlement_rule
 from app.domains.portfolio.commercial_rules import install_commercial_lease_rule
 
@@ -71,7 +74,9 @@ install_event_collection_timezone_rule()
 install_commercial_lead_agenda_rule()
 install_communication_agenda_rule()
 install_operational_agenda_rules()
+install_lease_handover_agenda_rule()
 install_operational_communication_rules()
+install_schedule_reconciliation_rules()
 install_lease_exit_communication_rules()
 install_settlement_rule()
 install_commercial_lease_rule()
@@ -82,6 +87,7 @@ api_router.include_router(auth_proxy_router)
 api_router.include_router(branding_router)
 api_router.include_router(foundation_router)
 api_router.include_router(portfolio_router)
+api_router.include_router(capture_workflow_router)
 api_router.include_router(economic_indices_router)
 api_router.include_router(person_bank_details_router)
 api_router.include_router(person_profile_router)
