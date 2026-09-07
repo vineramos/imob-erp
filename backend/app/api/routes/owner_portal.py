@@ -271,9 +271,10 @@ def _repasse_payload(
     agency_fee = _money(_money(settlement.agency_fee_withheld if settlement else 0) * pct)
     owner_entitlement = _money(_money(settlement.owner_entitlement_amount if settlement else 0) * pct)
     amount = _money(repasse.amount)
-    # O direito econômico nasce na liquidação; deduções posteriores, como
-    # manutenção do proprietário, reduzem apenas o repasse líquido.
-    other_adjustments = _money(amount - owner_entitlement)
+    # Mantém a semântica histórica do portal: ajustes incluem valores econômicos
+    # do proprietário fora do aluguel (ex.: IPTU) e também deduções posteriores.
+    # O direito econômico original fica exposto separadamente em owner_entitlement_amount.
+    other_adjustments = _money(amount - (rent_share - agency_fee))
     return {
         "id": str(repasse.id),
         "charge_id": str(repasse.charge_id),

@@ -4,20 +4,20 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from uuid import UUID, uuid4
 
-from sqlalchemy import select
-
 from app.core.database import SessionLocal
 from app.domains.finance.models import MaintenanceFinancialEntry
 from app.domains.finance.owner_portal_service import owner_annual_income_values
 from app.domains.maintenance.models import MaintenanceRequest
-from app.domains.portfolio.models import PropertyOwner
 from tests.helpers import (
     add_months,
     assert_response,
     build_signed_rental,
     create_person,
     create_property,
+    create_signed_administration_contract,
+    create_signed_lease_contract,
     decimal,
+    first_month,
     midday,
 )
 
@@ -52,8 +52,14 @@ def _owner_login(client, owner: dict) -> None:
 
 
 def test_owner_portal_respects_coproperty_share_deductions_and_cash_year(client, identity):
-    journey = build_signed_rental(client, publish=False)
-    owner = journey["owner"]
+    start = first_month()
+    owner = create_person(
+        client,
+        name="Coproprietário Portal A",
+        document="74374374373",
+        email="coproprietario.portal.a@example.com",
+        role_keys=["owner"],
+    )
     other_owner = create_person(
         client,
         name="Coproprietário Portal B",
@@ -61,29 +67,79 @@ def test_owner_portal_respects_coproperty_share_deductions_and_cash_year(client,
         email="coproprietario.portal.b@example.com",
         role_keys=["owner"],
     )
+    property_item = assert_response(
+        client.post(
+            "/api/properties",
+            json={
+                "property_type": "apartment",
+                "purpose": "rent",
+                "status": "available",
+                "address": {
+                    "street": "Rua da Copropriedade Portal",
+                    "number": "50",
+                    "complement": "Apto 5",
+                    "neighborhood": "Centro",
+                    "city": "Curitiba",
+                    "state": "PR",
+                    "postal_code": "80000-050",
+                },
+                "rent_amount": "2000.00",
+                "condo_amount": "0.00",
+                "iptu_amount": "0.00",
+                "area_m2": "70.00",
+                "bedrooms": 2,
+                "suites": 1,
+                "bathrooms": 2,
+                "parking_spaces": 1,
+                "furnished": False,
+                "pets_allowed": True,
+                "public_title": "Imóvel 50/50 do Portal",
+                "public_description": "Cenário automatizado para validar o Portal do Proprietário.",
+                "publication_enabled": False,
+                "owners": [
+                    {"person_id": owner["id"], "ownership_percent": "50.00"},
+                    {"person_id": other_owner["id"], "ownership_percent": "50.00"},
+                ],
+            },
+        ),
+        201,
+    ).json()
+    tenant = create_person(
+        client,
+        name="Locatário da Copropriedade Portal",
+        document="74574574575",
+        email="locatario.copropriedade.portal@example.com",
+        role_keys=["tenant"],
+    )
+    create_signed_administration_contract(client, property_item["id"], start=start)
+    lease = create_signed_lease_contract(client, property_item["id"], tenant["id"], start=start)
 
-    assert SessionLocal is not None
-    with SessionLocal() as db:
-        current = db.scalar(
-            select(PropertyOwner).where(
-                PropertyOwner.property_id == UUID(journey["property"]["id"]),
-                PropertyOwner.person_id == UUID(owner["id"]),
-            )
+    # Primeiro aluguel pertence à intermediação (100%). A segunda competência é
+    # a primeira em que o proprietário recebe aluguel menos administração.
+    first = assert_response(
+        client.post(
+            "/api/finance/charges/generate",
+            json={"competence": start.isoformat(), "lease_contract_id": lease["id"]},
         )
-        assert current is not None
-        current.ownership_percent = Decimal("50.00")
-        db.add(PropertyOwner(
-            property_id=UUID(journey["property"]["id"]),
-            person_id=UUID(other_owner["id"]),
-            ownership_percent=Decimal("50.00"),
-        ))
-        db.commit()
+    ).json()["charges"][0]
+    assert_response(
+        client.post(
+            f"/api/finance/charges/{first['id']}/payment",
+            json={
+                "paid_amount": "2000.00",
+                "paid_at": midday(start.replace(day=10)).isoformat(),
+                "payment_method": "pix",
+                "payment_reference": "OWNER-PORTAL-COPRO-FIRST",
+                "notes": None,
+            },
+        )
+    )
 
-    competence = add_months(journey["start"], 1)
+    competence = add_months(start, 1)
     charge = assert_response(
         client.post(
             "/api/finance/charges/generate",
-            json={"competence": competence.isoformat(), "lease_contract_id": journey["lease"]["id"]},
+            json={"competence": competence.isoformat(), "lease_contract_id": lease["id"]},
         )
     ).json()["charges"][0]
     paid = assert_response(
@@ -102,12 +158,13 @@ def test_owner_portal_respects_coproperty_share_deductions_and_cash_year(client,
     assert decimal(repasse["amount"]) == decimal("900.00")
 
     quote_id = str(uuid4())
+    assert SessionLocal is not None
     with SessionLocal() as db:
         pending = MaintenanceRequest(
             organization_id=identity["organization_id"],
-            property_id=UUID(journey["property"]["id"]),
-            lease_contract_id=UUID(journey["lease"]["id"]),
-            requester_person_id=UUID(journey["tenant"]["id"]),
+            property_id=UUID(property_item["id"]),
+            lease_contract_id=UUID(lease["id"]),
+            requester_person_id=UUID(tenant["id"]),
             title="Pintura aprovada por coproprietários",
             category="general",
             priority="normal",
@@ -133,9 +190,9 @@ def test_owner_portal_respects_coproperty_share_deductions_and_cash_year(client,
 
         completed = MaintenanceRequest(
             organization_id=identity["organization_id"],
-            property_id=UUID(journey["property"]["id"]),
-            lease_contract_id=UUID(journey["lease"]["id"]),
-            requester_person_id=UUID(journey["tenant"]["id"]),
+            property_id=UUID(property_item["id"]),
+            lease_contract_id=UUID(lease["id"]),
+            requester_person_id=UUID(tenant["id"]),
             title="Manutenção já abatida",
             category="general",
             priority="normal",
@@ -154,8 +211,8 @@ def test_owner_portal_respects_coproperty_share_deductions_and_cash_year(client,
         entry = MaintenanceFinancialEntry(
             organization_id=identity["organization_id"],
             maintenance_request_id=completed.id,
-            property_id=UUID(journey["property"]["id"]),
-            lease_contract_id=UUID(journey["lease"]["id"]),
+            property_id=UUID(property_item["id"]),
+            lease_contract_id=UUID(lease["id"]),
             direction="receivable",
             counterparty_type="owner",
             counterparty_name="Proprietários",
@@ -180,7 +237,7 @@ def test_owner_portal_respects_coproperty_share_deductions_and_cash_year(client,
     _owner_login(client, owner)
     overview = assert_response(client.get("/api/owner-portal/overview")).json()
 
-    owner_property = next(row for row in overview["properties"] if row["id"] == journey["property"]["id"])
+    owner_property = next(row for row in overview["properties"] if row["id"] == property_item["id"])
     assert decimal(owner_property["ownership_percent"]) == decimal("50.00")
 
     repasse_row = next(row for row in overview["repasses"] if row["id"] == repasse["id"])
