@@ -67,6 +67,7 @@ from app.domains.agenda.timezone_rules import install_event_collection_timezone_
 from app.domains.communications.lease_exit_event_rules import install_lease_exit_communication_rules
 from app.domains.communications.operational_event_rules import install_operational_communication_rules
 from app.domains.communications.schedule_reconciliation_rules import install_schedule_reconciliation_rules
+from app.domains.finance.late_charges import install_late_payment_contract_rule
 from app.domains.finance.settlement_rules import install_settlement_rule
 from app.domains.portfolio.commercial_rules import install_commercial_lease_rule
 
@@ -79,6 +80,7 @@ install_lease_handover_agenda_rule()
 install_operational_communication_rules()
 install_schedule_reconciliation_rules()
 install_lease_exit_communication_rules()
+install_late_payment_contract_rule()
 install_settlement_rule()
 install_commercial_lease_rule()
 
