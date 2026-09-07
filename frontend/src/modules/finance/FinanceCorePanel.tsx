@@ -68,7 +68,16 @@ type Filter = 'all'|'receivable'|'payable'|'overdue'|'third_party'|'operating'
 const statusLabels:Record<string,string> = {
   pending:'Pendente', partial:'Parcial', overdue:'Vencido', settled:'Liquidado', cancelled:'Cancelado', settled_zero:'Compensado',
 }
-const sourceLabels:Record<string,string> = { rent:'Locação', owner_repasse:'Repasse', maintenance:'Manutenção', manual:'Manual' }
+const sourceLabels:Record<string,string> = {
+  rent:'Locação',
+  owner_repasse:'Repasse',
+  maintenance:'Manutenção',
+  manual:'Manual',
+  lease_exit_adjustment:'Acerto de saída',
+  lease_termination_fine:'Multa rescisória',
+  lease_charge_component:'Encargo da locação',
+  commission:'Comissão',
+}
 
 function money(value:number|null|undefined){ return Number(value||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'}) }
 function dateLabel(value:string|null|undefined){ if(!value)return '—'; return new Date(`${value.slice(0,10)}T12:00:00`).toLocaleDateString('pt-BR') }
@@ -160,6 +169,7 @@ export function FinanceCorePanel({permissions,onNavigateSource}:Props){
   }
   function openCreate(nextDirection:Direction){resetCreate(nextDirection);setCreateOpen(true)}
   function openSource(item:CoreItem){if(item.source_type==='maintenance')onNavigateSource('maintenance');else if(item.source_type==='rent'||item.source_type==='owner_repasse')onNavigateSource('rent')}
+  const canNavigateSource=(item:CoreItem)=>['rent','owner_repasse','maintenance'].includes(item.source_type)
   const canSettle=(item:CoreItem)=>item.manual&&(item.direction==='receivable'?canSettleReceivable:canSettlePayable)&&!['settled','cancelled','settled_zero'].includes(item.status)
 
   return <section className="workspace finance-core-workspace">
@@ -196,7 +206,7 @@ export function FinanceCorePanel({permissions,onNavigateSource}:Props){
         <div className="finance-core-meta"><span>Vencimento</span><strong>{dateLabel(item.due_date)}</strong><small>{item.overdue?'Vencido':'Competência '+item.competence.slice(0,7).split('-').reverse().join('/')}</small></div>
         <div className="finance-core-scope"><span>Natureza do recurso</span><strong>{item.fund_scope==='third_party'?'Terceiros':'Operacional'}</strong><small>{item.manual?'Lançamento manual':'Origem automática'}</small></div>
         <div className="finance-core-value"><span>{item.direction==='receivable'?'A receber':'A pagar'}</span><strong>{money(item.amount)}</strong>{item.settled_amount>0&&<small>{money(item.settled_amount)} liquidado</small>}</div>
-        <div className="finance-core-row-actions">{!item.manual&&<button className="button secondary compact" type="button" onClick={()=>openSource(item)}>Ver origem</button>}{canSettle(item)&&<button className="button primary compact" type="button" onClick={()=>{setSettleTarget(item);setSettleAt(localDateTime());setSettleMethod('pix');setSettleReference('')}}><CheckCircle2 size={13}/> Liquidar</button>}</div>
+        <div className="finance-core-row-actions">{canNavigateSource(item)&&<button className="button secondary compact" type="button" onClick={()=>openSource(item)}>Ver origem</button>}{canSettle(item)&&<button className="button primary compact" type="button" onClick={()=>{setSettleTarget(item);setSettleAt(localDateTime());setSettleMethod('pix');setSettleReference('')}}><CheckCircle2 size={13}/> Liquidar</button>}</div>
       </article>)}
       {items.length===0&&<article className="panel finance-empty"><CircleDollarSign size={28}/><strong>{filter==='overdue'?'Nenhum título vencido em aberto.':'Nenhum lançamento nesta competência.'}</strong><span>{filter==='overdue'?'A consulta de vencidos considera todas as competências.':'As cobranças de locação e os lançamentos de manutenção aparecerão aqui automaticamente.'}</span></article>}
     </div>}
