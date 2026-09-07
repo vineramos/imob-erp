@@ -1,4 +1,11 @@
-from tests.helpers import add_months, assert_response, build_signed_rental, midday
+from tests.helpers import (
+    add_months,
+    assert_response,
+    build_signed_rental,
+    create_person,
+    create_property,
+    midday,
+)
 
 
 def _owner_login(client, owner: dict) -> None:
@@ -54,7 +61,14 @@ def test_owner_portal_downloads_statement_and_annual_income(client):
         )
     )
 
-    other_journey = build_signed_rental(client, publish=False)
+    other_owner = create_person(
+        client,
+        name="Outro Proprietário Portal",
+        document="83838383839",
+        email="outro.owner.portal@example.com",
+        role_keys=["owner"],
+    )
+    other_property = create_property(client, other_owner["id"])
     _owner_login(client, owner)
 
     statement = client.get(
@@ -74,6 +88,6 @@ def test_owner_portal_downloads_statement_and_annual_income(client):
 
     forbidden_property = client.get(
         f"/api/owner-portal/statements/{competence.isoformat()}/pdf",
-        params={"property_id": other_journey["property"]["id"]},
+        params={"property_id": other_property["id"]},
     )
     assert forbidden_property.status_code == 404
