@@ -36,6 +36,12 @@ OPERATIONAL_DEFAULTS = {
     "delinquency_first_contact_day": 1,
     "delinquency_followup_day": 3,
     "delinquency_critical_day": 5,
+    # Mora padrão para NOVOS contratos. Contratos já assinados preservam a
+    # condição congelada em sua própria versão e nunca herdam mudanças futuras.
+    "late_fee_percent": 2,
+    "late_interest_percent_monthly": 1,
+    "late_interest_type": "simple",
+    "late_interest_compounding": "daily",
 }
 
 INTEGRATIONS_DEFAULTS = {
