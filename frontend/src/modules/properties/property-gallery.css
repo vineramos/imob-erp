@@ -33,9 +33,11 @@
 /* No Resumo, a galeria dá contexto sem dominar uma faixa inteira da ficha. */
 .property-gallery-summary-mount .property-gallery { padding: 13px 14px; }
 .property-gallery-summary-mount .property-gallery-main {
-  height: clamp(125px, 10vw, 150px);
+  width: min(100%, 320px);
+  height: auto;
   min-height: 0;
-  aspect-ratio: auto;
+  margin: 0 auto;
+  aspect-ratio: 16 / 9;
   background: #f4f6f9;
 }
 .property-gallery-summary-mount .property-gallery-main img {
@@ -58,7 +60,7 @@
 @media (max-width: 680px) {
   .property-gallery-heading { align-items: flex-start; }
   .property-gallery-main { min-height: 180px; }
-  .property-gallery-summary-mount .property-gallery-main { height: 135px; min-height: 0; }
+  .property-gallery-summary-mount .property-gallery-main { width: min(100%, 320px); height: auto; min-height: 0; }
   .property-gallery-summary-mount .property-gallery-empty { min-height: 130px; }
   .property-gallery-summary-mount .property-gallery-thumbs { grid-auto-columns: 58px; }
   .property-gallery-summary-mount .property-gallery-thumbs button { height: 42px; }
