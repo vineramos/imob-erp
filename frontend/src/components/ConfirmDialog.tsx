@@ -1,5 +1,5 @@
 import { AlertTriangle, X } from 'lucide-react'
-import { useEffect, useId, useRef } from 'react'
+import { ReactNode, useEffect, useId, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import './confirm-dialog.css'
 
@@ -13,6 +13,8 @@ type ConfirmDialogProps = {
   cancelLabel?: string
   tone?: ConfirmDialogTone
   busy?: boolean
+  confirmDisabled?: boolean
+  children?: ReactNode
   onConfirm: () => void
   onCancel: () => void
 }
@@ -25,23 +27,42 @@ export function ConfirmDialog({
   cancelLabel = 'Cancelar',
   tone = 'default',
   busy = false,
+  confirmDisabled = false,
+  children,
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) {
   const titleId = useId()
   const descriptionId = useId()
+  const dialogRef = useRef<HTMLElement>(null)
   const confirmRef = useRef<HTMLButtonElement>(null)
 
   useEffect(() => {
     if (!open) return
     const previousOverflow = document.body.style.overflow
     document.body.style.overflow = 'hidden'
-    const timer = window.setTimeout(() => confirmRef.current?.focus(), 0)
+    const timer = window.setTimeout(() => {
+      const contentFocusable = dialogRef.current?.querySelector<HTMLElement>('.confirm-dialog__content input:not([disabled]), .confirm-dialog__content textarea:not([disabled]), .confirm-dialog__content select:not([disabled])')
+      ;(contentFocusable ?? confirmRef.current)?.focus()
+    }, 0)
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape' && !busy) {
         event.preventDefault()
         event.stopPropagation()
         onCancel()
+        return
+      }
+      if (event.key !== 'Tab') return
+      const focusable = Array.from(dialogRef.current?.querySelectorAll<HTMLElement>('button:not([disabled]), a[href], input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])') ?? [])
+      if (!focusable.length) return
+      const first = focusable[0]
+      const last = focusable[focusable.length - 1]
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault()
+        last.focus()
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault()
+        first.focus()
       }
     }
     window.addEventListener('keydown', handleKeyDown, true)
@@ -63,6 +84,7 @@ export function ConfirmDialog({
       }}
     >
       <section
+        ref={dialogRef}
         className={`confirm-dialog confirm-dialog--${tone}`}
         role="alertdialog"
         aria-modal="true"
@@ -82,9 +104,10 @@ export function ConfirmDialog({
           </button>
         </div>
         <p id={descriptionId} className="confirm-dialog__description">{description}</p>
+        {children && <div className="confirm-dialog__content">{children}</div>}
         <div className="confirm-dialog__actions">
           <button className="button secondary" type="button" onClick={onCancel} disabled={busy}>{cancelLabel}</button>
-          <button ref={confirmRef} className={`button confirm-dialog__confirm confirm-dialog__confirm--${tone}`} type="button" onClick={onConfirm} disabled={busy}>
+          <button ref={confirmRef} className={`button confirm-dialog__confirm confirm-dialog__confirm--${tone}`} type="button" onClick={onConfirm} disabled={busy || confirmDisabled}>
             {busy ? 'Processando...' : confirmLabel}
           </button>
         </div>
