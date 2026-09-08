@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ApiError, apiRequest } from '../../api/client'
 import type { AgendaEvent, SystemPendingTask, TodaySummary } from './agendaTypes'
 import { eventTime, fullDayLabel, todayValue } from './agendaTypes'
+import './agenda.css'
 
 
 type ReminderRow = { event: AgendaEvent; minutes_until: number }
