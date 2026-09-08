@@ -12,7 +12,9 @@
 .property-gallery-empty strong { color: var(--text); font-size: 12px; }
 .property-gallery-empty span { max-width: 330px; font-size: 9.5px; line-height: 1.5; }
 .property-gallery-empty-action { margin-top: 4px; cursor: pointer; }
-.property-gallery-main { position: relative; width: 100%; aspect-ratio: 16 / 9; min-height: 200px; overflow: hidden; border-radius: 9px; background: var(--surface-muted); border: 1px solid var(--border); }
+.property-gallery-main { position: relative; width: 100%; aspect-ratio: 16 / 9; min-height: 200px; display: block; padding: 0; overflow: hidden; border: 1px solid var(--border); border-radius: 9px; background: var(--surface-muted); cursor: zoom-in; text-align: initial; }
+.property-gallery-main:hover { border-color: color-mix(in srgb, var(--brand-primary) 34%, var(--border)); box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand-primary) 6%, transparent); }
+.property-gallery-main:focus-visible { outline: 2px solid color-mix(in srgb, var(--brand-primary) 55%, transparent); outline-offset: 2px; }
 .property-gallery-main img { display: block; width: 100%; height: 100%; object-fit: cover; }
 .property-gallery-cover { position: absolute; top: 10px; left: 10px; display: inline-flex; align-items: center; gap: 5px; min-height: 25px; padding: 0 8px; border-radius: 999px; background: rgba(255,255,255,.93); box-shadow: 0 1px 5px rgba(17,24,39,.12); color: var(--brand-primary); font-size: 9px; font-weight: 800; }
 .property-gallery-thumbs { display: grid; grid-auto-flow: column; grid-auto-columns: 70px; gap: 7px; overflow-x: auto; padding: 7px 1px 3px; scrollbar-width: thin; }
@@ -30,10 +32,10 @@
 .property-gallery-caption input { width: 100%; height: 34px; border: 1px solid var(--border); border-radius: 7px; padding: 0 10px; outline: 0; background: var(--surface); color: var(--text); font-size: 10.5px; }
 .property-gallery-caption input:focus { border-color: #b9c8d9; box-shadow: 0 0 0 3px rgba(18,58,107,.06); }
 
-/* No Resumo, a galeria dá contexto sem dominar uma faixa inteira da ficha. */
+/* No Resumo, a foto ocupa aproximadamente a largura de dois cards superiores sem dominar a linha inteira. */
 .property-gallery-summary-mount .property-gallery { padding: 13px 14px; }
 .property-gallery-summary-mount .property-gallery-main {
-  width: min(100%, 320px);
+  width: min(100%, 620px);
   height: auto;
   min-height: 0;
   margin: 0 auto;
@@ -57,13 +59,83 @@
 .property-gallery-summary-mount .property-gallery-thumbs button { height: 44px; }
 .property-gallery-summary-mount .property-gallery-editor { margin-top: 6px; padding-top: 7px; }
 
+.property-gallery-viewer-backdrop {
+  position: fixed;
+  z-index: 1600;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(15, 23, 42, .72);
+  backdrop-filter: blur(2px);
+}
+.property-gallery-viewer {
+  width: min(1180px, calc(100vw - 48px));
+  max-height: calc(100vh - 48px);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+  border-radius: 13px;
+  background: var(--surface);
+  box-shadow: 0 24px 70px rgba(15, 23, 42, .28);
+}
+.property-gallery-viewer-heading {
+  min-height: 54px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 10px 12px 10px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.property-gallery-viewer-heading > div { min-width: 0; display: grid; gap: 2px; }
+.property-gallery-viewer-heading strong { overflow: hidden; color: var(--text); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.property-gallery-viewer-heading span { overflow: hidden; color: var(--text-muted); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.property-gallery-viewer-heading button {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.property-gallery-viewer-heading button:hover { background: var(--surface-muted); color: var(--text); }
+.property-gallery-viewer-stage {
+  min-height: 0;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  overflow: auto;
+  background: #eef1f5;
+}
+.property-gallery-viewer-stage img {
+  display: block;
+  max-width: 100%;
+  max-height: calc(100vh - 140px);
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  border-radius: 7px;
+  box-shadow: 0 4px 18px rgba(15, 23, 42, .12);
+}
+
 @media (max-width: 680px) {
   .property-gallery-heading { align-items: flex-start; }
   .property-gallery-main { min-height: 180px; }
-  .property-gallery-summary-mount .property-gallery-main { width: min(100%, 320px); height: auto; min-height: 0; }
+  .property-gallery-summary-mount .property-gallery-main { width: min(100%, 620px); height: auto; min-height: 0; }
   .property-gallery-summary-mount .property-gallery-empty { min-height: 130px; }
   .property-gallery-summary-mount .property-gallery-thumbs { grid-auto-columns: 58px; }
   .property-gallery-summary-mount .property-gallery-thumbs button { height: 42px; }
   .property-gallery-delete { margin-left: 0; }
   .property-gallery-caption > div { grid-template-columns: 1fr; }
+  .property-gallery-viewer-backdrop { padding: 10px; }
+  .property-gallery-viewer { width: calc(100vw - 20px); max-height: calc(100vh - 20px); }
+  .property-gallery-viewer-stage { padding: 10px; }
+  .property-gallery-viewer-stage img { max-height: calc(100vh - 100px); }
 }
