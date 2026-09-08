@@ -30,6 +30,12 @@ type LeaseSignerRole = 'owner' | 'tenant' | 'agency' | 'witness' | 'other'
 type MonthlyChargeKind = 'iptu' | 'condo' | 'guarantee_insurance' | 'fire_insurance' | 'other'
 type MonthlyChargePayer = 'tenant' | 'owner' | 'agency'
 type MonthlyChargeBeneficiary = 'owner' | 'agency' | 'third_party'
+type LatePaymentTerms = {
+  fee_percent: number
+  interest_percent_monthly: number
+  interest_type: 'simple' | 'compound'
+  compounding: 'daily' | 'monthly'
+}
 type MonthlyCharge = {
   key: string
   kind: MonthlyChargeKind
@@ -47,6 +53,12 @@ type MonthlyChargeConfig = {
   configured: boolean
   monthly_charges: Array<Omit<MonthlyCharge, 'amount'> & { amount: number | string }>
   tenant_monthly_total: number | string
+  late_payment?: {
+    fee_percent: number | string
+    interest_percent_monthly: number | string
+    interest_type: 'simple' | 'compound'
+    compounding: 'daily' | 'monthly'
+  }
 }
 type LeaseSigner = {
   role: LeaseSignerRole
@@ -116,6 +128,7 @@ type LeaseForm = {
   inspection_contest_days: number
   guarantee_type: GuaranteeType
   guarantee_details: Record<string, unknown>
+  late_payment: LatePaymentTerms
   monthly_charges: MonthlyCharge[]
   notes: string
   signers: LeaseSigner[]
@@ -160,6 +173,9 @@ function addressLine(address: Record<string, string>) {
 function money(value: number | null) {
   return value == null ? '—' : Number(value).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 }
+function percent(value: number) {
+  return Number(value).toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
+}
 function statusClass(value: LeaseStatus) {
   if (value === 'signed' || value === 'approved' || value === 'closed') return 'success'
   if (value === 'cancelled') return 'danger'
@@ -198,6 +214,14 @@ function standardMonthlyCharges(property?: Property): MonthlyCharge[] {
 function normalizeMonthlyCharges(items: MonthlyChargeConfig['monthly_charges']): MonthlyCharge[] {
   return items.map((item) => ({ ...item, amount: Number(item.amount || 0) }))
 }
+function defaultLatePayment(defaults?: OperationalDefaults): LatePaymentTerms {
+  return {
+    fee_percent: Number(defaults?.late_fee_percent ?? 2),
+    interest_percent_monthly: Number(defaults?.late_interest_percent_monthly ?? 1),
+    interest_type: defaults?.late_interest_type ?? 'simple',
+    compounding: defaults?.late_interest_compounding ?? 'daily',
+  }
+}
 function defaultForm(defaults?: OperationalDefaults): LeaseForm {
   return {
     property_id: '',
@@ -215,6 +239,7 @@ function defaultForm(defaults?: OperationalDefaults): LeaseForm {
     inspection_contest_days: defaults?.inspection_contest_days ?? 5,
     guarantee_type: 'insurance',
     guarantee_details: {},
+    late_payment: defaultLatePayment(defaults),
     monthly_charges: standardMonthlyCharges(),
     notes: '',
     signers: [],
@@ -244,6 +269,9 @@ export function LeaseContractsPage({ permissions }: Props) {
   const [changeSummary, setChangeSummary] = useState('')
   const [expanded, setExpanded] = useState<string | null>(null)
   const [expandedTab, setExpandedTab] = useState<'details' | 'lifecycle' | 'documents'>('details')
+  const [signerLookupIndex, setSignerLookupIndex] = useState<number | null>(null)
+  const [cancelTarget, setCancelTarget] = useState<Lease | null>(null)
+  const [cancelReason, setCancelReason] = useState('')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -292,6 +320,7 @@ export function LeaseContractsPage({ permissions }: Props) {
     setEditing(null)
     setForm(defaultForm(defaults))
     setChangeSummary('')
+    setSignerLookupIndex(null)
     setShowForm(true)
     setError('')
     setSuccess('')
@@ -300,15 +329,25 @@ export function LeaseContractsPage({ permissions }: Props) {
   async function openEdit(item: Lease) {
     setEditing(item)
     setChangeSummary('')
+    setSignerLookupIndex(null)
     setError('')
     setSuccess('')
     const property = properties.find((candidate) => candidate.id === item.property_id)
     let monthlyCharges = standardMonthlyCharges(property)
+    let latePayment = defaultLatePayment(defaults)
     try {
       const result = await apiRequest<MonthlyChargeConfig>(`/finance/lease-contracts/${item.id}/monthly-charges`)
       monthlyCharges = normalizeMonthlyCharges(result.monthly_charges)
+      if (result.late_payment) {
+        latePayment = {
+          fee_percent: Number(result.late_payment.fee_percent || 0),
+          interest_percent_monthly: Number(result.late_payment.interest_percent_monthly || 0),
+          interest_type: result.late_payment.interest_type,
+          compounding: result.late_payment.compounding,
+        }
+      }
     } catch {
-      // Mantém sugestões do cadastro do imóvel caso a configuração financeira ainda não exista.
+      // Mantém sugestões do cadastro do imóvel e defaults operacionais caso a configuração financeira ainda não exista.
     }
     setForm({
       property_id: item.property_id,
@@ -326,6 +365,7 @@ export function LeaseContractsPage({ permissions }: Props) {
       inspection_contest_days: item.inspection_contest_days,
       guarantee_type: item.guarantee_type,
       guarantee_details: item.guarantee_details,
+      late_payment: latePayment,
       monthly_charges: monthlyCharges,
       notes: item.notes ?? '',
       signers: item.signers.map((signer) => ({ ...signer })),
@@ -357,11 +397,30 @@ export function LeaseContractsPage({ permissions }: Props) {
       signers: current.signers.map((signer, signerIndex) => signerIndex === index ? { ...signer, ...patch } : signer),
     }))
   }
+  function signerMatches(signer: LeaseSigner) {
+    const term = signer.name.trim().toLocaleLowerCase('pt-BR')
+    return persons
+      .filter((person) => person.is_active)
+      .filter((person) => !term || [person.name, person.document_number ?? '', person.email ?? ''].some((value) => value.toLocaleLowerCase('pt-BR').includes(term)))
+      .slice(0, 8)
+  }
+  function chooseSigner(index: number, person: Person) {
+    updateSigner(index, {
+      name: person.name,
+      email: person.email ?? '',
+      document_number: person.document_number,
+      phone: person.phone,
+    })
+    setSignerLookupIndex(null)
+  }
   function updateMonthlyCharge(index: number, patch: Partial<MonthlyCharge>) {
     setForm((current) => ({
       ...current,
       monthly_charges: current.monthly_charges.map((charge, chargeIndex) => chargeIndex === index ? { ...charge, ...patch } : charge),
     }))
+  }
+  function removeMonthlyCharge(index: number) {
+    setForm((current) => ({ ...current, monthly_charges: current.monthly_charges.filter((_, chargeIndex) => chargeIndex !== index) }))
   }
   function addMonthlyCharge() {
     const suffix = Date.now().toString(36)
@@ -388,10 +447,11 @@ export function LeaseContractsPage({ permissions }: Props) {
         : [updated, ...current])
       setShowForm(false)
       setEditing(null)
+      setSignerLookupIndex(null)
       setSuccess(
         editing
           ? `${updated.code} ganhou a versão ${updated.current_version}. PDF, assinatura e composição mensal anteriores foram invalidados.`
-          : `${updated.code} criado com a composição mensal congelada na versão inicial.`,
+          : `${updated.code} criado com a composição mensal e regra de mora congeladas na versão inicial.`,
       )
     } catch (cause) {
       setError(cause instanceof ApiError ? cause.detail : cause instanceof Error ? cause.message : 'Não foi possível salvar a locação.')
@@ -400,12 +460,9 @@ export function LeaseContractsPage({ permissions }: Props) {
     }
   }
 
-  async function workflow(item: Lease, action: LeaseWorkflowAction) {
-    let reason: string | null = null
-    if (action === 'cancel') {
-      reason = window.prompt('Motivo do cancelamento:')
-      if (!reason?.trim()) return
-    }
+  async function workflow(item: Lease, action: LeaseWorkflowAction, providedReason: string | null = null) {
+    const reason = action === 'cancel' ? providedReason : null
+    if (action === 'cancel' && !reason?.trim()) return
     setSaving(true)
     setError('')
     setSuccess('')
@@ -423,6 +480,10 @@ export function LeaseContractsPage({ permissions }: Props) {
         cancel: `${updated.code} cancelado com motivo auditado.`,
       }
       setSuccess(message[action])
+      if (action === 'cancel') {
+        setCancelTarget(null)
+        setCancelReason('')
+      }
     } catch (cause) {
       setError(cause instanceof ApiError ? cause.detail : 'Não foi possível avançar o contrato.')
     } finally {
@@ -568,6 +629,16 @@ export function LeaseContractsPage({ permissions }: Props) {
         {editing && <label className="field field-span-3"><span>Resumo desta nova versão</span><input required minLength={3} value={changeSummary} onChange={(event) => setChangeSummary(event.target.value)}/></label>}
       </div>
 
+      <div className="lease-late-payment">
+        <div className="lease-late-payment-heading"><span className="eyebrow">Mora e atraso</span><h3>Multa e juros desta versão</h3><p>Esta regra fica congelada no contrato. Alterações futuras em Configurações não mudam esta locação.</p></div>
+        <div className="lease-late-payment-grid">
+          <label className="field"><span>Multa por atraso (%)</span><input min="0" max="100" step="0.01" type="number" value={form.late_payment.fee_percent} onChange={(event) => setForm((current) => ({ ...current, late_payment: { ...current.late_payment, fee_percent: Number(event.target.value) } }))}/></label>
+          <label className="field"><span>Juros ao mês (%)</span><input min="0" max="100" step="0.01" type="number" value={form.late_payment.interest_percent_monthly} onChange={(event) => setForm((current) => ({ ...current, late_payment: { ...current.late_payment, interest_percent_monthly: Number(event.target.value) } }))}/></label>
+          <label className="field"><span>Tipo de juros</span><select value={form.late_payment.interest_type} onChange={(event) => setForm((current) => ({ ...current, late_payment: { ...current.late_payment, interest_type: event.target.value as LatePaymentTerms['interest_type'] } }))}><option value="simple">Simples</option><option value="compound">Composto</option></select></label>
+          <label className="field"><span>Capitalização</span><select disabled={form.late_payment.interest_type !== 'compound'} value={form.late_payment.compounding} onChange={(event) => setForm((current) => ({ ...current, late_payment: { ...current.late_payment, compounding: event.target.value as LatePaymentTerms['compounding'] } }))}><option value="daily">Diária</option><option value="monthly">Mensal</option></select></label>
+        </div>
+      </div>
+
       <div className="lease-monthly-charges">
         <div className="lease-monthly-heading">
           <div><span className="eyebrow">Composição mensal</span><h3>Aluguel + encargos recorrentes</h3><p>IPTU, condomínio, seguro fiança, seguro incêndio e outros itens ficam congelados nesta versão do contrato.</p></div>
@@ -581,8 +652,8 @@ export function LeaseContractsPage({ permissions }: Props) {
             <label className="field"><span>Valor mensal</span><input min="0" step="0.01" type="number" value={charge.amount || ''} onChange={(event) => { const amount = event.target.value ? Number(event.target.value) : 0; updateMonthlyCharge(index, { amount, active: amount > 0 ? true : charge.active }) }}/></label>
             <label className="field"><span>Responsável</span><select value={charge.payer} onChange={(event) => updateMonthlyCharge(index, { payer: event.target.value as MonthlyChargePayer })}>{Object.entries(payerLabels).map(([key, label]) => <option value={key} key={key}>{label}</option>)}</select></label>
             <label className="field"><span>Destino</span><select value={charge.beneficiary} onChange={(event) => updateMonthlyCharge(index, { beneficiary: event.target.value as MonthlyChargeBeneficiary })}>{Object.entries(beneficiaryLabels).map(([key, label]) => <option value={key} key={key}>{label}</option>)}</select></label>
-            <div className="lease-charge-period"><label><span>De</span><input type="date" min={form.start_date || undefined} max={form.end_date || undefined} value={charge.start_date ?? ''} onChange={(event) => updateMonthlyCharge(index, { start_date: event.target.value || null })}/></label><label><span>Até</span><input type="date" min={form.start_date || undefined} max={form.end_date || undefined} value={charge.end_date ?? ''} onChange={(event) => updateMonthlyCharge(index, { end_date: event.target.value || null })}/></label></div>
-            {charge.kind === 'other' ? <button className="signer-remove" type="button" aria-label="Remover encargo" onClick={() => setForm((current) => ({ ...current, monthly_charges: current.monthly_charges.filter((_, chargeIndex) => chargeIndex !== index) }))}><Trash2 size={15}/></button> : <span className="lease-charge-fixed">padrão</span>}
+            <div className="lease-charge-period"><label><span>Início</span><input type="date" min={form.start_date || undefined} max={form.end_date || undefined} value={charge.start_date ?? ''} onChange={(event) => updateMonthlyCharge(index, { start_date: event.target.value || null })}/></label><label><span>Fim</span><input type="date" min={form.start_date || undefined} max={form.end_date || undefined} value={charge.end_date ?? ''} onChange={(event) => updateMonthlyCharge(index, { end_date: event.target.value || null })}/></label></div>
+            <button className="signer-remove lease-charge-remove" type="button" title={`Remover ${charge.label}`} aria-label={`Remover ${charge.label}`} onClick={() => removeMonthlyCharge(index)}><Trash2 size={14}/></button>
           </div>)}
         </div>
         <div className="lease-monthly-footer"><span>Somente itens com responsável “Locatário” entram na cobrança mensal. Destino “Proprietário” compõe o repasse; “Imobiliária” vira reembolso; “Terceiro” fica separado para condomínio/seguradora.</span><button className="button secondary" type="button" onClick={addMonthlyCharge}><Plus size={14}/> Outro encargo</button></div>
@@ -601,14 +672,14 @@ export function LeaseContractsPage({ permissions }: Props) {
 
       <div className="contract-signers-editor">
         <div className="contract-signers-heading">
-          <div><span className="eyebrow">Assinatura</span><h3>Signatários desta versão</h3><p>Se a lista ficar vazia, o ERP monta automaticamente proprietários + locatários ao salvar.</p></div>
+          <div><span className="eyebrow">Assinatura</span><h3>Signatários desta versão</h3><p>Pesquise uma pessoa já cadastrada pelo nome, documento ou e-mail. Testemunhas e outros signatários ainda podem ser preenchidos manualmente.</p></div>
           <button className="button secondary" type="button" onClick={() => setForm((current) => ({ ...current, signers: [...current.signers, blankSigner()] }))}><UserRoundPlus size={14}/> Adicionar</button>
         </div>
         {form.signers.length === 0
           ? <div className="contract-signers-empty">Signatários automáticos serão criados a partir das partes do contrato. E-mail será obrigatório antes do envio à Clicksign.</div>
           : form.signers.map((signer, index) => <div className="contract-signer-row" key={`${index}-${signer.email}`}>
             <label className="field"><span>Papel</span><select value={signer.role} onChange={(event) => updateSigner(index, { role: event.target.value as LeaseSignerRole })}>{Object.entries(signerRoleLabels).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
-            <label className="field"><span>Nome</span><input required value={signer.name} onChange={(event) => updateSigner(index, { name: event.target.value })}/></label>
+            <label className="field signer-person-field"><span>Nome</span><input required autoComplete="off" value={signer.name} onFocus={() => setSignerLookupIndex(index)} onBlur={() => window.setTimeout(() => setSignerLookupIndex((current) => current === index ? null : current), 120)} onChange={(event) => { updateSigner(index, { name: event.target.value }); setSignerLookupIndex(index) }}/>{signerLookupIndex === index && <div className="signer-person-results">{signerMatches(signer).length ? signerMatches(signer).map((person) => <button type="button" key={person.id} onMouseDown={(event) => { event.preventDefault(); chooseSigner(index, person) }}><strong>{person.name}</strong><small>{person.document_number || person.email || 'Cadastro sem documento'}</small></button>) : <span>Nenhuma pessoa encontrada.</span>}</div>}</label>
             <label className="field"><span>E-mail</span><input required type="email" value={signer.email} onChange={(event) => updateSigner(index, { email: event.target.value })}/></label>
             <label className="field"><span>CPF/CNPJ</span><input value={signer.document_number ?? ''} onChange={(event) => updateSigner(index, { document_number: event.target.value || null })}/></label>
             <label className="field"><span>Comunicação</span><select value={signer.communication} onChange={(event) => updateSigner(index, { communication: event.target.value as LeaseSigner['communication'] })}><option value="email">E-mail</option><option value="sms">SMS</option><option value="whatsapp">WhatsApp</option><option value="none">Nenhuma</option></select></label>
@@ -617,9 +688,9 @@ export function LeaseContractsPage({ permissions }: Props) {
           </div>)}
       </div>
 
-      <div className="contract-snapshot-note"><ShieldCheck size={16}/><span>Nova versão invalida PDF/hash e assinatura anteriores. A composição mensal também fica versionada para preservar o histórico das cobranças.</span></div>
+      <div className="contract-snapshot-note"><ShieldCheck size={16}/><span>Nova versão invalida PDF/hash e assinatura anteriores. A composição mensal e a regra de multa/juros também ficam versionadas para preservar o histórico das cobranças.</span></div>
       <div className="form-actions">
-        <button className="button secondary" type="button" onClick={() => { setShowForm(false); setEditing(null) }}>Cancelar</button>
+        <button className="button secondary" type="button" onClick={() => { setShowForm(false); setEditing(null); setSignerLookupIndex(null) }}>Cancelar</button>
         <button className="button primary" disabled={saving} type="submit">{saving ? 'Salvando...' : editing ? 'Salvar nova versão' : 'Criar rascunho'}</button>
       </div>
     </form>}
@@ -655,11 +726,11 @@ export function LeaseContractsPage({ permissions }: Props) {
                 {item.status === 'pending_signature' && item.signing_status === 'document_ready' && canSign && <button className="button primary" disabled={saving} type="button" onClick={() => void sendSignature(item)}><Send size={14}/> Enviar Clicksign</button>}
                 {item.status === 'pending_signature' && ['provider_closed_pending_archive', 'archive_failed'].includes(item.signing_status) && canSign && <button className="button primary" disabled={saving} type="button" onClick={() => void archiveFinal(item)}><FileCheck2 size={14}/> Arquivar final</button>}
                 {['review', 'approved', 'pending_signature'].includes(item.status) && canEdit && <button className="button secondary" type="button" onClick={() => void workflow(item, 'return_draft')}><RotateCcw size={14}/> Rascunho</button>}
-                {!['signed', 'cancelled'].includes(item.status) && canEdit && <button className="button ghost-danger" type="button" onClick={() => void workflow(item, 'cancel')}>Cancelar</button>}
+                {!['signed', 'cancelled'].includes(item.status) && canEdit && <button className="button ghost-danger" type="button" onClick={() => { setCancelTarget(item); setCancelReason('') }}>Cancelar</button>}
               </div>
             </div>
 
-            {isExpanded && <><div className="entity-document-tabs"><button type="button" className={expandedTab==='details'?'active':''} onClick={()=>setExpandedTab('details')}>Detalhes</button><button type="button" className={expandedTab==='lifecycle'?'active':''} onClick={()=>setExpandedTab('lifecycle')}>Ciclo da locação</button><button type="button" className={expandedTab==='documents'?'active':''} onClick={()=>setExpandedTab('documents')}>Documentos</button></div>{expandedTab==='details'&&<div className="contract-expanded">
+            {isExpanded && <><div className="entity-document-tabs"><button type="button" className={expandedTab==='details'?'active':''} onClick={()=>setExpandedTab('details')}>Detalhes</button><button type="button" className={expandedTab==='lifecycle'?'active':''} onClick={()=>setExpandedTab('lifecycle')}>Ciclo da locação</button><button type="button" className={expandedTab==='documents'?'active':''} onClick={()=>setExpandedTab('documents')}>Documentos</button></div>{expandedTab==='details'&&<div className="contract-expanded lease-contract-expanded">
               <div className="contract-version-panel">
                 <div className="panel-heading-row"><div><span className="eyebrow">Versões</span><h3>Histórico imutável</h3></div><CalendarClock size={17}/></div>
                 {item.versions.slice().reverse().map((version) => <div className="contract-version-row" key={version.version_number}><strong>v{version.version_number}</strong><span>{version.change_summary || 'Sem resumo'}</span><small>{new Date(version.created_at).toLocaleString('pt-BR')}</small></div>)}
@@ -691,5 +762,7 @@ export function LeaseContractsPage({ permissions }: Props) {
         })}
         {items.length === 0 && <article className="panel portfolio-empty"><FileText size={26}/><strong>Nenhum contrato de locação ainda.</strong><span>Crie a primeira minuta usando as regras-padrão da imobiliária.</span></article>}
       </div>}
+
+    {cancelTarget && <div className="portfolio-modal-backdrop" onMouseDown={(event) => { if (event.currentTarget === event.target && !saving) { setCancelTarget(null); setCancelReason('') } }}><div className="panel portfolio-modal lease-cancel-modal" role="dialog" aria-modal="true" aria-labelledby="lease-cancel-title"><div className="portfolio-modal-header"><div><span className="eyebrow">Ação sensível</span><h2 id="lease-cancel-title">Cancelar {cancelTarget.code}</h2><p>O contrato ficará cancelado e o motivo será preservado na trilha de auditoria.</p></div></div><div className="lease-cancel-body"><label className="field"><span>Motivo do cancelamento</span><textarea autoFocus rows={4} value={cancelReason} onChange={(event) => setCancelReason(event.target.value)} placeholder="Descreva objetivamente o motivo..."/></label></div><div className="form-actions lease-cancel-actions"><button className="button secondary" type="button" disabled={saving} onClick={() => { setCancelTarget(null); setCancelReason('') }}>Voltar</button><button className="button ghost-danger" type="button" disabled={saving || cancelReason.trim().length < 3} onClick={() => void workflow(cancelTarget, 'cancel', cancelReason.trim())}>{saving ? 'Cancelando...' : 'Confirmar cancelamento'}</button></div></div></div>}
   </section>
 }
