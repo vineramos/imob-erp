@@ -96,7 +96,7 @@
   border-radius: 7px;
   background: var(--surface);
 }
-.contract-version-history span {
+.contract-version-history > div > span {
   width: 31px;
   height: 22px;
   border-radius: 6px;
