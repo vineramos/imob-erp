@@ -1,4 +1,4 @@
-import { Camera, ChevronLeft, ChevronRight, ImagePlus, Star, Trash2 } from 'lucide-react'
+import { Camera, ChevronLeft, ChevronRight, ImagePlus, Star, Trash2, X } from 'lucide-react'
 import { ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ApiError, apiBlobRequest, apiRequest } from '../../api/client'
 import { ConfirmDialog } from '../../components/ConfirmDialog'
@@ -27,6 +27,7 @@ export function PropertyGallery({ propertyId, canManage, onChanged }: Props) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [deleteTarget, setDeleteTarget] = useState<PropertyPhoto | null>(null)
+  const [viewerOpen, setViewerOpen] = useState(false)
   const urlsRef = useRef<string[]>([])
 
   const releaseUrls = useCallback(() => {
@@ -57,6 +58,14 @@ export function PropertyGallery({ propertyId, canManage, onChanged }: Props) {
 
   const selected = useMemo(() => photos.find((photo) => photo.id === selectedId) ?? photos.find((photo) => photo.is_cover) ?? photos[0] ?? null, [photos, selectedId])
   useEffect(() => { setCaption(selected?.caption ?? '') }, [selected?.id, selected?.caption])
+  useEffect(() => {
+    if (!viewerOpen) return
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setViewerOpen(false)
+    }
+    window.addEventListener('keydown', closeOnEscape)
+    return () => window.removeEventListener('keydown', closeOnEscape)
+  }, [viewerOpen])
 
   async function refreshAfterMutation(message?: string) {
     await load()
@@ -137,11 +146,17 @@ export function PropertyGallery({ propertyId, canManage, onChanged }: Props) {
       </div>
       {error && <div className="property-gallery-error">{error}</div>}
       {!selected ? <div className="property-gallery-empty"><Camera size={31}/><strong>Nenhuma foto cadastrada</strong><span>Adicione fotos comerciais do imóvel. Elas ficam separadas das imagens das vistorias.</span>{canManage && <label className="button primary property-gallery-empty-action"><ImagePlus size={14}/> Selecionar fotos<input type="file" multiple accept="image/jpeg,image/png,image/webp" disabled={busy} onChange={upload}/></label>}</div> : <>
-        <div className="property-gallery-main"><img src={selected.objectUrl} alt={selected.caption || selected.filename}/>{selected.is_cover && <span className="property-gallery-cover"><Star size={12} fill="currentColor"/> Capa do anúncio</span>}</div>
+        <button className="property-gallery-main" type="button" onClick={() => setViewerOpen(true)} aria-label="Ampliar foto selecionada"><img src={selected.objectUrl} alt={selected.caption || selected.filename}/>{selected.is_cover && <span className="property-gallery-cover"><Star size={12} fill="currentColor"/> Capa do anúncio</span>}</button>
         <div className="property-gallery-thumbs" aria-label="Fotos do imóvel">{photos.map((photo) => <button type="button" className={photo.id === selected.id ? 'active' : ''} key={photo.id} onClick={() => setSelectedId(photo.id)}><img src={photo.objectUrl} alt={photo.caption || photo.filename}/>{photo.is_cover && <Star size={11} fill="currentColor"/>}</button>)}</div>
         {canManage && <div className="property-gallery-editor"><div className="property-gallery-actions"><button className="button secondary compact-button" type="button" disabled={busy || photos[0]?.id === selected.id} onClick={() => void move(-1)}><ChevronLeft size={14}/> Anterior</button><button className="button secondary compact-button" type="button" disabled={busy || photos[photos.length - 1]?.id === selected.id} onClick={() => void move(1)}>Próxima <ChevronRight size={14}/></button><button className="button secondary compact-button" type="button" disabled={busy || selected.is_cover} onClick={() => void setCover(selected)}><Star size={14}/> Definir capa</button><button className="button secondary compact-button property-gallery-delete" type="button" disabled={busy} onClick={() => setDeleteTarget(selected)}><Trash2 size={14}/> Excluir</button></div><label className="property-gallery-caption"><span>Legenda</span><div><input maxLength={300} value={caption} onChange={(event) => setCaption(event.target.value)} placeholder="Ex.: Sala integrada com ampla iluminação natural"/><button className="button secondary compact-button" type="button" disabled={busy || caption.trim() === (selected.caption ?? '')} onClick={() => void saveCaption()}>Salvar</button></div></label></div>}
       </>}
     </article>
+    {viewerOpen && selected && <div className="property-gallery-viewer-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setViewerOpen(false) }}>
+      <section className="property-gallery-viewer" role="dialog" aria-modal="true" aria-label="Visualização ampliada da foto">
+        <header className="property-gallery-viewer-heading"><div><strong>{selected.caption || 'Foto do imóvel'}</strong><span>{selected.filename}</span></div><button type="button" onClick={() => setViewerOpen(false)} aria-label="Fechar visualização"><X size={18}/></button></header>
+        <div className="property-gallery-viewer-stage"><img src={selected.objectUrl} alt={selected.caption || selected.filename}/></div>
+      </section>
+    </div>}
     <ConfirmDialog
       open={Boolean(deleteTarget)}
       title="Excluir foto"
