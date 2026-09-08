@@ -5,11 +5,16 @@ function optionLabel(select: HTMLSelectElement) {
 }
 
 function normalize(value: string) {
-  return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim()
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '')
 }
 
 function enhance(select: HTMLSelectElement) {
-  if (select.dataset.ownerAutocomplete === 'true') return
+  const currentUi = select.previousElementSibling
+  if (select.dataset.ownerAutocomplete === 'true' && currentUi instanceof HTMLElement && currentUi.dataset.ownerAutocompleteUi === 'true') return
   select.dataset.ownerAutocomplete = 'true'
   select.classList.add('property-owner-native-select')
   select.tabIndex = -1
