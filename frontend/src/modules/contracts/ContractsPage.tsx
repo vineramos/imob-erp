@@ -29,6 +29,7 @@ import type {
   Person,
   Property,
 } from '../../api/types'
+import { ConfirmDialog } from '../../components/ConfirmDialog'
 import { SignatureTimeline } from './SignatureTimeline'
 import { EntityDocumentsPanel } from '../documents/EntityDocumentsPanel'
 
@@ -124,6 +125,8 @@ export function ContractsPage({ permissions }: Props) {
   const [terms, setTerms] = useState<AdministrationContractTerms>(() => defaultTerms())
   const [leaseMonths, setLeaseMonths] = useState(30)
   const [changeSummary, setChangeSummary] = useState('')
+  const [cancelTarget, setCancelTarget] = useState<AdministrationContract | null>(null)
+  const [cancelReason, setCancelReason] = useState('')
 
   const load = useCallback(async () => {
     setLoading(true); setError('')
@@ -236,9 +239,8 @@ export function ContractsPage({ permissions }: Props) {
     finally { setSaving(false) }
   }
 
-  async function workflow(item: AdministrationContract, action: AdministrationContractWorkflowAction) {
-    let reason: string | null = null
-    if (action === 'cancel') { reason = window.prompt('Informe o motivo do cancelamento:'); if (!reason?.trim()) return }
+  async function workflow(item: AdministrationContract, action: AdministrationContractWorkflowAction, reason: string | null = null): Promise<boolean> {
+    if (action === 'cancel' && !reason?.trim()) return false
     setSaving(true); setError(''); setSuccess('')
     try {
       const updated = await apiRequest<AdministrationContract>(`/administration-contracts/${item.id}/workflow`, { method: 'POST', body: JSON.stringify({ action, reason }) })
@@ -249,8 +251,20 @@ export function ContractsPage({ permissions }: Props) {
         cancel: `${updated.code} cancelado com motivo auditado.`,
       }
       setSuccess(message[action])
-    } catch (cause) { setError(cause instanceof ApiError ? cause.detail : 'Não foi possível executar a ação.') }
-    finally { setSaving(false) }
+      return true
+    } catch (cause) {
+      setError(cause instanceof ApiError ? cause.detail : 'Não foi possível executar a ação.')
+      return false
+    } finally { setSaving(false) }
+  }
+
+  async function confirmCancellation() {
+    if (!cancelTarget || !cancelReason.trim()) return
+    const cancelled = await workflow(cancelTarget, 'cancel', cancelReason.trim())
+    if (cancelled) {
+      setCancelTarget(null)
+      setCancelReason('')
+    }
   }
 
   async function generateDocument(item: AdministrationContract) {
@@ -368,7 +382,7 @@ export function ContractsPage({ permissions }: Props) {
           {item.status === 'pending_signature' && canSign && documentCurrent && !['provider_running','provider_signature_progress','provider_closed_pending_archive','signed_archived'].includes(item.signing_status) && <button className="button primary" disabled={saving} type="button" onClick={() => void sendSignature(item)}><Send size={14}/> Enviar à Clicksign</button>}
           {item.status === 'pending_signature' && canSign && ['provider_closed_pending_archive','archive_failed'].includes(item.signing_status) && <button className="button primary" disabled={saving} type="button" onClick={() => void archiveFinal(item)}><FileCheck2 size={14}/> Arquivar PDF final</button>}
           {(item.status === 'review' || item.status === 'approved' || item.status === 'pending_signature') && canEdit && <button className="button secondary" disabled={saving} type="button" onClick={() => void workflow(item, 'return_draft')}><RotateCcw size={14}/> Rascunho</button>}
-          {item.status !== 'cancelled' && item.status !== 'signed' && canEdit && <button className="button ghost-danger" disabled={saving} type="button" onClick={() => void workflow(item, 'cancel')}>Cancelar</button>}
+          {item.status !== 'cancelled' && item.status !== 'signed' && canEdit && <button className="button ghost-danger" disabled={saving} type="button" onClick={() => { setCancelTarget(item); setCancelReason('') }}>Cancelar</button>}
           <a className="button secondary" href={`/api/administration-contracts/${item.id}/document/pdf`} target="_blank" rel="noreferrer"><Download size={14}/> Ver PDF</a>
         </div></div>
         {isExpanded && <><div className="entity-document-tabs"><button type="button" className={expandedTab==='details'?'active':''} onClick={()=>setExpandedTab('details')}>Detalhes</button><button type="button" className={expandedTab==='documents'?'active':''} onClick={()=>setExpandedTab('documents')}>Documentos</button></div>{expandedTab==='details'&&<div className="contract-expanded-detail contract-expanded-three"><div className="contract-signers-summary"><span className="eyebrow">Signatários</span>{item.signers.length ? item.signers.map((signer) => <div key={signer.email}><strong>{signer.name}</strong><span>{signerRoleLabel[signer.role] ?? signer.role} · {signer.email} · ordem {signer.sign_order}</span></div>) : <small>Nenhum signatário.</small>}</div><div className="contract-version-history"><span className="eyebrow">Versões</span>{[...item.versions].reverse().map((version) => <div key={version.version_number}><span>v{version.version_number}</span><strong>{version.change_summary || 'Versão registrada'}</strong><small>{new Date(version.created_at).toLocaleString('pt-BR')}</small></div>)}</div><SignatureTimeline contractId={item.id}/></div>}{expandedTab==='documents'&&<EntityDocumentsPanel entityType="administration_contract" entityId={item.id} entityLabel={item.code} permissions={permissions} compact/>}</>}
@@ -376,5 +390,22 @@ export function ContractsPage({ permissions }: Props) {
     })}{filtered.length === 0 && <article className="panel portfolio-empty"><FileSignature size={27}/><strong>Nenhum contrato nesta etapa.</strong></article>}</div>}
 
     <article className="panel contract-provider-note"><ShieldCheck size={21}/><div><span className="eyebrow">Integridade documental</span><h2>O ERP não confia apenas no status da Clicksign</h2><p>Cada PDF original recebe SHA-256 antes do envio. Mesmo após a Clicksign encerrar a assinatura, o contrato só muda para “Assinado” depois que o PDF final é salvo no storage próprio e recebe um segundo hash.</p></div></article>
+
+    <ConfirmDialog
+      open={Boolean(cancelTarget)}
+      title="Cancelar contrato de administração"
+      description={cancelTarget ? `Informe o motivo para cancelar ${cancelTarget.code}. O motivo ficará registrado na auditoria do contrato.` : 'Informe o motivo do cancelamento.'}
+      confirmLabel="Cancelar contrato"
+      tone="danger"
+      busy={saving}
+      confirmDisabled={!cancelReason.trim()}
+      onCancel={() => { if (!saving) { setCancelTarget(null); setCancelReason('') } }}
+      onConfirm={() => void confirmCancellation()}
+    >
+      <label className="field">
+        <span>Motivo do cancelamento</span>
+        <textarea rows={3} value={cancelReason} onChange={(event) => setCancelReason(event.target.value)} placeholder="Descreva o motivo..." />
+      </label>
+    </ConfirmDialog>
   </section>
 }
