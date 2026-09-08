@@ -1,4 +1,4 @@
-from helpers import assert_response, create_person, create_property
+from tests.helpers import assert_response, create_person, create_property
 
 
 def test_person_can_be_archived_and_restored(client):
