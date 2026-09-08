@@ -12,6 +12,17 @@ function enhance(select: HTMLSelectElement) {
   if (select.dataset.ownerAutocomplete === 'true') return
   select.dataset.ownerAutocomplete = 'true'
   select.classList.add('property-owner-native-select')
+  select.tabIndex = -1
+  select.setAttribute('aria-hidden', 'true')
+  Object.assign(select.style, {
+    position: 'absolute',
+    width: '1px',
+    height: '1px',
+    margin: '0',
+    padding: '0',
+    opacity: '0',
+    pointerEvents: 'none',
+  })
 
   const wrapper = document.createElement('div')
   wrapper.className = 'property-owner-combobox'
