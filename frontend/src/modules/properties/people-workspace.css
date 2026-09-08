@@ -1,0 +1,148 @@
+.portfolio-role-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 7px;
+}
+
+.portfolio-role-option {
+  position: relative;
+  min-height: 34px;
+  padding: 0 11px 0 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+  transition: border-color 120ms ease, background 120ms ease, color 120ms ease;
+}
+
+.portfolio-role-option:hover {
+  border-color: color-mix(in srgb, var(--brand-primary) 42%, var(--border));
+}
+
+.portfolio-role-option input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.portfolio-role-check {
+  width: 17px;
+  height: 17px;
+  flex: 0 0 17px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border-strong, var(--border));
+  border-radius: 5px;
+  background: var(--surface);
+  color: #fff;
+}
+
+.portfolio-role-option.is-selected {
+  border-color: color-mix(in srgb, var(--brand-primary) 55%, var(--border));
+  background: var(--brand-primary-soft);
+  color: var(--brand-primary);
+}
+
+.portfolio-role-option.is-selected .portfolio-role-check {
+  border-color: var(--brand-primary);
+  background: var(--brand-primary);
+}
+
+.portfolio-role-option:focus-within {
+  outline: 2px solid color-mix(in srgb, var(--brand-primary) 28%, transparent);
+  outline-offset: 2px;
+}
+
+.people-status-tabs button:not(.active) {
+  color: var(--text-muted);
+}
+
+.person-row.is-archived {
+  opacity: .78;
+}
+
+.portfolio-restore-button {
+  min-height: 32px;
+  padding: 0 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--brand-primary);
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.portfolio-restore-button:hover:not(:disabled) {
+  background: var(--brand-primary-soft);
+  border-color: color-mix(in srgb, var(--brand-primary) 40%, var(--border));
+}
+
+.person-edit-actions {
+  justify-content: space-between;
+}
+
+.person-modal-primary-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.person-archive-button {
+  border-color: color-mix(in srgb, #b42318 28%, var(--border));
+  background: var(--surface);
+  color: #b42318;
+}
+
+.person-archive-button:hover:not(:disabled) {
+  background: #fff3f2;
+  border-color: #f1b3ad;
+}
+
+@media (max-width: 720px) {
+  .portfolio-role-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .portfolio-role-option {
+    width: 100%;
+  }
+
+  .person-edit-actions {
+    align-items: stretch;
+  }
+
+  .person-modal-primary-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    width: 100%;
+  }
+
+  .person-archive-button {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+@media (max-width: 440px) {
+  .portfolio-role-grid {
+    grid-template-columns: 1fr;
+  }
+}
