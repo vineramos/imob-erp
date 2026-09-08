@@ -16,6 +16,8 @@ MonthlyChargePayer = Literal["tenant", "owner", "agency"]
 MonthlyChargeBeneficiary = Literal["owner", "agency", "third_party"]
 MonthlyChargeFrequency = Literal["monthly", "annual", "one_time"]
 MonthlyChargeRetentionType = Literal["none", "percent", "fixed"]
+LateInterestType = Literal["simple", "compound"]
+LateCompounding = Literal["daily", "monthly"]
 
 
 class LeaseSignerPayload(BaseModel):
@@ -66,6 +68,15 @@ class LeaseMonthlyChargePayload(BaseModel):
         return self
 
 
+class LeaseLatePaymentPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    fee_percent: Decimal = Field(default=Decimal("2"), ge=0, le=100)
+    interest_percent_monthly: Decimal = Field(default=Decimal("1"), ge=0, le=100)
+    interest_type: LateInterestType = "simple"
+    compounding: LateCompounding = "daily"
+
+
 class LeaseContractTerms(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -82,6 +93,7 @@ class LeaseContractTerms(BaseModel):
     inspection_contest_days: int = Field(default=5, ge=1, le=30)
     guarantee_type: GuaranteeType = "insurance"
     guarantee_details: dict = Field(default_factory=dict)
+    late_payment: LeaseLatePaymentPayload | None = None
     monthly_charges: list[LeaseMonthlyChargePayload] = Field(default_factory=list, max_length=30)
     notes: str | None = Field(default=None, max_length=4000)
     signers: list[LeaseSignerPayload] = Field(default_factory=list, max_length=30)
