@@ -32,7 +32,34 @@
 .property-gallery-caption input { width: 100%; height: 34px; border: 1px solid var(--border); border-radius: 7px; padding: 0 10px; outline: 0; background: var(--surface); color: var(--text); font-size: 10.5px; }
 .property-gallery-caption input:focus { border-color: #b9c8d9; box-shadow: 0 0 0 3px rgba(18,58,107,.06); }
 
-/* No Resumo, a foto ocupa aproximadamente a largura de dois cards superiores sem dominar a linha inteira. */
+/* No Resumo, Fotos fica à esquerda e Localização/Publicação/Visão rápida empilham à direita. */
+.property-summary-grid.property-summary-grid-with-gallery {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(360px, 2fr);
+  grid-template-rows: auto auto auto;
+  gap: 12px;
+  align-items: stretch;
+}
+.property-summary-grid-with-gallery .property-gallery-summary-mount .property-gallery {
+  grid-column: 1;
+  grid-row: 1 / span 3;
+  min-height: 0;
+  height: 100%;
+}
+.property-summary-grid-with-gallery .property-location-live-panel {
+  grid-column: 2;
+  grid-row: 1;
+}
+.property-summary-grid-with-gallery .property-publication-live-panel {
+  grid-column: 2;
+  grid-row: 2;
+}
+.property-summary-grid-with-gallery .property-summary-overview {
+  grid-column: 2;
+  grid-row: 3;
+}
+
+/* A foto principal continua ampla, mas sem transformar a ficha em uma faixa horizontal. */
 .property-gallery-summary-mount .property-gallery { padding: 13px 14px; }
 .property-gallery-summary-mount .property-gallery-main {
   width: min(100%, 620px);
@@ -123,6 +150,20 @@
   object-fit: contain;
   border-radius: 7px;
   box-shadow: 0 4px 18px rgba(15, 23, 42, .12);
+}
+
+@media (max-width: 1050px) {
+  .property-summary-grid.property-summary-grid-with-gallery {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto;
+  }
+  .property-summary-grid-with-gallery .property-gallery-summary-mount .property-gallery,
+  .property-summary-grid-with-gallery .property-location-live-panel,
+  .property-summary-grid-with-gallery .property-publication-live-panel,
+  .property-summary-grid-with-gallery .property-summary-overview {
+    grid-column: 1;
+    grid-row: auto;
+  }
 }
 
 @media (max-width: 680px) {
