@@ -27,6 +27,7 @@ import './imob-modal-overrides.css'
 import './imob-sprint-polish.css'
 import './public-site-compact-hero.css'
 import './imob-final-ux.css'
+import './modules/properties/property-owner-share.css'
 
 installBrazilianInputFormatting()
 installGlobalModalEscape()
