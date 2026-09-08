@@ -1,0 +1,95 @@
+.property-owner-edit-row {
+  grid-template-columns: minmax(0, 1fr) 104px 28px 34px;
+  column-gap: 0;
+  row-gap: 7px;
+}
+
+.property-owner-edit-row > .property-owner-combobox {
+  min-width: 0;
+  margin-right: 7px;
+}
+
+.property-owner-edit-row > input[type='number'] {
+  width: 100%;
+  min-width: 0;
+  height: 38px;
+  min-height: 38px;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0 9px 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 9px 0 0 9px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 1;
+  text-align: right;
+  box-shadow: none;
+  outline: none;
+  appearance: textfield;
+  -moz-appearance: textfield;
+  transition: border-color .14s ease, box-shadow .14s ease, background-color .14s ease;
+}
+
+.property-owner-edit-row > input[type='number']::-webkit-inner-spin-button,
+.property-owner-edit-row > input[type='number']::-webkit-outer-spin-button {
+  margin: 0;
+  -webkit-appearance: none;
+}
+
+.property-owner-edit-row > input[type='number']:hover {
+  border-color: color-mix(in srgb, var(--brand-primary) 30%, var(--border));
+}
+
+.property-owner-edit-row > input[type='number']:focus {
+  position: relative;
+  z-index: 1;
+  border-color: var(--brand-primary);
+  box-shadow: 0 0 0 3px var(--brand-primary-soft);
+}
+
+.property-owner-edit-row > span {
+  height: 38px;
+  box-sizing: border-box;
+  display: grid;
+  place-items: center;
+  margin: 0;
+  border: 1px solid var(--border);
+  border-left: 0;
+  border-radius: 0 9px 9px 0;
+  background: var(--surface-muted);
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 750;
+  line-height: 1;
+  user-select: none;
+}
+
+.property-owner-edit-row > button {
+  margin-left: 7px;
+}
+
+@media (max-width: 620px) {
+  .property-owner-edit-row {
+    grid-template-columns: minmax(0, 1fr) 88px 28px 34px;
+  }
+
+  .property-owner-edit-row > .property-owner-combobox {
+    grid-column: 1 / -1;
+    margin-right: 0;
+  }
+
+  .property-owner-edit-row > input[type='number'] {
+    grid-column: 2;
+  }
+
+  .property-owner-edit-row > span {
+    grid-column: 3;
+  }
+
+  .property-owner-edit-row > button {
+    grid-column: 4;
+  }
+}
