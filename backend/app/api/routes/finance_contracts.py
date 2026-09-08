@@ -6,6 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.domains.finance.late_charges import contract_late_payment_terms
 from app.domains.finance.service import (
     administration_terms,
     configured_monthly_charge_rules,
@@ -65,6 +66,7 @@ def lease_monthly_charges(
         and rule.get("include_in_invoice", True) is not False
         and str(rule.get("frequency") or "monthly") != "monthly"
     ]
+    late_payment = contract_late_payment_terms(lease)
     return {
         "lease_contract_id": str(lease.id),
         "lease_code": f"LOC-{lease.internal_number:06d}",
@@ -72,4 +74,10 @@ def lease_monthly_charges(
         "monthly_charges": rules,
         "tenant_monthly_total": str(money(lease.rent_amount) + tenant_monthly_extras),
         "scheduled_extras": scheduled_extras,
+        "late_payment": {
+            "fee_percent": str(late_payment.fee_percent),
+            "interest_percent_monthly": str(late_payment.interest_percent_monthly),
+            "interest_type": late_payment.interest_type,
+            "compounding": late_payment.compounding,
+        },
     }
