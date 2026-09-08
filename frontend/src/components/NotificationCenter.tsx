@@ -44,6 +44,11 @@ function eventLabel(value: string) {
   return date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: date.getFullYear() !== new Date().getFullYear() ? 'numeric' : undefined })
 }
 
+function notificationTime(item: NotificationItem) {
+  const timestamp = new Date(item.event_at).getTime()
+  return Number.isNaN(timestamp) ? Number.NEGATIVE_INFINITY : timestamp
+}
+
 export function NotificationCenter({ onNavigate }: Props) {
   const wrapperRef = useRef<HTMLDivElement>(null)
   const [data, setData] = useState<NotificationResponse | null>(null)
@@ -95,9 +100,12 @@ export function NotificationCenter({ onNavigate }: Props) {
 
   const visible = useMemo(() => {
     const items = data?.items ?? []
-    if (filter === 'unread') return items.filter(item => !item.read)
-    if (filter === 'critical') return items.filter(item => item.severity === 'critical')
-    return items
+    const filtered = filter === 'unread'
+      ? items.filter(item => !item.read)
+      : filter === 'critical'
+        ? items.filter(item => item.severity === 'critical')
+        : items
+    return [...filtered].sort((left, right) => notificationTime(right) - notificationTime(left))
   }, [data, filter])
 
   function applyRead(keys: Set<string>) {
