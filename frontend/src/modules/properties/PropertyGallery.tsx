@@ -1,6 +1,7 @@
 import { Camera, ChevronLeft, ChevronRight, ImagePlus, Star, Trash2 } from 'lucide-react'
 import { ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ApiError, apiBlobRequest, apiRequest } from '../../api/client'
+import { ConfirmDialog } from '../../components/ConfirmDialog'
 import './property-gallery.css'
 
 type PropertyPhoto = {
@@ -25,6 +26,7 @@ export function PropertyGallery({ propertyId, canManage, onChanged }: Props) {
   const [caption, setCaption] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [deleteTarget, setDeleteTarget] = useState<PropertyPhoto | null>(null)
   const urlsRef = useRef<string[]>([])
 
   const releaseUrls = useCallback(() => {
@@ -116,25 +118,39 @@ export function PropertyGallery({ propertyId, canManage, onChanged }: Props) {
   }
 
   async function remove(photo: PropertyPhoto) {
-    if (!canManage || !window.confirm(`Excluir a foto “${photo.filename}”?`)) return
+    if (!canManage) return
     setBusy(true); setError('')
     try {
       await apiRequest(`/properties/${propertyId}/photos/${photo.id}`, { method: 'DELETE' })
+      setDeleteTarget(null)
       await refreshAfterMutation()
-    } catch (cause) { setError(cause instanceof ApiError ? cause.detail : 'Não foi possível excluir a foto.') }
-    finally { setBusy(false) }
+    } catch (cause) {
+      setError(cause instanceof ApiError ? cause.detail : 'Não foi possível excluir a foto.')
+    } finally { setBusy(false) }
   }
 
-  return <article className="panel property-media-panel property-gallery">
-    <div className="property-panel-heading property-gallery-heading">
-      <div><h2>Fotos</h2><span>{photos.length ? `${photos.length} foto(s) · ${photos.findIndex((photo) => photo.id === selected?.id) + 1} de ${photos.length}` : 'Galeria comercial do imóvel'}</span></div>
-      {canManage && <label className={`button secondary compact-button property-gallery-upload ${busy ? 'disabled' : ''}`}><ImagePlus size={14}/> Adicionar fotos<input type="file" multiple accept="image/jpeg,image/png,image/webp" disabled={busy} onChange={upload}/></label>}
-    </div>
-    {error && <div className="property-gallery-error">{error}</div>}
-    {!selected ? <div className="property-gallery-empty"><Camera size={31}/><strong>Nenhuma foto cadastrada</strong><span>Adicione fotos comerciais do imóvel. Elas ficam separadas das imagens das vistorias.</span>{canManage && <label className="button primary property-gallery-empty-action"><ImagePlus size={14}/> Selecionar fotos<input type="file" multiple accept="image/jpeg,image/png,image/webp" disabled={busy} onChange={upload}/></label>}</div> : <>
-      <div className="property-gallery-main"><img src={selected.objectUrl} alt={selected.caption || selected.filename}/>{selected.is_cover && <span className="property-gallery-cover"><Star size={12} fill="currentColor"/> Capa do anúncio</span>}</div>
-      <div className="property-gallery-thumbs" aria-label="Fotos do imóvel">{photos.map((photo) => <button type="button" className={photo.id === selected.id ? 'active' : ''} key={photo.id} onClick={() => setSelectedId(photo.id)}><img src={photo.objectUrl} alt={photo.caption || photo.filename}/>{photo.is_cover && <Star size={11} fill="currentColor"/>}</button>)}</div>
-      {canManage && <div className="property-gallery-editor"><div className="property-gallery-actions"><button className="button secondary compact-button" type="button" disabled={busy || photos[0]?.id === selected.id} onClick={() => void move(-1)}><ChevronLeft size={14}/> Anterior</button><button className="button secondary compact-button" type="button" disabled={busy || photos[photos.length - 1]?.id === selected.id} onClick={() => void move(1)}>Próxima <ChevronRight size={14}/></button><button className="button secondary compact-button" type="button" disabled={busy || selected.is_cover} onClick={() => void setCover(selected)}><Star size={14}/> Definir capa</button><button className="button secondary compact-button property-gallery-delete" type="button" disabled={busy} onClick={() => void remove(selected)}><Trash2 size={14}/> Excluir</button></div><label className="property-gallery-caption"><span>Legenda</span><div><input maxLength={300} value={caption} onChange={(event) => setCaption(event.target.value)} placeholder="Ex.: Sala integrada com ampla iluminação natural"/><button className="button secondary compact-button" type="button" disabled={busy || caption.trim() === (selected.caption ?? '')} onClick={() => void saveCaption()}>Salvar</button></div></label></div>}
-    </>}
-  </article>
+  return <>
+    <article className="panel property-media-panel property-gallery">
+      <div className="property-panel-heading property-gallery-heading">
+        <div><h2>Fotos</h2><span>{photos.length ? `${photos.length} foto(s) · ${photos.findIndex((photo) => photo.id === selected?.id) + 1} de ${photos.length}` : 'Galeria comercial do imóvel'}</span></div>
+        {canManage && <label className={`button secondary compact-button property-gallery-upload ${busy ? 'disabled' : ''}`}><ImagePlus size={14}/> Adicionar fotos<input type="file" multiple accept="image/jpeg,image/png,image/webp" disabled={busy} onChange={upload}/></label>}
+      </div>
+      {error && <div className="property-gallery-error">{error}</div>}
+      {!selected ? <div className="property-gallery-empty"><Camera size={31}/><strong>Nenhuma foto cadastrada</strong><span>Adicione fotos comerciais do imóvel. Elas ficam separadas das imagens das vistorias.</span>{canManage && <label className="button primary property-gallery-empty-action"><ImagePlus size={14}/> Selecionar fotos<input type="file" multiple accept="image/jpeg,image/png,image/webp" disabled={busy} onChange={upload}/></label>}</div> : <>
+        <div className="property-gallery-main"><img src={selected.objectUrl} alt={selected.caption || selected.filename}/>{selected.is_cover && <span className="property-gallery-cover"><Star size={12} fill="currentColor"/> Capa do anúncio</span>}</div>
+        <div className="property-gallery-thumbs" aria-label="Fotos do imóvel">{photos.map((photo) => <button type="button" className={photo.id === selected.id ? 'active' : ''} key={photo.id} onClick={() => setSelectedId(photo.id)}><img src={photo.objectUrl} alt={photo.caption || photo.filename}/>{photo.is_cover && <Star size={11} fill="currentColor"/>}</button>)}</div>
+        {canManage && <div className="property-gallery-editor"><div className="property-gallery-actions"><button className="button secondary compact-button" type="button" disabled={busy || photos[0]?.id === selected.id} onClick={() => void move(-1)}><ChevronLeft size={14}/> Anterior</button><button className="button secondary compact-button" type="button" disabled={busy || photos[photos.length - 1]?.id === selected.id} onClick={() => void move(1)}>Próxima <ChevronRight size={14}/></button><button className="button secondary compact-button" type="button" disabled={busy || selected.is_cover} onClick={() => void setCover(selected)}><Star size={14}/> Definir capa</button><button className="button secondary compact-button property-gallery-delete" type="button" disabled={busy} onClick={() => setDeleteTarget(selected)}><Trash2 size={14}/> Excluir</button></div><label className="property-gallery-caption"><span>Legenda</span><div><input maxLength={300} value={caption} onChange={(event) => setCaption(event.target.value)} placeholder="Ex.: Sala integrada com ampla iluminação natural"/><button className="button secondary compact-button" type="button" disabled={busy || caption.trim() === (selected.caption ?? '')} onClick={() => void saveCaption()}>Salvar</button></div></label></div>}
+      </>}
+    </article>
+    <ConfirmDialog
+      open={Boolean(deleteTarget)}
+      title="Excluir foto"
+      description={deleteTarget ? `Deseja excluir a foto “${deleteTarget.filename}”? Essa ação remove a imagem da galeria comercial do imóvel.` : ''}
+      confirmLabel="Excluir foto"
+      tone="danger"
+      busy={busy}
+      onCancel={() => { if (!busy) setDeleteTarget(null) }}
+      onConfirm={() => { if (deleteTarget) void remove(deleteTarget) }}
+    />
+  </>
 }
