@@ -52,6 +52,7 @@ class SiteThemeConfig(BaseModel):
     border: str = Field(pattern=r"^#[0-9A-Fa-f]{6}$")
     headingFont: SiteFont = "playfair"
     bodyFont: SiteFont = "inter"
+    heroSize: Literal["compact", "standard", "expanded"] = "compact"
     heroKicker: str = Field(min_length=1, max_length=80)
     heroTitle: str = Field(min_length=1, max_length=160)
     heroSubtitle: str = Field(min_length=1, max_length=260)
