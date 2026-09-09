@@ -23,7 +23,13 @@ def test_site_theme_is_controlled_persisted_and_exposed_publicly(client, identit
     assert saved == customized
     assert assert_response(client.get("/api/settings/appearance/site")).json() == customized
 
-    owner = create_person(client, name="Proprietário Site Theme", document="72727272727", role_keys=["owner"])
+    owner = create_person(
+        client,
+        name="Proprietário Site Theme",
+        document="72727272727",
+        email="owner.site.theme@imob.invalid",
+        role_keys=["owner"],
+    )
     property_item = create_property(client, owner["id"])
     publish_property(client, property_item["id"])
     public_profile = assert_response(client.get(f"/api/public/sites/{identity['organization_id']}")).json()
