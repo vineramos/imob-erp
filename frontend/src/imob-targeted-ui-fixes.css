@@ -1,0 +1,76 @@
+/* Imob ERP · correções visuais pontuais validadas em revisão de UX.
+   Importado por último para não redesenhar componentes existentes. */
+
+/* Campos de data: mantém o seletor nativo, mas remove realces/sombras que
+   destoavam dos demais inputs do Design System. */
+.workspace .field input[type="date"],
+.workspace .field input[type="datetime-local"] {
+  box-shadow: none !important;
+  background-color: var(--surface) !important;
+  background-image: none !important;
+  color: var(--text) !important;
+}
+
+.workspace .field input[type="date"]::-webkit-datetime-edit,
+.workspace .field input[type="datetime-local"]::-webkit-datetime-edit {
+  color: inherit;
+  background: transparent;
+}
+
+.workspace .field input[type="date"]::-webkit-calendar-picker-indicator,
+.workspace .field input[type="datetime-local"]::-webkit-calendar-picker-indicator {
+  opacity: .58;
+  cursor: pointer;
+}
+
+/* Parceiros de manutenção: o total é metadado da toolbar, não uma ação. */
+.maintenance-toolbar {
+  flex-wrap: wrap;
+}
+
+.maintenance-toolbar > .portfolio-search {
+  flex: 1 1 320px;
+  min-width: min(280px, 100%);
+}
+
+.maintenance-toolbar .heading-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex: 0 0 auto;
+}
+
+.maintenance-toolbar-count {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  white-space: nowrap;
+  color: var(--text-muted);
+  font-size: 8px !important;
+  font-weight: 500;
+  line-height: 1.2;
+  letter-spacing: .01em;
+}
+
+/* Orçamentos: o prefixo monetário nunca encolhe nem quebra; somente o input
+   absorve a largura disponível. */
+.quote-pricing-row label span {
+  flex: 0 0 auto;
+  white-space: nowrap;
+  padding: 0 0 0 8px !important;
+  line-height: 1;
+}
+
+.quote-pricing-row label input {
+  flex: 1 1 0 !important;
+  width: auto !important;
+  min-width: 0 !important;
+}
+
+@media (max-width: 820px) {
+  .maintenance-toolbar .heading-actions {
+    width: 100%;
+  }
+}
