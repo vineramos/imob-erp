@@ -31,6 +31,32 @@ class ThemeConfig(BaseModel):
     tableDensity: Literal["compact", "normal", "comfortable"] = "normal"
 
 
+SiteFont = Literal["playfair", "lora", "merriweather", "inter", "manrope", "montserrat", "poppins", "dm-sans", "georgia"]
+
+
+class SiteThemeConfig(BaseModel):
+    """Identidade visual segura do site público, sem CSS livre."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    companyShortName: str = Field(min_length=1, max_length=40)
+    logoUrl: str = Field(default="", max_length=500)
+    faviconUrl: str = Field(default="", max_length=500)
+    primary: str = Field(pattern=r"^#[0-9A-Fa-f]{6}$")
+    primaryStrong: str = Field(pattern=r"^#[0-9A-Fa-f]{6}$")
+    primarySoft: str = Field(pattern=r"^#[0-9A-Fa-f]{6}$")
+    background: str = Field(pattern=r"^#[0-9A-Fa-f]{6}$")
+    surface: str = Field(pattern=r"^#[0-9A-Fa-f]{6}$")
+    text: str = Field(pattern=r"^#[0-9A-Fa-f]{6}$")
+    textMuted: str = Field(pattern=r"^#[0-9A-Fa-f]{6}$")
+    border: str = Field(pattern=r"^#[0-9A-Fa-f]{6}$")
+    headingFont: SiteFont = "playfair"
+    bodyFont: SiteFont = "inter"
+    heroKicker: str = Field(min_length=1, max_length=80)
+    heroTitle: str = Field(min_length=1, max_length=160)
+    heroSubtitle: str = Field(min_length=1, max_length=260)
+
+
 class AddressPayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
