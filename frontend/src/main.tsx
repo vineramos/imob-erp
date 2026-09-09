@@ -30,6 +30,7 @@ import './imob-final-ux.css'
 import './modules/properties/property-owner-share.css'
 import './imob-targeted-ui-fixes.css'
 import './public-site-premium.css'
+import './public-site-hero-options.css'
 
 installBrazilianInputFormatting()
 installGlobalModalEscape()
