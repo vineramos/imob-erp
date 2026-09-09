@@ -169,7 +169,7 @@ def list_v2(property_id: UUID | None = None, context: UserContext = Depends(requ
 
 @router.post("/maintenance-v2", response_model=MaintenanceV2Response, status_code=status.HTTP_201_CREATED)
 def create_v2(payload: MaintenanceOpenRequest, request: Request, context: UserContext = Depends(require_permission("maintenance.manage")), db: Session = Depends(get_db)) -> MaintenanceV2Response:
-    item = MaintenanceRequest(organization_id=context.user.organization_id, property_id=payload.property_id, title=payload.title.strip(), description=payload.description.strip(), responsibility="pending", approval_required=True, services=[], quotes=[], history=[], created_by_user_id=context.user.id)
+    item = MaintenanceRequest(organization_id=context.user.organization_id, property_id=payload.property_id, title=payload.title.strip(), description=payload.description.strip(), responsibility="owner", approval_required=True, services=[], quotes=[], history=[], created_by_user_id=context.user.id)
     _apply(db, context.user.organization_id, item, payload); db.add(item); db.flush(); _history(item, context, "Chamado aberto", item.title); _audit(db, request, context, item, "maintenance.created", after={"status": item.status, "property_id": str(item.property_id)}); db.commit(); db.refresh(item); return _response(db, item)
 
 
