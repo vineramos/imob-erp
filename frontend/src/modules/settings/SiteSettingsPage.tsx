@@ -4,6 +4,7 @@ import { ApiError, apiRequest } from '../../api/client'
 import './site-settings.css'
 
 type SiteFont = 'playfair' | 'lora' | 'merriweather' | 'inter' | 'manrope' | 'montserrat' | 'poppins' | 'dm-sans' | 'georgia'
+type HeroSize = 'compact' | 'standard' | 'expanded'
 
 type SiteTheme = {
   companyShortName: string
@@ -19,6 +20,7 @@ type SiteTheme = {
   border: string
   headingFont: SiteFont
   bodyFont: SiteFont
+  heroSize: HeroSize
   heroKicker: string
   heroTitle: string
   heroSubtitle: string
@@ -52,7 +54,7 @@ const defaultTheme: SiteTheme = {
   companyShortName: 'Imob', logoUrl: '', faviconUrl: '',
   primary: '#123a6b', primaryStrong: '#0d2d55', primarySoft: '#edf4fb',
   background: '#ffffff', surface: '#ffffff', text: '#11213a', textMuted: '#657187', border: '#e3e8ef',
-  headingFont: 'playfair', bodyFont: 'inter',
+  headingFont: 'playfair', bodyFont: 'inter', heroSize: 'compact',
   heroKicker: 'ENCONTRE O SEU LUGAR',
   heroTitle: 'Viva o próximo capítulo da sua história',
   heroSubtitle: 'Casas, apartamentos e imóveis especiais para alugar nas melhores regiões.',
@@ -123,6 +125,10 @@ export function SiteSettingsPage({ canEdit }: { canEdit: boolean }) {
           <label><span>URL do favicon · opcional</span><input disabled={!canEdit} value={form.faviconUrl} maxLength={500} placeholder="https://..." onChange={(e) => patch('faviconUrl', e.target.value)}/></label>
         </div></article>
 
+        <article className="panel site-settings-section"><div className="site-settings-section-head"><div><span className="eyebrow">Layout da Home</span><h2>Banner inicial</h2><p>Ajuste a presença da foto principal sem alterar a estrutura do site.</p></div></div><div className="site-settings-grid">
+          <label><span>Tamanho do banner inicial</span><select disabled={!canEdit} value={form.heroSize} onChange={(e) => patch('heroSize', e.target.value as HeroSize)}><option value="compact">Compacto · padrão</option><option value="standard">Padrão</option><option value="expanded">Expandido</option></select></label>
+        </div></article>
+
         <article className="panel site-settings-section"><div className="site-settings-section-head"><div><span className="eyebrow">Tipografia</span><h2>Fontes controladas</h2><p>Uma lista limitada mantém o site consistente e evita combinações ruins.</p></div></div><div className="site-settings-grid">
           <label><span>Fonte dos títulos</span><select disabled={!canEdit} value={form.headingFont} onChange={(e) => patch('headingFont', e.target.value as SiteFont)}>{fontOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>
           <label><span>Fonte dos textos</span><select disabled={!canEdit} value={form.bodyFont} onChange={(e) => patch('bodyFont', e.target.value as SiteFont)}>{fontOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>
@@ -133,7 +139,7 @@ export function SiteSettingsPage({ canEdit }: { canEdit: boolean }) {
         </div></article>
       </form>
 
-      <aside className="panel site-live-preview" style={previewStyle}><div className="site-preview-title"><Eye size={16}/><div><strong>Prévia ao vivo</strong><span>Representação reduzida da nova Home</span></div></div><div className="site-preview-browser"><div className="site-preview-nav"><strong>{form.companyShortName || 'Imob'}</strong><span>Alugar</span><span>Bairros</span><span>Serviços</span><button type="button">Anunciar imóvel</button></div><div className="site-preview-hero"><div className="site-preview-photo"/><div className="site-preview-copy"><small>{form.heroKicker}</small><h3>{form.heroTitle}</h3><p>{form.heroSubtitle}</p></div><div className="site-preview-search"><span>Cidade ou bairro</span><span>Tipo de imóvel</span><span>Faixa de preço</span><button type="button">Buscar imóveis</button></div></div><div className="site-preview-list"><div className="site-preview-list-head"><h4>Imóveis em destaque</h4><span>Ver todos →</span></div><div className="site-preview-cards">{[1,2,3].map((n) => <div key={n}><i/><strong>Apartamento em destaque</strong><span>R$ 2.800 / mês</span><small>2 quartos · 1 vaga</small></div>)}</div></div></div><p className="site-preview-note">A foto real do topo é a capa de um imóvel publicado. Nenhuma imagem é duplicada nas configurações.</p></aside>
+      <aside className="panel site-live-preview" style={previewStyle}><div className="site-preview-title"><Eye size={16}/><div><strong>Prévia ao vivo</strong><span>Representação reduzida da nova Home</span></div></div><div className="site-preview-browser"><div className="site-preview-nav"><strong>{form.companyShortName || 'Imob'}</strong><span>Alugar</span><span>Bairros</span><span>Serviços</span><button type="button">Anunciar imóvel</button></div><div className={`site-preview-hero site-preview-hero-${form.heroSize}`}><div className="site-preview-photo"/><div className="site-preview-copy"><small>{form.heroKicker}</small><h3>{form.heroTitle}</h3><p>{form.heroSubtitle}</p></div><div className="site-preview-search"><span>Cidade ou bairro</span><span>Tipo de imóvel</span><span>Faixa de preço</span><button type="button">Buscar imóveis</button></div></div><div className="site-preview-list"><div className="site-preview-list-head"><h4>Imóveis em destaque</h4><span>Ver todos →</span></div><div className="site-preview-cards">{[1,2,3].map((n) => <div key={n}><i/><strong>Apartamento em destaque</strong><span>R$ 2.800 / mês</span><small>2 quartos · 1 vaga</small></div>)}</div></div></div><p className="site-preview-note">A foto real do topo é a capa de um imóvel publicado. Nenhuma imagem é duplicada nas configurações.</p></aside>
     </div>
   </section>
 }
