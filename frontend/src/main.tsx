@@ -28,6 +28,7 @@ import './imob-sprint-polish.css'
 import './public-site-compact-hero.css'
 import './imob-final-ux.css'
 import './modules/properties/property-owner-share.css'
+import './imob-targeted-ui-fixes.css'
 
 installBrazilianInputFormatting()
 installGlobalModalEscape()
