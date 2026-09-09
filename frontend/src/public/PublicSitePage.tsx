@@ -69,6 +69,12 @@ function fontStack(value: string, fallback: string) {
 
 type Props = { organizationId: string; slug?: string | null }
 type PropertyTypeFilter = 'all' | 'apartment' | 'house' | 'commercial' | 'land' | 'studio' | 'other'
+type HeroSize = 'compact' | 'standard' | 'expanded'
+
+function heroSizeValue(theme: Record<string, unknown>): HeroSize {
+  const value = themeString(theme, 'heroSize', 'compact')
+  return value === 'standard' || value === 'expanded' ? value : 'compact'
+}
 
 function PropertyCard({ organizationId, item, badge }: { organizationId: string; item: PublicProperty; badge?: string }) {
   return <a className="public-property-card" href={`/site/${organizationId}/imoveis/${item.slug}`}>
@@ -160,6 +166,7 @@ export function PublicSitePage({ organizationId, slug }: Props) {
   const heroKicker = themeString(theme, 'heroKicker', 'ENCONTRE O SEU LUGAR')
   const heroTitle = themeString(theme, 'heroTitle', 'Viva o próximo capítulo da sua história')
   const heroSubtitle = themeString(theme, 'heroSubtitle', 'Casas, apartamentos e imóveis especiais para alugar nas melhores regiões.')
+  const heroSize = heroSizeValue(theme)
   const headingFont = fontStack(themeString(theme, 'headingFont', 'playfair'), 'Georgia, "Times New Roman", serif')
   const bodyFont = fontStack(themeString(theme, 'bodyFont', 'inter'), 'Inter, Aptos, sans-serif')
   const siteStyle = {
@@ -185,7 +192,7 @@ export function PublicSitePage({ organizationId, slug }: Props) {
   return <main className="public-site public-site-premium" style={siteStyle}>
     <header className="public-header">{brand}<nav className="public-nav"><a href="#imoveis">Alugar</a><a href="#bairros">Bairros</a><a href="#servicos">Serviços</a><a href="#anunciar">Anunciar</a></nav><div className="public-header-actions">{contactActions}<a className="public-announce" href="#anunciar">Anunciar imóvel</a></div></header>
 
-    <section className={`public-hero public-hero-premium ${featured ? 'has-featured' : ''}`}>
+    <section className={`public-hero public-hero-premium public-hero-size-${heroSize} ${featured ? 'has-featured' : ''}`}>
       {featured && <div className="public-hero-media" aria-hidden="true"><PublicPropertyCardMedia organizationId={organizationId} item={featured}/></div>}
       <div className="public-hero-overlay"/><div className="public-hero-copy"><span className="public-kicker">{heroKicker}</span><h1>{heroTitle}</h1><p>{heroSubtitle}</p><div className="public-hero-trust"><span/><small>MAIS QUE IMÓVEIS, NOVOS COMEÇOS</small></div></div>
       <form className="public-search public-search-premium" onSubmit={searchSubmit}><div className="public-search-tabs"><strong>Alugar</strong><span>Encontre seu próximo lugar</span></div><label className="public-search-main"><MapPin size={17}/><span><small>Cidade ou bairro</small><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Ex.: Centro, Curitiba"/></span></label><label><span>Tipo de imóvel</span><select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value as PropertyTypeFilter)}><option value="all">Todos</option><option value="apartment">Apartamento</option><option value="house">Casa</option><option value="commercial">Comercial</option><option value="land">Terreno</option><option value="studio">Studio</option><option value="other">Outros</option></select></label><label><span>Faixa de preço</span><select value={maxRent} onChange={(e) => setMaxRent(Number(e.target.value))}><option value={0}>Qualquer valor</option><option value={2000}>Até R$ 2.000</option><option value={3000}>Até R$ 3.000</option><option value={5000}>Até R$ 5.000</option><option value={8000}>Até R$ 8.000</option><option value={10000}>Até R$ 10.000</option></select></label><label><span>Quartos</span><select value={bedrooms} onChange={(e) => setBedrooms(Number(e.target.value))}><option value={0}>Todos</option><option value={1}>1+</option><option value={2}>2+</option><option value={3}>3+</option><option value={4}>4+</option></select></label><button type="submit"><Search size={17}/> Buscar imóveis</button></form>
