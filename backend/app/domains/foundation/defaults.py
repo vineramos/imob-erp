@@ -22,6 +22,28 @@ ERP_THEME_DEFAULT = {
     "tableDensity": "normal",
 }
 
+# Identidade do SITE PÚBLICO. Fica separada do tema do ERP para permitir uma
+# presença comercial mais editorial sem alterar a interface operacional.
+# Somente valores controlados são persistidos: nada de CSS livre ou scripts.
+SITE_THEME_DEFAULT = {
+    "companyShortName": "Imob",
+    "logoUrl": "",
+    "faviconUrl": "",
+    "primary": "#123a6b",
+    "primaryStrong": "#0d2d55",
+    "primarySoft": "#edf4fb",
+    "background": "#ffffff",
+    "surface": "#ffffff",
+    "text": "#11213a",
+    "textMuted": "#657187",
+    "border": "#e3e8ef",
+    "headingFont": "playfair",
+    "bodyFont": "inter",
+    "heroKicker": "ENCONTRE O SEU LUGAR",
+    "heroTitle": "Viva o próximo capítulo da sua história",
+    "heroSubtitle": "Casas, apartamentos e imóveis especiais para alugar nas melhores regiões.",
+}
+
 # Padrões já validados para novos registros/contratos. O princípio da aplicação
 # continua sendo: configuração define o padrão; cada registro operacional guarda
 # sua própria regra e alterações posteriores não são retroativas.
