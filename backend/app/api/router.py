@@ -51,6 +51,7 @@ from app.api.routes.publication import router as publication_router
 from app.api.routes.reports import router as reports_router
 from app.api.routes.search import router as search_router
 from app.api.routes.signature_events import router as signature_events_router
+from app.api.routes.site_settings import router as site_settings_router
 from app.api.routes.tenant_portal import admin_router as tenant_portal_admin_router
 from app.api.routes.tenant_portal import public_router as tenant_portal_router
 from app.api.routes.tenant_portal_account import router as tenant_portal_account_router
@@ -90,6 +91,7 @@ api_router.include_router(health_router)
 api_router.include_router(auth_proxy_router)
 api_router.include_router(branding_router)
 api_router.include_router(foundation_router)
+api_router.include_router(site_settings_router)
 api_router.include_router(portfolio_router)
 api_router.include_router(people_lifecycle_router)
 api_router.include_router(capture_workflow_router)
