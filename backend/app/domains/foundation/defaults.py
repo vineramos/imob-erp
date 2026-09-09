@@ -39,6 +39,7 @@ SITE_THEME_DEFAULT = {
     "border": "#e3e8ef",
     "headingFont": "playfair",
     "bodyFont": "inter",
+    "heroSize": "compact",
     "heroKicker": "ENCONTRE O SEU LUGAR",
     "heroTitle": "Viva o próximo capítulo da sua história",
     "heroSubtitle": "Casas, apartamentos e imóveis especiais para alugar nas melhores regiões.",
