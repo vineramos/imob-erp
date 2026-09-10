@@ -47,6 +47,7 @@ from app.api.routes.person_profile import router as person_profile_router
 from app.api.routes.portfolio import router as portfolio_router
 from app.api.routes.property_media import router as property_media_router
 from app.api.routes.public_captures import router as public_captures_router
+from app.api.routes.public_map import router as public_map_router
 from app.api.routes.publication import router as publication_router
 from app.api.routes.reports import router as reports_router
 from app.api.routes.search import router as search_router
@@ -145,5 +146,6 @@ api_router.include_router(inter_webhook_router)
 api_router.include_router(signature_events_router)
 api_router.include_router(integrations_router)
 api_router.include_router(public_captures_router)
+api_router.include_router(public_map_router)
 api_router.include_router(publication_router)
 api_router.include_router(commercial_router)
