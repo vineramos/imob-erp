@@ -5,6 +5,7 @@ import { ThemeProvider } from './theme/ThemeProvider'
 import { installBrazilianInputFormatting } from './utils/brFormat'
 import { installGlobalModalEscape } from './utils/modalEscape'
 import { installPublicSiteLinkEnhancer } from './utils/publicSiteLinks'
+import { installPublicNeighborhoodMap } from './utils/publicNeighborhoodMap'
 import { installAuthenticatedPdfLinkHandler } from './utils/authenticatedPdfLinks'
 import './styles.css'
 import './settings.css'
@@ -31,10 +32,12 @@ import './modules/properties/property-owner-share.css'
 import './imob-targeted-ui-fixes.css'
 import './public-site-premium.css'
 import './public-site-hero-options.css'
+import './public-neighborhood-map.css'
 
 installBrazilianInputFormatting()
 installGlobalModalEscape()
 installPublicSiteLinkEnhancer()
+installPublicNeighborhoodMap()
 installAuthenticatedPdfLinkHandler()
 
 createRoot(document.getElementById('root')!).render(
