@@ -1,0 +1,72 @@
+/* Ajuste defensivo dos filtros da busca principal do site público.
+ * Mantém rótulo e valor selecionado legíveis dentro dos campos compactos.
+ */
+.public-site-premium .public-search-premium label:not(.public-search-main) {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) !important;
+  grid-template-rows: auto auto !important;
+  align-content: center !important;
+  align-items: center !important;
+  gap: 2px !important;
+  padding: 6px 12px !important;
+  min-width: 0 !important;
+  overflow: hidden !important;
+}
+
+.public-site-premium .public-search-premium label:not(.public-search-main) > span {
+  display: block !important;
+  flex: none !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  font-size: 8px !important;
+  font-weight: 600 !important;
+  line-height: 1.05 !important;
+  color: var(--site-muted) !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+
+.public-site-premium .public-search-premium label:not(.public-search-main) > select {
+  display: block !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  height: 20px !important;
+  min-height: 20px !important;
+  max-height: 20px !important;
+  padding: 0 22px 0 0 !important;
+  margin: 0 !important;
+  border: 0 !important;
+  background-color: transparent !important;
+  font: 600 11px/20px var(--site-body-font) !important;
+  color: var(--site-ink) !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+
+.public-site-premium .public-search-premium .public-search-main > span {
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: center !important;
+  gap: 1px !important;
+}
+
+.public-site-premium .public-search-premium .public-search-main > span > small {
+  line-height: 1.05 !important;
+  white-space: nowrap !important;
+}
+
+.public-site-premium .public-search-premium .public-search-main input {
+  line-height: 18px !important;
+}
+
+@media (max-width: 900px) {
+  .public-site-premium .public-search-premium label:not(.public-search-main) > span {
+    font-size: 8px !important;
+  }
+
+  .public-site-premium .public-search-premium label:not(.public-search-main) > select {
+    font-size: 10px !important;
+  }
+}
