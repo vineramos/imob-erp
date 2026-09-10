@@ -5,28 +5,30 @@
  */
 @media (min-width: 861px) {
   .public-site-premium .public-hero-premium.public-hero-size-compact {
-    height: auto !important;
-    min-height: 360px !important;
+    height: 300px !important;
+    min-height: 300px !important;
+    max-height: 300px !important;
   }
 
   .public-site-premium .public-hero-premium.public-hero-size-compact .public-hero-copy {
-    padding-top: 44px !important;
-    padding-bottom: 108px !important;
+    padding-top: 28px !important;
+    padding-bottom: 56px !important;
   }
 
   .public-site-premium .public-hero-premium.public-hero-size-compact .public-hero-copy h1 {
-    font-size: clamp(38px, 3.35vw, 56px) !important;
-    margin-top: 9px !important;
-    margin-bottom: 11px !important;
+    font-size: clamp(32px, 2.65vw, 44px) !important;
+    line-height: .98 !important;
+    margin-top: 7px !important;
+    margin-bottom: 8px !important;
   }
 
   .public-site-premium .public-hero-premium.public-hero-size-compact .public-hero-copy > p {
-    font-size: 13px !important;
-    line-height: 1.55 !important;
+    font-size: 12px !important;
+    line-height: 1.45 !important;
   }
 
   .public-site-premium .public-hero-premium.public-hero-size-compact .public-hero-trust {
-    margin-top: 15px !important;
+    margin-top: 10px !important;
   }
 
   .public-site-premium .public-hero-premium.public-hero-size-standard {
