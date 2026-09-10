@@ -33,6 +33,7 @@ import './imob-targeted-ui-fixes.css'
 import './public-site-premium.css'
 import './public-site-hero-options.css'
 import './public-neighborhood-map.css'
+import './public-site-service-grid-fix.css'
 
 installBrazilianInputFormatting()
 installGlobalModalEscape()
