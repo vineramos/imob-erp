@@ -1,0 +1,24 @@
+.public-site-premium .public-map-art:has(.public-live-map-shell){background:var(--site-surface)}
+.public-site-premium .public-map-art:has(.public-live-map-shell):before,
+.public-site-premium .public-map-art:has(.public-live-map-shell):after{display:none}
+.public-site-premium .public-live-map-shell{position:absolute;inset:0;overflow:hidden;background:#eef3f5}
+.public-site-premium .public-live-map-canvas{position:absolute;inset:0;z-index:1}
+.public-site-premium .public-live-map-canvas .leaflet-control-zoom{border:1px solid color-mix(in srgb,var(--site-line) 86%,transparent);border-radius:10px;overflow:hidden;box-shadow:0 8px 20px rgba(19,40,61,.08)}
+.public-site-premium .public-live-map-canvas .leaflet-control-zoom a{color:var(--site-primary-strong);border:0;font:500 18px/30px var(--site-body-font)}
+.public-site-premium .public-live-map-canvas .leaflet-control-attribution{font:500 8px var(--site-body-font);color:var(--site-muted);background:rgba(255,255,255,.86)}
+.public-site-premium .public-map-price-icon{background:transparent!important;border:0!important}
+.public-site-premium .public-map-price-icon span{display:flex;align-items:center;justify-content:center;width:max-content;min-width:58px;max-width:92px;height:30px;padding:0 9px;border:2px solid #fff;border-radius:999px;background:var(--site-primary);color:#fff;font:750 10px var(--site-body-font);white-space:nowrap;box-shadow:0 7px 18px rgba(13,45,85,.24);transform:translateX(calc((78px - 100%)/2));transition:transform .16s ease,box-shadow .16s ease}
+.public-site-premium .public-map-price-icon span:hover{transform:translateX(calc((78px - 100%)/2)) translateY(-2px);box-shadow:0 10px 22px rgba(13,45,85,.3)}
+.public-site-premium .public-live-map-card-host{position:absolute;z-index:500;left:18px;right:18px;bottom:18px;pointer-events:none}
+.public-site-premium .public-map-property-card{display:flex;align-items:center;justify-content:space-between;gap:18px;width:min(420px,calc(100% - 20px));padding:13px 14px 13px 16px;border:1px solid rgba(19,58,107,.12);border-radius:13px;background:rgba(255,255,255,.96);box-shadow:0 16px 34px rgba(20,38,57,.18);backdrop-filter:blur(12px);pointer-events:auto}
+.public-site-premium .public-map-property-copy{display:flex;flex-direction:column;min-width:0}
+.public-site-premium .public-map-property-copy>span{font-size:7px;font-weight:800;letter-spacing:.13em;color:var(--site-primary);margin-bottom:3px}
+.public-site-premium .public-map-property-copy>strong{font-size:12px;color:var(--site-ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.public-site-premium .public-map-property-copy>small{font-size:8px;color:var(--site-muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.public-site-premium .public-map-property-copy>b{font-size:12px;color:var(--site-primary-strong);margin-top:6px}
+.public-site-premium .public-map-property-copy>p{font-size:8px;color:var(--site-muted);margin:2px 0 0}
+.public-site-premium .public-map-property-link{display:inline-flex;align-items:center;justify-content:center;min-height:34px;padding:0 11px;border-radius:9px;background:var(--site-primary);color:#fff!important;font-size:9px;font-weight:750;white-space:nowrap}
+.public-site-premium .public-live-map-privacy{position:absolute;z-index:500;right:14px;top:14px;display:inline-flex;align-items:center;min-height:26px;padding:0 9px;border:1px solid rgba(19,58,107,.1);border-radius:999px;background:rgba(255,255,255,.94);box-shadow:0 6px 16px rgba(20,38,57,.09);color:var(--site-muted);font:650 8px var(--site-body-font)}
+.public-site-premium .public-live-map-loading{position:absolute;z-index:600;inset:0;display:grid;place-items:center;background:linear-gradient(135deg,#f7f9f5 0%,#eaf2f4 48%,#dbe9ef 100%);color:var(--site-muted);font:650 10px var(--site-body-font)}
+@media(max-width:860px){.public-site-premium .public-map-art{min-height:360px}.public-site-premium .public-map-property-card{width:100%;max-width:none}.public-site-premium .public-live-map-privacy{top:10px;right:10px}.public-site-premium .public-live-map-card-host{left:10px;right:10px;bottom:10px}}
+@media(max-width:560px){.public-site-premium .public-map-property-card{align-items:flex-end;gap:8px;padding:11px}.public-site-premium .public-map-property-copy>strong{font-size:11px}.public-site-premium .public-map-property-link{padding:0 9px}.public-site-premium .public-live-map-privacy{font-size:7px}}
