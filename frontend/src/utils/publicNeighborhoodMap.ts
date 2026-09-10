@@ -4,11 +4,18 @@ import { runtimeConfig } from '../config/runtime'
 
 type PublicMapProperty = PublicProperty & { cover_photo_url?: string | null }
 type Coordinate = [number, number]
+type MapPrecision = 'exact' | 'street' | 'postal_code' | 'neighborhood'
+type PublicMapPositionResponse = {
+  latitude: number
+  longitude: number
+  precision: Exclude<MapPrecision, 'neighborhood'>
+}
 type PreparedMapProperty = {
   item: PublicMapProperty
   position: Coordinate
   groupKey: string
   neighborhood: string
+  precision: MapPrecision
 }
 
 declare global {
@@ -120,12 +127,25 @@ async function geocodeNeighborhood(neighborhood: string, city: string, state: st
   return task
 }
 
-function propertyOffset(code: string, index: number): Coordinate {
-  let hash = 0
-  for (const char of `${code}-${index}`) hash = ((hash << 5) - hash + char.charCodeAt(0)) | 0
-  const angle = (Math.abs(hash) % 360) * Math.PI / 180
-  const ring = 0.0017 + (Math.abs(hash >> 5) % 4) * 0.00055
-  return [Math.sin(angle) * ring, Math.cos(angle) * ring]
+async function exactPropertyCoordinate(organizationId: string, item: PublicMapProperty): Promise<{ position: Coordinate; precision: MapPrecision } | null> {
+  try {
+    const response = await publicApiRequest<PublicMapPositionResponse>(
+      `/public/sites/${organizationId}/properties/${encodeURIComponent(item.slug)}/map-position`,
+    )
+    const latitude = Number(response.latitude)
+    const longitude = Number(response.longitude)
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null
+    return { position: [latitude, longitude], precision: response.precision }
+  } catch {
+    return null
+  }
+}
+
+function privacyLabel(prepared: PreparedMapProperty[]) {
+  if (prepared.length > 0 && prepared.every((entry) => entry.precision === 'exact')) {
+    return 'Ponto exato no mapa · número do endereço oculto'
+  }
+  return 'Número do endereço oculto'
 }
 
 function priceIcon(L: any, item: PublicMapProperty, active = false) {
@@ -238,7 +258,7 @@ function openExplorerModal(L: any, organizationId: string, prepared: PreparedMap
 
   const privacy = document.createElement('span')
   privacy.className = 'public-map-explorer-privacy'
-  privacy.textContent = 'Localização aproximada por bairro'
+  privacy.textContent = privacyLabel(prepared)
 
   const close = document.createElement('button')
   close.type = 'button'
@@ -524,13 +544,6 @@ async function enhanceMap(target: HTMLElement) {
     const rentals = items.filter((item) => item.purpose === 'rent' && item.address.neighborhood && item.address.city)
     if (!rentals.length) { target.dataset.liveMap = 'empty'; return }
 
-    const groups = new Map<string, PublicMapProperty[]>()
-    rentals.forEach((item) => {
-      const key = normalizedGeoKey(String(item.address.neighborhood || ''), String(item.address.city || ''), String(item.address.state || ''))
-      const existing = groups.get(key) ?? []
-      existing.push(item); groups.set(key, existing)
-    })
-
     const shell = document.createElement('div')
     shell.className = 'public-live-map-shell'
     const mapHost = document.createElement('div')
@@ -540,7 +553,7 @@ async function enhanceMap(target: HTMLElement) {
     cardHost.className = 'public-live-map-card-host'
     const badge = document.createElement('span')
     badge.className = 'public-live-map-privacy'
-    badge.textContent = 'Localização aproximada por bairro'
+    badge.textContent = 'Número do endereço oculto'
     const expand = document.createElement('button')
     expand.type = 'button'
     expand.className = 'public-live-map-expand'
@@ -559,26 +572,47 @@ async function enhanceMap(target: HTMLElement) {
 
     const coordinates: Coordinate[] = []
     const prepared: PreparedMapProperty[] = []
+    const neighborhoodFallbacks = new Map<string, Coordinate | null>()
     let firstProperty: PublicMapProperty | null = null
 
-    for (const [groupKey, properties] of groups.entries()) {
-      const sample = properties[0]
-      const center = await geocodeNeighborhood(
-        String(sample.address.neighborhood || ''),
-        String(sample.address.city || ''),
-        String(sample.address.state || ''),
+    for (const item of rentals) {
+      if (!target.isConnected) return
+      const groupKey = normalizedGeoKey(
+        String(item.address.neighborhood || ''),
+        String(item.address.city || ''),
+        String(item.address.state || ''),
       )
-      if (!center || !target.isConnected) continue
 
-      properties.forEach((item, index) => {
-        const offset = propertyOffset(item.code, index)
-        const position: Coordinate = [center[0] + offset[0], center[1] + offset[1]]
-        coordinates.push(position)
-        prepared.push({ item, position, groupKey, neighborhood: String(item.address.neighborhood || '') })
-        const marker = L.marker(position, { icon: priceIcon(L, item) }).addTo(map)
-        marker.on('click', () => buildCard(cardHost, organizationId, item))
-        if (!firstProperty) firstProperty = item
+      const exact = await exactPropertyCoordinate(organizationId, item)
+      let position = exact?.position ?? null
+      let precision: MapPrecision = exact?.precision ?? 'neighborhood'
+
+      if (!position) {
+        let fallback = neighborhoodFallbacks.get(groupKey)
+        if (fallback === undefined) {
+          fallback = await geocodeNeighborhood(
+            String(item.address.neighborhood || ''),
+            String(item.address.city || ''),
+            String(item.address.state || ''),
+          )
+          neighborhoodFallbacks.set(groupKey, fallback)
+        }
+        position = fallback
+        precision = 'neighborhood'
+      }
+
+      if (!position || !target.isConnected) continue
+      coordinates.push(position)
+      prepared.push({
+        item,
+        position,
+        groupKey,
+        neighborhood: String(item.address.neighborhood || ''),
+        precision,
       })
+      const marker = L.marker(position, { icon: priceIcon(L, item) }).addTo(map)
+      marker.on('click', () => buildCard(cardHost, organizationId, item))
+      if (!firstProperty) firstProperty = item
     }
 
     loading.remove()
@@ -588,6 +622,7 @@ async function enhanceMap(target: HTMLElement) {
       return
     }
 
+    badge.textContent = privacyLabel(prepared)
     if (coordinates.length === 1) map.setView(coordinates[0], 14)
     else map.fitBounds(L.latLngBounds(coordinates), { padding: [36, 36], maxZoom: 14 })
     if (firstProperty) buildCard(cardHost, organizationId, firstProperty)
