@@ -10,7 +10,7 @@ from uuid import UUID
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
@@ -187,8 +187,8 @@ def public_property_map_position(
             "longitude": longitude,
             "precision": precision,
             "source": "nominatim",
-            "geocoded_at": __import__("sqlalchemy").func.now(),
-            "updated_at": __import__("sqlalchemy").func.now(),
+            "geocoded_at": func.now(),
+            "updated_at": func.now(),
         },
     )
     db.execute(statement)
