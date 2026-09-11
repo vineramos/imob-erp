@@ -21,6 +21,7 @@ from tests.helpers import (
     create_signed_administration_contract,
     decimal,
     first_month,
+    midday,
 )
 
 
@@ -91,7 +92,7 @@ def test_lease_charge_composition_generates_only_scheduled_items_and_third_party
     annual = assert_response(client.post("/api/finance/charges/generate", json={"competence":annual_competence.isoformat(),"lease_contract_id":created["id"]})).json()
     assert decimal(annual["charges"][0]["gross_amount"]) == Decimal("3530.00")
 
-    paid = assert_response(client.post(f"/api/finance/charges/{charge['id']}/payment", json={"paid_amount":"3530.00","paid_at":datetime.now(timezone.utc).isoformat(),"payment_method":"pix","payment_reference":"TEST-ENCARGOS","notes":None})).json()
+    paid = assert_response(client.post(f"/api/finance/charges/{charge['id']}/payment", json={"paid_amount":"3530.00","paid_at":midday(start).isoformat(),"payment_method":"pix","payment_reference":"TEST-ENCARGOS","notes":None})).json()
     settlement = paid["settlement"]
     assert decimal(settlement["third_party_amount"]) == Decimal("1200.00")
     assert decimal(settlement["agency_retention_amount"]) == Decimal("210.00")
