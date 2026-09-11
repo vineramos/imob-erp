@@ -6,6 +6,7 @@ import { installBrazilianInputFormatting } from './utils/brFormat'
 import { installGlobalModalEscape } from './utils/modalEscape'
 import { installPublicSiteLinkEnhancer } from './utils/publicSiteLinks'
 import { installPublicNeighborhoodMap } from './utils/publicNeighborhoodMap'
+import { installPublicSearchModalEnhancer } from './utils/publicSearchModalEnhancer'
 import { installAuthenticatedPdfLinkHandler } from './utils/authenticatedPdfLinks'
 import './styles.css'
 import './settings.css'
@@ -36,11 +37,13 @@ import './public-neighborhood-map.css'
 import './public-site-service-grid-fix.css'
 import './public-site-search-fix.css'
 import './public-search-modal.css'
+import './public-search-map-enhancer.css'
 
 installBrazilianInputFormatting()
 installGlobalModalEscape()
 installPublicSiteLinkEnhancer()
 installPublicNeighborhoodMap()
+installPublicSearchModalEnhancer()
 installAuthenticatedPdfLinkHandler()
 
 createRoot(document.getElementById('root')!).render(
