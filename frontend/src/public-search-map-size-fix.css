@@ -1,0 +1,30 @@
+/* Ajuste fino do modo Mapa na busca pública: menos mapa, cards/fotos mais generosos. */
+@media (min-width: 981px) {
+  .public-site-premium .public-search-modal-body.is-map-view {
+    grid-template-columns: minmax(0, 1.14fr) minmax(440px, .9fr) !important;
+  }
+
+  .public-site-premium .public-search-modal-body.is-map-view .public-search-result-card {
+    grid-template-columns: 168px minmax(0, 1fr) !important;
+    min-height: 154px !important;
+  }
+
+  .public-site-premium .public-search-modal-body.is-map-view .public-search-result-media,
+  .public-site-premium .public-search-modal-body.is-map-view .public-search-result-media .public-property-visual {
+    min-height: 154px !important;
+  }
+
+  .public-site-premium .public-search-modal-body.is-map-view .public-search-result-copy {
+    padding: 13px 14px !important;
+  }
+}
+
+@media (min-width: 981px) and (max-width: 1180px) {
+  .public-site-premium .public-search-modal-body.is-map-view {
+    grid-template-columns: minmax(0, 1fr) minmax(410px, .92fr) !important;
+  }
+
+  .public-site-premium .public-search-modal-body.is-map-view .public-search-result-card {
+    grid-template-columns: 152px minmax(0, 1fr) !important;
+  }
+}
