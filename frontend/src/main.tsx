@@ -38,6 +38,7 @@ import './public-site-service-grid-fix.css'
 import './public-site-search-fix.css'
 import './public-search-modal.css'
 import './public-search-map-enhancer.css'
+import './public-search-condo-fix.css'
 
 installBrazilianInputFormatting()
 installGlobalModalEscape()
