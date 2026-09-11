@@ -1,30 +1,83 @@
-/* Ajuste fino do modo Mapa na busca pública: menos mapa, cards/fotos mais generosos. */
+/* Ajuste fino do modo Mapa na busca pública: modal mais largo, mapa menos dominante e cards mais visuais. */
 @media (min-width: 981px) {
+  .public-site-premium .public-search-modal {
+    width: min(1520px, 98vw) !important;
+  }
+
   .public-site-premium .public-search-modal-body.is-map-view {
-    grid-template-columns: minmax(0, 1.14fr) minmax(440px, .9fr) !important;
+    grid-template-columns: minmax(0, 1.05fr) minmax(520px, .95fr) !important;
+    gap: 10px !important;
+    padding: 18px 12px 22px !important;
   }
 
   .public-site-premium .public-search-modal-body.is-map-view .public-search-result-card {
-    grid-template-columns: 168px minmax(0, 1fr) !important;
-    min-height: 154px !important;
+    grid-template-columns: 205px minmax(0, 1fr) !important;
+    min-height: 160px !important;
+    border-radius: 12px !important;
   }
 
   .public-site-premium .public-search-modal-body.is-map-view .public-search-result-media,
   .public-site-premium .public-search-modal-body.is-map-view .public-search-result-media .public-property-visual {
-    min-height: 154px !important;
+    min-height: 160px !important;
+    height: 100% !important;
   }
 
   .public-site-premium .public-search-modal-body.is-map-view .public-search-result-copy {
-    padding: 13px 14px !important;
+    padding: 10px 12px !important;
+  }
+
+  .public-site-premium .public-search-modal-body.is-map-view .public-card-type {
+    font-size: 7.5px !important;
+    letter-spacing: .04em !important;
+  }
+
+  .public-site-premium .public-search-modal-body.is-map-view .public-search-result-main h3 {
+    margin: 2px 0 3px !important;
+    font-size: 12px !important;
+    line-height: 1.18 !important;
+  }
+
+  .public-site-premium .public-search-modal-body.is-map-view .public-search-result-location {
+    gap: 3px !important;
+    font-size: 7.5px !important;
+    line-height: 1.2 !important;
+  }
+
+  .public-site-premium .public-search-modal-body.is-map-view .public-search-result-price {
+    margin-top: 7px !important;
+  }
+
+  .public-site-premium .public-search-modal-body.is-map-view .public-search-result-price > small {
+    margin-bottom: 1px !important;
+    font-size: 7px !important;
+  }
+
+  .public-site-premium .public-search-modal-body.is-map-view .public-search-result-price > strong {
+    font-size: 15px !important;
+    line-height: 1.1 !important;
+  }
+
+  .public-site-premium .public-search-modal-body.is-map-view .public-search-result-footer {
+    margin-top: 8px !important;
+    padding-top: 7px !important;
+  }
+
+  .public-site-premium .public-search-modal-body.is-map-view .public-search-result-facts {
+    gap: 7px !important;
+  }
+
+  .public-site-premium .public-search-modal-body.is-map-view .public-search-result-facts span,
+  .public-site-premium .public-search-modal-body.is-map-view .public-search-result-action {
+    font-size: 7.5px !important;
   }
 }
 
-@media (min-width: 981px) and (max-width: 1180px) {
+@media (min-width: 981px) and (max-width: 1250px) {
   .public-site-premium .public-search-modal-body.is-map-view {
-    grid-template-columns: minmax(0, 1fr) minmax(410px, .92fr) !important;
+    grid-template-columns: minmax(0, .98fr) minmax(455px, 1.02fr) !important;
   }
 
   .public-site-premium .public-search-modal-body.is-map-view .public-search-result-card {
-    grid-template-columns: 152px minmax(0, 1fr) !important;
+    grid-template-columns: 180px minmax(0, 1fr) !important;
   }
 }
