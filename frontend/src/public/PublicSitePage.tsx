@@ -11,13 +11,13 @@ import {
   KeyRound,
   Mail,
   MapPin,
-  MapPinned,
   MessageCircle,
   Phone,
   Ruler,
   Search,
   ShieldCheck,
   Sparkles,
+  X,
 } from 'lucide-react'
 import { FormEvent, type CSSProperties, useEffect, useMemo, useState } from 'react'
 import { ApiError, publicApiRequest } from '../api/client'
@@ -71,9 +71,36 @@ type Props = { organizationId: string; slug?: string | null }
 type PropertyTypeFilter = 'all' | 'apartment' | 'house' | 'commercial' | 'land' | 'studio' | 'other'
 type HeroSize = 'compact' | 'standard' | 'expanded'
 
+type RentRangeProps = {
+  minRent: number
+  maxRent: number
+  ceiling: number
+  includeCondo: boolean
+  onMinRent: (value: number) => void
+  onMaxRent: (value: number) => void
+  onIncludeCondo: (value: boolean) => void
+}
+
 function heroSizeValue(theme: Record<string, unknown>): HeroSize {
   const value = themeString(theme, 'heroSize', 'compact')
   return value === 'standard' || value === 'expanded' ? value : 'compact'
+}
+
+function propertySearchValue(item: PublicProperty, includeCondo: boolean) {
+  if (item.rent_amount == null) return null
+  return Number(item.rent_amount) + (includeCondo ? Number(item.condo_amount ?? 0) : 0)
+}
+
+function RentRangeControl({ minRent, maxRent, ceiling, includeCondo, onMinRent, onMaxRent, onIncludeCondo }: RentRangeProps) {
+  const effectiveMax = maxRent > 0 ? maxRent : ceiling
+  return <div className="public-rent-range">
+    <div className="public-rent-range-head"><span>Valor do aluguel</span><strong>{money(minRent)} — {money(effectiveMax)}</strong></div>
+    <div className="public-rent-range-lines">
+      <div className="public-rent-line"><small>Mínimo</small><input aria-label="Valor mínimo" type="range" min={0} max={ceiling} step={100} value={Math.min(minRent, effectiveMax)} onChange={(event) => onMinRent(Math.min(Number(event.target.value), effectiveMax))}/></div>
+      <div className="public-rent-line"><small>Máximo</small><input aria-label="Valor máximo" type="range" min={0} max={ceiling} step={100} value={effectiveMax} onChange={(event) => { const value = Math.max(Number(event.target.value), minRent); onMaxRent(value >= ceiling ? 0 : value) }}/></div>
+    </div>
+    <label className="public-condo-toggle"><input type="checkbox" checked={includeCondo} onChange={(event) => onIncludeCondo(event.target.checked)}/><span>Considerar condomínio no valor</span></label>
+  </div>
 }
 
 function PropertyCard({ organizationId, item, badge }: { organizationId: string; item: PublicProperty; badge?: string }) {
@@ -93,14 +120,30 @@ function PropertyCard({ organizationId, item, badge }: { organizationId: string;
   </a>
 }
 
+function SearchResultCard({ organizationId, item, includeCondo }: { organizationId: string; item: PublicProperty; includeCondo: boolean }) {
+  const searchedValue = propertySearchValue(item, includeCondo)
+  return <a className="public-search-result-card" href={`/site/${organizationId}/imoveis/${item.slug}`}>
+    <div className="public-search-result-media"><PublicPropertyCardMedia organizationId={organizationId} item={item}/></div>
+    <div className="public-search-result-copy">
+      <div className="public-search-result-main"><span className="public-card-type">{propertyType(item.property_type)}</span><h3>{item.title}</h3><p className="public-search-result-location"><MapPin size={13}/>{publicLocation(item)}</p></div>
+      <p className="public-search-result-description">{item.description || 'Entre em contato para receber mais informações sobre este imóvel.'}</p>
+      <div className="public-search-result-price"><small>{includeCondo ? 'Aluguel + condomínio' : 'Aluguel mensal'}</small><strong>{money(searchedValue)}</strong><div className="public-search-result-costs"><span>Aluguel <b>{money(item.rent_amount)}</b></span><span>Condomínio <b>{money(item.condo_amount)}</b></span><span>IPTU <b>{money(item.iptu_amount)}</b></span></div></div>
+      <div className="public-search-result-footer"><div className="public-search-result-facts"><span><BedDouble size={14}/>{item.bedrooms} quartos</span><span><Bath size={14}/>{item.bathrooms} banheiros</span><span><Car size={14}/>{item.parking_spaces} vagas</span>{item.area_m2 != null && <span><Ruler size={14}/>{item.area_m2} m²</span>}</div><span className="public-search-result-action">Ver imóvel <ArrowRight size={14}/></span></div>
+    </div>
+  </a>
+}
+
 export function PublicSitePage({ organizationId, slug }: Props) {
   const [profile, setProfile] = useState<PublicSiteProfile | null>(null)
   const [items, setItems] = useState<PublicProperty[]>([])
   const [selected, setSelected] = useState<PublicProperty | null>(null)
   const [query, setQuery] = useState('')
   const [typeFilter, setTypeFilter] = useState<PropertyTypeFilter>('all')
+  const [minRent, setMinRent] = useState(0)
   const [maxRent, setMaxRent] = useState(0)
+  const [includeCondo, setIncludeCondo] = useState(false)
   const [bedrooms, setBedrooms] = useState(0)
+  const [searchOpen, setSearchOpen] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
@@ -129,16 +172,33 @@ export function PublicSitePage({ organizationId, slug }: Props) {
     return () => { document.title = previous }
   }, [profile, selected])
 
+  useEffect(() => {
+    if (!searchOpen) return
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === 'Escape') setSearchOpen(false) }
+    window.addEventListener('keydown', closeOnEscape)
+    return () => { document.body.style.overflow = previousOverflow; window.removeEventListener('keydown', closeOnEscape) }
+  }, [searchOpen])
+
+  const priceCeiling = useMemo(() => {
+    const highest = items.reduce((current, item) => Math.max(current, Number(item.rent_amount ?? 0) + Number(item.condo_amount ?? 0)), 0)
+    return Math.max(10000, Math.ceil(highest / 500) * 500)
+  }, [items])
+
   const filtered = useMemo(() => {
     const term = query.trim().toLowerCase()
     return items.filter((item) => {
       if (typeFilter !== 'all' && item.property_type !== typeFilter) return false
-      if (maxRent > 0 && (item.rent_amount == null || Number(item.rent_amount) > maxRent)) return false
+      const searchValue = propertySearchValue(item, includeCondo)
+      if ((minRent > 0 || maxRent > 0) && searchValue == null) return false
+      if (minRent > 0 && searchValue != null && searchValue < minRent) return false
+      if (maxRent > 0 && searchValue != null && searchValue > maxRent) return false
       if (bedrooms > 0 && item.bedrooms < bedrooms) return false
       if (!term) return true
       return `${item.title} ${item.description} ${publicLocation(item)} ${propertyType(item.property_type)}`.toLowerCase().includes(term)
     })
-  }, [bedrooms, items, maxRent, query, typeFilter])
+  }, [bedrooms, includeCondo, items, maxRent, minRent, query, typeFilter])
 
   const neighborhoodRanking = useMemo(() => {
     const counts = new Map<string, number>()
@@ -146,9 +206,8 @@ export function PublicSitePage({ organizationId, slug }: Props) {
     return [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, 6)
   }, [items])
 
-  const hasActiveFilters = Boolean(query.trim() || typeFilter !== 'all' || maxRent > 0 || bedrooms > 0)
-  const featured = filtered[0] ?? (!hasActiveFilters ? items[0] ?? null : null)
-  const highlights = filtered.slice(0, 4)
+  const featured = items[0] ?? null
+  const highlights = items.slice(0, 4)
 
   if (loading) return <main className="public-site public-site-state"><div className="public-brand-mark"><House size={20}/></div><strong>Carregando imóveis...</strong></main>
   if (error || !profile) return <main className="public-site public-site-state"><div className="public-brand-mark"><Building2 size={20}/></div><strong>Site indisponível</strong><span>{error || 'O site público ainda não está habilitado.'}</span></main>
@@ -187,9 +246,12 @@ export function PublicSitePage({ organizationId, slug }: Props) {
     <footer className="public-footer"><div>{brand}</div><div><strong>Catálogo conectado ao Imob ERP</strong><span>Informações sujeitas a confirmação e disponibilidade.</span></div></footer>
   </main>
 
-  function clearFilters() { setQuery(''); setTypeFilter('all'); setMaxRent(0); setBedrooms(0) }
-  function searchSubmit(event: FormEvent) { event.preventDefault(); document.getElementById('imoveis')?.scrollIntoView({ behavior: 'smooth', block: 'start' }) }
-  function pickNeighborhood(name: string) { setQuery(name); window.setTimeout(() => document.getElementById('imoveis')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50) }
+  function clearFilters() { setQuery(''); setTypeFilter('all'); setMinRent(0); setMaxRent(0); setIncludeCondo(false); setBedrooms(0) }
+  function searchSubmit(event: FormEvent) { event.preventDefault(); setSearchOpen(true) }
+  function pickNeighborhood(name: string) { setQuery(name); setSearchOpen(true) }
+  function openAllProperties() { clearFilters(); setSearchOpen(true) }
+
+  const rentRangeProps: RentRangeProps = { minRent, maxRent, ceiling: priceCeiling, includeCondo, onMinRent: setMinRent, onMaxRent: setMaxRent, onIncludeCondo: setIncludeCondo }
 
   return <main className="public-site public-site-premium" style={siteStyle}>
     <header className="public-header">{brand}<nav className="public-nav"><a href="#imoveis">Alugar</a><a href="#bairros">Bairros</a><a href="#servicos">Serviços</a><a href="#anunciar">Anunciar</a></nav><div className="public-header-actions">{contactActions}<a className="public-announce" href="#anunciar">Anunciar imóvel</a></div></header>
@@ -197,20 +259,22 @@ export function PublicSitePage({ organizationId, slug }: Props) {
     <section className={`public-hero public-hero-premium public-hero-size-${heroSize} ${featured ? 'has-featured' : ''}`}>
       {featured && <div className="public-hero-media" aria-hidden="true"><PublicPropertyCardMedia organizationId={organizationId} item={featured}/></div>}
       <div className="public-hero-overlay"/><div className="public-hero-copy"><span className="public-kicker">{heroKicker}</span><h1>{heroTitle}</h1><p>{heroSubtitle}</p><div className="public-hero-trust"><span/><small>MAIS QUE IMÓVEIS, NOVOS COMEÇOS</small></div></div>
-      <form className="public-search public-search-premium" onSubmit={searchSubmit}><div className="public-search-tabs"><strong>Alugar</strong><span>Encontre seu próximo lugar</span></div><label className="public-search-main"><MapPin size={17}/><span><small>Cidade ou bairro</small><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Ex.: Centro, Curitiba"/></span></label><label><span>Tipo de imóvel</span><select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value as PropertyTypeFilter)}><option value="all">Todos</option><option value="apartment">Apartamento</option><option value="house">Casa</option><option value="commercial">Comercial</option><option value="land">Terreno</option><option value="studio">Studio</option><option value="other">Outros</option></select></label><label><span>Faixa de preço</span><select value={maxRent} onChange={(e) => setMaxRent(Number(e.target.value))}><option value={0}>Qualquer valor</option><option value={2000}>Até R$ 2.000</option><option value={3000}>Até R$ 3.000</option><option value={5000}>Até R$ 5.000</option><option value={8000}>Até R$ 8.000</option><option value={10000}>Até R$ 10.000</option></select></label><label><span>Quartos</span><select value={bedrooms} onChange={(e) => setBedrooms(Number(e.target.value))}><option value={0}>Todos</option><option value={1}>1+</option><option value={2}>2+</option><option value={3}>3+</option><option value={4}>4+</option></select></label><button type="submit"><Search size={17}/> Buscar imóveis</button></form>
+      <form className="public-search public-search-premium" onSubmit={searchSubmit}><div className="public-search-tabs"><strong>Alugar</strong><span>Encontre seu próximo lugar</span></div><label className="public-search-main"><MapPin size={17}/><span><small>Cidade ou bairro</small><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Ex.: Centro, Curitiba"/></span></label><label><span>Tipo de imóvel</span><select value={typeFilter} onChange={(event) => setTypeFilter(event.target.value as PropertyTypeFilter)}><option value="all">Todos</option><option value="apartment">Apartamento</option><option value="house">Casa</option><option value="commercial">Comercial</option><option value="land">Terreno</option><option value="studio">Studio</option><option value="other">Outros</option></select></label><RentRangeControl {...rentRangeProps}/><label><span>Quartos</span><select value={bedrooms} onChange={(event) => setBedrooms(Number(event.target.value))}><option value={0}>Todos</option><option value={1}>1+</option><option value={2}>2+</option><option value={3}>3+</option><option value={4}>4+</option></select></label><button type="submit"><Search size={17}/> Buscar imóveis</button></form>
     </section>
 
-    <section className="public-showcase public-premium-section" id="imoveis"><div className="public-section-title"><div><span className="public-kicker">{hasActiveFilters ? 'RESULTADOS DA BUSCA' : 'OPORTUNIDADES REAIS'}</span><h2>{hasActiveFilters ? 'Imóveis encontrados' : 'Imóveis em destaque'}</h2><p>{hasActiveFilters ? `${filtered.length} ${filtered.length === 1 ? 'opção encontrada' : 'opções encontradas'} para os filtros selecionados.` : 'Selecionamos imóveis que merecem sua atenção.'}</p></div>{hasActiveFilters ? <button type="button" className="public-clear" onClick={clearFilters}>Limpar filtros</button> : <a href="#todos">Ver todos os imóveis <ArrowRight size={15}/></a>}</div>{highlights.length ? <div className="public-highlight-grid">{highlights.map((item, index) => <PropertyCard key={item.slug} organizationId={organizationId} item={item} badge={!hasActiveFilters && index === 0 ? 'Destaque' : !hasActiveFilters && index === 1 ? 'Novo' : undefined}/>)}</div> : <div className="public-empty"><House size={24}/><strong>Nenhum imóvel para os filtros selecionados.</strong><button type="button" onClick={clearFilters}>Limpar filtros</button></div>}</section>
+    <section className="public-showcase public-premium-section" id="imoveis"><div className="public-section-title"><div><span className="public-kicker">OPORTUNIDADES REAIS</span><h2>Imóveis em destaque</h2><p>Selecionamos imóveis que merecem sua atenção.</p></div><button type="button" className="public-search-open-all" onClick={openAllProperties}>Ver todos os imóveis <ArrowRight size={15}/></button></div>{highlights.length ? <div className="public-highlight-grid">{highlights.map((item, index) => <PropertyCard key={item.slug} organizationId={organizationId} item={item} badge={index === 0 ? 'Destaque' : index === 1 ? 'Novo' : undefined}/>)}</div> : <div className="public-empty"><House size={24}/><strong>Nenhum imóvel publicado no momento.</strong></div>}</section>
 
     <section className="public-neighborhood-premium public-premium-section" id="bairros"><div className="public-neighborhood-copy"><span className="public-kicker">DESCUBRA NOVOS LUGARES</span><h2>Explore bairros</h2><p>Encontre o lugar que combina com o seu estilo de vida e veja as oportunidades disponíveis em cada região.</p>{neighborhoodRanking.length > 0 && <div className="public-neighborhood-chips">{neighborhoodRanking.map(([name, count]) => <button type="button" key={name} onClick={() => pickNeighborhood(name)}><MapPin size={13}/><span>{name}</span><small>{count} {count === 1 ? 'imóvel' : 'imóveis'}</small></button>)}</div>}</div><div className="public-map-art" aria-label="Mapa ilustrativo dos bairros"><div className="public-map-road one"/><div className="public-map-road two"/><div className="public-map-road three"/>{neighborhoodRanking.slice(0, 4).map(([name], index) => <button type="button" key={name} className={`pin pin-${index + 1}`} onClick={() => pickNeighborhood(name)}><MapPin size={14}/>{name}</button>)}</div></section>
 
     <section className="public-services-premium public-premium-section" id="servicos"><div className="public-section-title"><div><span className="public-kicker">MAIS QUE IMÓVEIS</span><h2>Soluções para cada momento</h2></div></div><div className="public-service-grid"><article><span><KeyRound size={21}/></span><div><strong>Locação</strong><p>Agilidade e clareza para encontrar o imóvel ideal.</p></div></article><article><span><Building2 size={21}/></span><div><strong>Administração</strong><p>Gestão do patrimônio com transparência e rastreabilidade.</p></div></article><article><span><Headphones size={21}/></span><div><strong>Atendimento humano</strong><p>Uma equipe acompanhando você do interesse até as chaves.</p></div></article><article><span><ShieldCheck size={21}/></span><div><strong>Processo seguro</strong><p>Informações conectadas ao ERP e histórico preservado.</p></div></article></div></section>
 
-    <section className="public-all public-premium-section" id="todos"><div className="public-section-title"><div><span className="public-kicker">NOSSO PORTFÓLIO</span><h2>Todos os imóveis</h2><p>{items.length} {items.length === 1 ? 'imóvel disponível' : 'imóveis disponíveis'}.</p></div></div><div className="public-property-grid">{items.map((item) => <PropertyCard key={item.slug} organizationId={organizationId} item={item}/>)}</div></section>
+    <section className="public-all public-premium-section" id="todos"><div className="public-section-title"><div><span className="public-kicker">NOSSO PORTFÓLIO</span><h2>Todos os imóveis</h2><p>{items.length} {items.length === 1 ? 'imóvel disponível' : 'imóveis disponíveis'}.</p></div><button type="button" className="public-search-open-all" onClick={openAllProperties}>Abrir busca completa <Search size={14}/></button></div><div className="public-property-grid">{items.map((item) => <PropertyCard key={item.slug} organizationId={organizationId} item={item}/>)}</div></section>
 
     <section className="public-capture-premium" id="anunciar"><div className="public-capture-intro"><span className="public-kicker">TEM UM IMÓVEL?</span><h2>Seu patrimônio merece uma gestão melhor.</h2><p>Conte um pouco sobre o imóvel. A solicitação entra na operação do Imob para análise da equipe, sem publicação automática.</p><div><span><CheckCircle2 size={15}/> Atendimento personalizado</span><span><CheckCircle2 size={15}/> Processo acompanhado</span><span><CheckCircle2 size={15}/> Nenhum anúncio sem validação</span></div></div><PublicCaptureForm organizationId={organizationId}/></section>
 
     <section className="public-final-cta"><Sparkles size={20}/><div><span className="public-kicker">PRONTO PARA COMEÇAR?</span><h2>O próximo capítulo pode começar aqui.</h2></div>{contactActions}</section>
     <footer className="public-footer"><div>{brand}</div><nav><a href="#imoveis">Imóveis</a><a href="#bairros">Bairros</a><a href="#servicos">Serviços</a><a href="#anunciar">Anunciar</a></nav><div><strong>{profile.display_name}</strong><span>Informações sujeitas a confirmação e disponibilidade.</span></div></footer>
+
+    {searchOpen && <div className="public-search-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setSearchOpen(false) }}><section className="public-search-modal" role="dialog" aria-modal="true" aria-labelledby="public-search-modal-title"><div className="public-search-modal-header"><div className="public-search-modal-title"><div><span className="public-kicker">BUSCA DE IMÓVEIS</span><h2 id="public-search-modal-title">Encontre o imóvel ideal</h2></div><button type="button" className="public-search-modal-close" aria-label="Fechar busca" onClick={() => setSearchOpen(false)}><X size={18}/></button></div><div className="public-search-modal-filters"><label className="public-search-modal-field"><span>Cidade ou bairro</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Ex.: Centro, Curitiba"/></label><label className="public-search-modal-field"><span>Tipo de imóvel</span><select value={typeFilter} onChange={(event) => setTypeFilter(event.target.value as PropertyTypeFilter)}><option value="all">Todos</option><option value="apartment">Apartamento</option><option value="house">Casa</option><option value="commercial">Comercial</option><option value="land">Terreno</option><option value="studio">Studio</option><option value="other">Outros</option></select></label><RentRangeControl {...rentRangeProps}/><label className="public-search-modal-field"><span>Quartos</span><select value={bedrooms} onChange={(event) => setBedrooms(Number(event.target.value))}><option value={0}>Todos</option><option value={1}>1+</option><option value={2}>2+</option><option value={3}>3+</option><option value={4}>4+</option></select></label><button type="button" className="public-search-modal-clear" onClick={clearFilters}>Limpar filtros</button></div></div><div className="public-search-modal-body"><div className="public-search-modal-summary"><strong>{filtered.length} {filtered.length === 1 ? 'imóvel encontrado' : 'imóveis encontrados'}</strong><span>{includeCondo ? 'Faixa de valor considerando aluguel + condomínio' : 'Faixa de valor considerando apenas o aluguel'}</span></div>{filtered.length ? <div className="public-search-results-list">{filtered.map((item) => <SearchResultCard key={item.slug} organizationId={organizationId} item={item} includeCondo={includeCondo}/>)}</div> : <div className="public-search-modal-empty"><House size={30}/><strong>Nenhum imóvel corresponde à pesquisa.</strong><span>Ajuste os filtros ou limpe a pesquisa para ver outras opções.</span><button type="button" className="public-clear" onClick={clearFilters}>Limpar filtros</button></div>}</div></section></div>}
   </main>
 }
