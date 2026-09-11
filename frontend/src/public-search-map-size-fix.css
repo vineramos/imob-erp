@@ -11,7 +11,7 @@
   }
 
   .public-site-premium .public-search-modal-body.is-map-view .public-search-result-card {
-    grid-template-columns: 255px minmax(0, 1fr) !important;
+    grid-template-columns: 300px minmax(0, 1fr) !important;
     min-height: 168px !important;
     border-radius: 12px !important;
   }
@@ -85,6 +85,6 @@
   }
 
   .public-site-premium .public-search-modal-body.is-map-view .public-search-result-card {
-    grid-template-columns: 220px minmax(0, 1fr) !important;
+    grid-template-columns: 250px minmax(0, 1fr) !important;
   }
 }
