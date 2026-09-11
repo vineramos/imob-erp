@@ -13,6 +13,7 @@ from tests.helpers import (
     create_signed_administration_contract,
     create_signed_lease_contract,
     first_month,
+    midday,
 )
 
 
@@ -81,7 +82,7 @@ def test_tenant_portal_receipt_exit_communications_and_cross_tenant_isolation(cl
             f"/api/finance/charges/{charge['id']}/payment",
             json={
                 "paid_amount": str(charge["gross_amount"]),
-                "paid_at": datetime.now(timezone.utc).isoformat(),
+                "paid_at": midday(journey["start"]).isoformat(),
                 "payment_method": "pix",
                 "payment_reference": "PIX-PORTAL-TESTE",
                 "notes": "Liquidação integral da jornada do portal.",
