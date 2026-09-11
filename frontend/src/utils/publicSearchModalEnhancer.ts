@@ -294,6 +294,11 @@ function scheduleRefresh(controller: ModalController) {
   if (controller.refreshTimer != null) window.clearTimeout(controller.refreshTimer)
   controller.refreshTimer = window.setTimeout(() => {
     controller.refreshTimer = null
+    const currentList = controller.modal.querySelector<HTMLElement>('.public-search-results-list')
+    if (currentList && currentList !== controller.list) {
+      controller.list = currentList
+      controller.body.insertBefore(controller.mapPane, currentList)
+    }
     const organizationId = organizationIdFromPath()
     if (organizationId) resultCards(controller).forEach((card) => void enhanceCarousel(card, organizationId))
     if (controller.mode === 'map') void renderMap(controller)
@@ -361,14 +366,17 @@ export function installPublicSearchModalEnhancer() {
   const observer = new MutationObserver((mutations) => {
     const modals = new Set<HTMLElement>()
     mutations.forEach((mutation) => {
-      if (!(mutation.target instanceof Element)) return
-      const modal = mutation.target.closest<HTMLElement>('.public-search-modal')
-      if (modal) modals.add(modal)
       mutation.addedNodes.forEach((node) => {
         if (!(node instanceof Element)) return
         if (node.matches('.public-search-modal')) modals.add(node as HTMLElement)
         node.querySelectorAll<HTMLElement>('.public-search-modal').forEach((item) => modals.add(item))
       })
+
+      if (!(mutation.target instanceof Element)) return
+      if (mutation.target.closest('.public-search-map-pane, .public-search-result-media')) return
+      const list = mutation.target.closest<HTMLElement>('.public-search-results-list')
+      const modal = list?.closest<HTMLElement>('.public-search-modal')
+      if (modal) modals.add(modal)
     })
     modals.forEach(enhanceModal)
   })
