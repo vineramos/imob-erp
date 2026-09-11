@@ -35,6 +35,7 @@ import './public-site-hero-options.css'
 import './public-neighborhood-map.css'
 import './public-site-service-grid-fix.css'
 import './public-site-search-fix.css'
+import './public-search-modal.css'
 
 installBrazilianInputFormatting()
 installGlobalModalEscape()
