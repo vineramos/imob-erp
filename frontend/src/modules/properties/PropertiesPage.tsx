@@ -1,5 +1,6 @@
 import { PeopleWorkspacePage } from './PeopleWorkspacePage'
 import { PropertyGalleryMount } from './PropertyGalleryMount'
+import { PropertyLifecyclePanel } from './PropertyLifecyclePanel'
 import { PropertyMapPublicationMount } from './PropertyMapPublicationMount'
 import { PropertyOwnerAutocompleteMount } from './PropertyOwnerAutocompleteMount'
 import { PropertyWorkspacePage } from './PropertyWorkspacePage'
@@ -10,5 +11,5 @@ type Props = { permissions: string[]; initialTab?: 'properties' | 'people' }
 export function PropertiesPage({ permissions, initialTab = 'properties' }: Props) {
   return initialTab === 'people'
     ? <PeopleWorkspacePage permissions={permissions} />
-    : <><PropertyWorkspacePage permissions={permissions} /><PropertyOwnerAutocompleteMount /><PropertyGalleryMount permissions={permissions} /><PropertyMapPublicationMount permissions={permissions} /></>
+    : <><PropertyLifecyclePanel permissions={permissions} /><PropertyWorkspacePage permissions={permissions} /><PropertyOwnerAutocompleteMount /><PropertyGalleryMount permissions={permissions} /><PropertyMapPublicationMount permissions={permissions} /></>
 }
