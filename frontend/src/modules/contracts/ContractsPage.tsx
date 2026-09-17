@@ -145,6 +145,18 @@ export function ContractsPage({ permissions }: Props) {
   }, [])
 
   useEffect(() => { void load() }, [load])
+  useEffect(() => {
+    const requestedPropertyId = new URLSearchParams(window.location.search).get('propertyId')
+    if (!requestedPropertyId || !canCreate || !properties.some((item) => item.id === requestedPropertyId)) return
+    const months = defaults?.residential_lease_months ?? 30
+    setEditing(null)
+    setPropertyId(requestedPropertyId)
+    setLeaseMonths(months)
+    setTerms(defaultTerms(defaults))
+    setChangeSummary('')
+    setShowForm(true)
+    window.history.replaceState({}, '', '/app/contracts')
+  }, [canCreate, defaults, properties])
 
   const eligibleProperties = useMemo(() => properties.filter((item) => item.owners.length > 0), [properties])
   const filtered = useMemo(() => filter === 'all' ? contracts : contracts.filter((item) => item.status === filter), [contracts, filter])
