@@ -45,6 +45,7 @@ from app.api.routes.people_lifecycle import router as people_lifecycle_router
 from app.api.routes.person_bank_details import router as person_bank_details_router
 from app.api.routes.person_profile import router as person_profile_router
 from app.api.routes.portfolio import router as portfolio_router
+from app.api.routes.property_lifecycle import router as property_lifecycle_router
 from app.api.routes.property_media import router as property_media_router
 from app.api.routes.public_captures import router as public_captures_router
 from app.api.routes.public_map import router as public_map_router
@@ -94,6 +95,7 @@ api_router.include_router(branding_router)
 api_router.include_router(foundation_router)
 api_router.include_router(site_settings_router)
 api_router.include_router(portfolio_router)
+api_router.include_router(property_lifecycle_router)
 api_router.include_router(people_lifecycle_router)
 api_router.include_router(capture_workflow_router)
 api_router.include_router(economic_indices_router)
