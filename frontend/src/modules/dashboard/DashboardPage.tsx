@@ -103,6 +103,8 @@ export function DashboardPage({onNavigate}:Props) {
       approvedCaptures:captures.filter(item=>item.status==='approved').length,
       convertedCaptures:captures.filter(item=>item.status==='available').length,
       propertiesWithoutAdministration:properties.filter(item=>!contracts.some(contract=>contract.property_code===item.code&&contract.status!=='cancelled')).length,
+      propertiesWithAdministration:properties.filter(item=>contracts.some(contract=>contract.property_code===item.code&&contract.status!=='cancelled')).length,
+      managedProperties:properties.filter(item=>contracts.some(contract=>contract.property_code===item.code&&contract.status==='signed')).length,
       contractsAwaitingSignature:contracts.filter(item=>item.status==='pending_signature').length,
       contractsInReview:contracts.filter(item=>item.status==='review').length,
     }
@@ -123,7 +125,9 @@ export function DashboardPage({onNavigate}:Props) {
         <button type="button" className="dashboard-pipeline-card" onClick={()=>onNavigate('captures')}><span className="dashboard-pipeline-index">01</span><div><small>Captações em andamento</small><strong>{pipelineLoading?'—':pipelineSummary.openCaptures}</strong><span>Novas oportunidades em negociação</span></div><ArrowRight size={15}/></button>
         <button type="button" className="dashboard-pipeline-card" onClick={()=>onNavigate('captures')}><span className="dashboard-pipeline-index">02</span><div><small>Aguardando conversão</small><strong>{pipelineLoading?'—':pipelineSummary.approvedCaptures}</strong><span>Captações aprovadas para virar imóvel</span></div><ArrowRight size={15}/></button>
         <button type="button" className="dashboard-pipeline-card" onClick={()=>onNavigate('properties')}><span className="dashboard-pipeline-index">03</span><div><small>Imóveis sem administração</small><strong>{pipelineLoading?'—':pipelineSummary.propertiesWithoutAdministration}</strong><span>Cadastros definitivos ainda sem contrato</span></div><ArrowRight size={15}/></button>
-        <button type="button" className="dashboard-pipeline-card" onClick={()=>onNavigate('contracts')}><span className="dashboard-pipeline-index">04</span><div><small>Contratos em assinatura</small><strong>{pipelineLoading?'—':pipelineSummary.contractsAwaitingSignature}</strong><span>{pipelineLoading?'—':`${pipelineSummary.contractsInReview} em revisão`}</span></div><ArrowRight size={15}/></button>
+        <button type="button" className="dashboard-pipeline-card" onClick={()=>onNavigate('properties')}><span className="dashboard-pipeline-index">04</span><div><small>Imóveis com administração</small><strong>{pipelineLoading?'—':pipelineSummary.propertiesWithAdministration}</strong><span>Cadastro com contrato ADM ativo</span></div><ArrowRight size={15}/></button>
+        <button type="button" className="dashboard-pipeline-card" onClick={()=>onNavigate('properties')}><span className="dashboard-pipeline-index">05</span><div><small>Carteira administrada</small><strong>{pipelineLoading?'—':pipelineSummary.managedProperties}</strong><span>Contrato ADM assinado e arquivado</span></div><ArrowRight size={15}/></button>
+        <button type="button" className="dashboard-pipeline-card" onClick={()=>onNavigate('contracts')}><span className="dashboard-pipeline-index">06</span><div><small>Contratos em assinatura</small><strong>{pipelineLoading?'—':pipelineSummary.contractsAwaitingSignature}</strong><span>{pipelineLoading?'—':`${pipelineSummary.contractsInReview} em revisão`}</span></div><ArrowRight size={15}/></button>
       </div>
     </article>
 
