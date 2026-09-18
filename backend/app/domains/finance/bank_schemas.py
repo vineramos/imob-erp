@@ -106,6 +106,8 @@ class ReconciliationCandidate(BaseModel):
     due_date: date | None
     remaining_amount: Decimal
     score: int
+    identifier_match: bool = False
+    matched_identifier: str | None = None
 
 
 class BankReconciliationRequest(BaseModel):
