@@ -656,6 +656,15 @@ def execute_payment_batch(
         raise HTTPException(status_code=422, detail="A execução só pode ser registrada na data atual ou em data passada.")
     account = _load_account(db, context.user.organization_id, batch.bank_account_id)
     _validate_batch_targets(db, batch)
+    available_balance = _account_balance(db, account)
+    if money(batch.total_amount) > available_balance:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Saldo insuficiente na conta {account.name}. "
+                f"Disponível: R$ {available_balance:.2f}; lote: R$ {money(batch.total_amount):.2f}."
+            ),
+        )
 
     settled_at = datetime.combine(payload.execution_date, time(12, 0), tzinfo=timezone.utc)
     batch_reference = (payload.reference or "").strip() or f"LOT-{batch.internal_number:05d}"
