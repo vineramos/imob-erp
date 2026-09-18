@@ -1,7 +1,7 @@
 import { Banknote, CheckCircle2, CircleAlert, FileSignature, Mail, RefreshCw, Save, ShieldCheck, Webhook } from 'lucide-react'
 import { FormEvent, useEffect, useState } from 'react'
 import { ApiError, apiRequest } from '../../api/client'
-import type { IntegrationsConfig, SignatureIntegrationStatus } from '../../api/types'
+import type { IntegrationReadiness, IntegrationsConfig, SignatureIntegrationStatus } from '../../api/types'
 import { authConfigured } from '../../auth/client'
 
 const defaults: IntegrationsConfig = {
@@ -30,6 +30,7 @@ function signatureBadge(statusValue: SignatureIntegrationStatus | null) {
 export function IntegrationsSettingsPage({ canEdit }: Props) {
   const [form, setForm] = useState<IntegrationsConfig>(defaults)
   const [signatureStatus, setSignatureStatus] = useState<SignatureIntegrationStatus | null>(null)
+  const [readiness, setReadiness] = useState<IntegrationReadiness | null>(null)
   const [loading, setLoading] = useState(authConfigured)
   const [saving, setSaving] = useState(false)
   const [testingSignature, setTestingSignature] = useState(false)
@@ -42,11 +43,13 @@ export function IntegrationsSettingsPage({ canEdit }: Props) {
     void Promise.all([
       apiRequest<IntegrationsConfig>('/settings/integrations'),
       apiRequest<SignatureIntegrationStatus>('/integrations/signature/status').catch(() => null),
+      apiRequest<IntegrationReadiness>('/integrations/readiness').catch(() => null),
     ])
-      .then(([data, statusData]) => {
+      .then(([data, statusData, readinessData]) => {
         if (!active) return
         setForm(data)
         setSignatureStatus(statusData)
+        setReadiness(readinessData)
       })
       .catch((cause) => { if (active) setError(cause instanceof ApiError ? cause.detail : 'Não foi possível carregar as integrações.') })
       .finally(() => { if (active) setLoading(false) })
@@ -64,7 +67,10 @@ export function IntegrationsSettingsPage({ canEdit }: Props) {
         ? await apiRequest<IntegrationsConfig>('/settings/integrations', { method: 'PUT', body: JSON.stringify(form) })
         : form
       setForm(updated)
-      if (authConfigured) setSignatureStatus(await apiRequest<SignatureIntegrationStatus>('/integrations/signature/status').catch(() => null))
+      if (authConfigured) {
+        setSignatureStatus(await apiRequest<SignatureIntegrationStatus>('/integrations/signature/status').catch(() => null))
+        setReadiness(await apiRequest<IntegrationReadiness>('/integrations/readiness').catch(() => null))
+      }
       setSuccess('Configuração de integrações salva e registrada na auditoria.')
     } catch (cause) {
       setError(cause instanceof ApiError ? cause.detail : 'Não foi possível salvar as integrações.')
@@ -148,6 +154,39 @@ export function IntegrationsSettingsPage({ canEdit }: Props) {
         </div>
 
         <div className="settings-column">
+          <article className="panel form-panel">
+            <div className="panel-heading panel-heading-row">
+              <div>
+                <span className="eyebrow">Readiness operacional</span>
+                <h2>{readiness?.ready ? 'Ambiente pronto' : 'Pendências de integração'}</h2>
+              </div>
+              {readiness?.ready ? <CheckCircle2 size={21} /> : <CircleAlert size={21} />}
+            </div>
+            <p className="muted-copy">
+              {readiness
+                ? readiness.ready
+                  ? 'Todas as integrações selecionadas possuem a configuração mínima necessária.'
+                  : `${readiness.pending_count} integração(ões) selecionada(s) ainda precisa(m) de configuração segura.`
+                : 'Status consolidado ainda não disponível.'}
+            </p>
+            <div className="settings-column">
+              {readiness?.items.map((item) => (
+                <div className="integration-health" key={item.key}>
+                  <div className="integration-health-copy">
+                    {item.status === 'ready' ? <CheckCircle2 size={16} /> : <CircleAlert size={16} />}
+                    <div>
+                      <strong>{item.label}{item.environment ? ` · ${item.environment}` : ''}</strong>
+                      <span>{item.message}</span>
+                    </div>
+                  </div>
+                  <i className={`status-badge ${item.status === 'ready' ? 'success' : item.status === 'disabled' ? 'neutral' : 'warning'}`}>
+                    {item.status === 'ready' ? 'Pronto' : item.status === 'disabled' ? 'Desativado' : 'Atenção'}
+                  </i>
+                </div>
+              ))}
+            </div>
+          </article>
+
           <article className="panel governance-note-card">
             <ShieldCheck size={22} />
             <div><span className="eyebrow">Segurança</span><h2>Segredos ficam fora do banco operacional</h2><p>Esta tela guarda somente escolha de provider e parâmetros não sensíveis. Token e HMAC Secret da Clicksign entram pela configuração segura do Cloud Run/Secret Manager e nunca aparecem de volta na interface.</p></div>
