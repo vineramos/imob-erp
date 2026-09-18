@@ -20,6 +20,7 @@ from app.domains.finance.bank_schemas import (
     BankAccountCreate,
     BankAccountResponse,
     BankImportResponse,
+    BankReconciliationException,
     BankingOverview,
     BankReconciliationRequest,
     BankReconciliationResponse,
@@ -648,6 +649,72 @@ def _open_candidates(db: Session, transaction: BankTransaction, account: BankAcc
             )
         )
     return sorted(result, key=lambda item: (-item.score, item.due_date or date.max, item.target_code))[:80]
+
+
+def _exception_reason(candidates: list[ReconciliationCandidate]) -> tuple[str, str]:
+    identifier_matches = [item for item in candidates if item.identifier_match]
+    if len(identifier_matches) > 1:
+        return "ambiguous_identifier", "Mais de um título compartilha a referência bancária; revisão manual necessária."
+    if len(identifier_matches) == 1:
+        return "identifier_detected", "Referência bancária identificada; falta concluir a conciliação."
+    if candidates and candidates[0].score >= 70:
+        return "strong_candidate", "Há um candidato forte, mas sem identificador bancário determinístico."
+    if candidates:
+        return "review_required", "Há títulos compatíveis, mas sem evidência suficiente para conciliar automaticamente."
+    return "no_candidate", "Nenhum título compatível foi encontrado para este movimento."
+
+
+@router.get("/exceptions", response_model=list[BankReconciliationException])
+def reconciliation_exceptions(
+    account_id: UUID = Query(...),
+    competence: date | None = Query(default=None),
+    context: UserContext = Depends(require_permission("finance.view")),
+    db: Session = Depends(get_db),
+) -> list[BankReconciliationException]:
+    account = _load_account(db, context.user.organization_id, account_id)
+    stmt = (
+        select(BankTransaction)
+        .options(selectinload(BankTransaction.reconciliations))
+        .where(
+            BankTransaction.organization_id == context.user.organization_id,
+            BankTransaction.bank_account_id == account_id,
+        )
+    )
+    if competence:
+        start = month_start(competence)
+        stmt = stmt.where(BankTransaction.transaction_date >= start, BankTransaction.transaction_date < month_end(start))
+    transactions = db.scalars(
+        stmt.order_by(BankTransaction.transaction_date.desc(), BankTransaction.internal_number.desc()).limit(1500)
+    ).unique().all()
+
+    result: list[BankReconciliationException] = []
+    for transaction in transactions:
+        tx = _transaction_response(transaction)
+        if tx.remaining_amount <= 0:
+            continue
+        candidates = _open_candidates(db, transaction, account)
+        reason, reason_label = _exception_reason(candidates)
+        top = candidates[0] if candidates else None
+        identifier = next((item.matched_identifier for item in candidates if item.identifier_match), None)
+        result.append(
+            BankReconciliationException(
+                transaction_id=transaction.id,
+                transaction_code=tx.code,
+                transaction_date=transaction.transaction_date,
+                direction=transaction.direction,
+                amount=money(transaction.amount),
+                remaining_amount=tx.remaining_amount,
+                description=transaction.description,
+                bank_reference=transaction.bank_reference,
+                reason=reason,
+                reason_label=reason_label,
+                candidate_count=len(candidates),
+                top_candidate_code=top.target_code if top else None,
+                top_candidate_score=top.score if top else None,
+                matched_identifier=identifier,
+            )
+        )
+    return result
 
 
 @router.get("/accounts", response_model=list[BankAccountResponse])
