@@ -1,7 +1,7 @@
 from datetime import date
 from decimal import Decimal
 
-from app.api.routes.finance_banking import _billing_identifier_match, _candidate_score
+from app.api.routes.finance_banking import _billing_identifier_match, _candidate_score, _exception_reason
 from app.domains.finance.advanced_models import BillingItem
 from app.domains.finance.bank_models import BankTransaction
 from app.domains.finance.models import RentCharge
@@ -104,3 +104,51 @@ def test_identifier_match_outranks_amount_heuristic():
     }
 
     assert _candidate_score(identified, details) > _candidate_score(unidentified, details)
+
+
+def test_exception_reason_prefers_identifier_over_score():
+    from app.domains.finance.bank_schemas import ReconciliationCandidate
+
+    candidate = ReconciliationCandidate(
+        target_type="rent",
+        target_id="00000000-0000-0000-0000-000000000001",
+        target_code="COB-000123",
+        direction="receivable",
+        fund_scope="third_party",
+        description="Cobrança mensal de locação",
+        counterparty_name="Locatário",
+        due_date=date(2026, 9, 10),
+        remaining_amount=Decimal("1500.00"),
+        score=1042,
+        identifier_match=True,
+        matched_identifier="PROVIDERABC123",
+    )
+
+    reason, label = _exception_reason([candidate])
+    assert reason == "identifier_detected"
+    assert "Referência bancária" in label
+
+
+def test_exception_reason_detects_ambiguous_identifier():
+    from app.domains.finance.bank_schemas import ReconciliationCandidate
+
+    items = [
+        ReconciliationCandidate(
+            target_type="rent",
+            target_id=f"00000000-0000-0000-0000-00000000000{index}",
+            target_code=f"COB-00012{index}",
+            direction="receivable",
+            fund_scope="third_party",
+            description="Cobrança mensal de locação",
+            counterparty_name="Locatário",
+            due_date=date(2026, 9, 10),
+            remaining_amount=Decimal("1500.00"),
+            score=1000,
+            identifier_match=True,
+            matched_identifier="MESMAREF",
+        )
+        for index in (1, 2)
+    ]
+
+    reason, _ = _exception_reason(items)
+    assert reason == "ambiguous_identifier"
