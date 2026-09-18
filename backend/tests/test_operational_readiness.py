@@ -24,3 +24,11 @@ def test_integration_readiness_exposes_configuration_without_secrets(client):
     serialized = str(payload).lower()
     for forbidden in ("access_token", "client_secret", "smtp_password", "webhook_secret"):
         assert forbidden not in serialized
+
+
+def test_security_headers_are_applied_to_api_responses(client):
+    response = assert_response(client.get("/api/health"))
+    assert response.headers["x-content-type-options"] == "nosniff"
+    assert response.headers["x-frame-options"] == "DENY"
+    assert response.headers["referrer-policy"] == "strict-origin-when-cross-origin"
+    assert "camera=()" in response.headers["permissions-policy"]
