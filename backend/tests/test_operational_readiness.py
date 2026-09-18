@@ -3,11 +3,10 @@ from tests.helpers import assert_response
 
 def test_health_readiness_checks_database(client):
     payload = assert_response(client.get("/api/health/ready")).json()
-    assert payload == {
-        "status": "ready",
-        "service": "imob-erp-api",
-        "database": "ok",
-    }
+    assert payload["status"] == "ready"
+    assert payload["service"] == "imob-erp-api"
+    assert payload["database"] == "ok"
+    assert payload["release"]
 
 
 def test_integration_readiness_exposes_configuration_without_secrets(client):
