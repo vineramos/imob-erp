@@ -217,7 +217,8 @@ class FinanceClosingControlResponse(BaseModel):
     dre_unclassified_commissions: int
     ready_to_close: bool
     issues: list[FinanceClosingIssue]
-\nclass AnnualIncomeLine(BaseModel):
+
+class AnnualIncomeLine(BaseModel):
     competence: date
     payment_date: date | None
     property_code: str
