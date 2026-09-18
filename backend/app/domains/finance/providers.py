@@ -288,10 +288,41 @@ class InterBankProvider(BankProvider):
         return ProviderPaymentResult(reference=resolved_reference, status=status, raw=dict(data or {}))
 
 
+@dataclass(frozen=True)
+class BankProviderDescriptor:
+    key: str
+    name: str
+    capabilities: ProviderCapabilities
+    direct_integration: bool
+
+
+BANK_PROVIDER_REGISTRY: dict[str, type[BankProvider]] = {
+    "manual": ManualBankProvider,
+    "inter": InterBankProvider,
+}
+
+
+def bank_provider_descriptors() -> list[BankProviderDescriptor]:
+    descriptors: list[BankProviderDescriptor] = []
+    labels = {"manual": "Manual / arquivo", "inter": "Banco Inter"}
+    for key, provider_class in BANK_PROVIDER_REGISTRY.items():
+        provider = provider_class()
+        descriptors.append(
+            BankProviderDescriptor(
+                key=key,
+                name=labels.get(key, key.replace("_", " ").title()),
+                capabilities=provider.capabilities(),
+                direct_integration=key != "manual",
+            )
+        )
+    return descriptors
+
+
 def bank_provider(key: str) -> BankProvider:
     normalized = (key or "manual").strip().lower()
-    if normalized in {"", "manual", "none"}:
-        return ManualBankProvider()
-    if normalized == "inter":
-        return InterBankProvider()
-    raise BankProviderError(f"Provedor bancário não suportado: {key}.")
+    if normalized in {"", "none"}:
+        normalized = "manual"
+    provider_class = BANK_PROVIDER_REGISTRY.get(normalized)
+    if provider_class is None:
+        raise BankProviderError(f"Provedor bancário não suportado: {key}.")
+    return provider_class()
