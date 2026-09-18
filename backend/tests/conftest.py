@@ -63,6 +63,8 @@ ALL_TEST_PERMISSIONS = frozenset(
         "agenda.manage",
         "documents.view",
         "documents.manage",
+        "reports.view",
+        "reports.export",
         "settings.view",
         "settings.company.manage",
         "settings.appearance.manage",
