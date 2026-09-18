@@ -14,6 +14,7 @@ from app.domains.finance.advanced_models import BillingBatch, BillingItem
 from app.domains.finance.advanced_schemas import (
     BillingBatchResponse,
     BillingIssueRequest,
+    BillingReceiptConfirmRequest,
     BillingItemResponse,
     BillingRunRequest,
     BillingRunResponse,
@@ -191,6 +192,66 @@ def list_batches(competence: date | None = Query(default=None), context: UserCon
     if competence:
         stmt = stmt.where(BillingBatch.competence == competence.replace(day=1))
     return [_batch_response(db, item) for item in db.scalars(stmt.order_by(BillingBatch.competence.desc(), BillingBatch.internal_number.desc()).limit(36)).all()]
+
+
+@router.post("/batches/{batch_id}/items/{item_id}/confirm-receipt", response_model=BillingBatchResponse)
+def confirm_receipt(
+    batch_id: UUID,
+    item_id: UUID,
+    payload: BillingReceiptConfirmRequest,
+    request: Request,
+    context: UserContext = Depends(require_permission("finance.reconcile")),
+    db: Session = Depends(get_db),
+) -> BillingBatchResponse:
+    batch = _load_batch(db, context.user.organization_id, batch_id)
+    item = db.scalar(
+        select(BillingItem).where(BillingItem.id == item_id, BillingItem.billing_batch_id == batch.id)
+    )
+    if item is None:
+        raise HTTPException(status_code=404, detail="Item de cobrança não encontrado neste lote.")
+    charge = db.get(RentCharge, item.charge_id)
+    if charge is None or charge.status == "cancelled":
+        raise HTTPException(status_code=409, detail="A cobrança não está disponível para recebimento.")
+    if charge.status == "paid":
+        raise HTTPException(status_code=409, detail="Esta cobrança já está recebida.")
+
+    paid_at = payload.paid_at or datetime.now(timezone.utc)
+    if paid_at > datetime.now(timezone.utc):
+        raise HTTPException(status_code=422, detail="A data do recebimento não pode estar no futuro.")
+    settlement = record_payment_with_late_charges(
+        db,
+        charge=charge,
+        paid_amount=money(payload.paid_amount),
+        paid_at=paid_at,
+        payment_method=payload.payment_method,
+        payment_reference=(payload.payment_reference or f"MANUAL:{item.id}").strip(),
+        notes=payload.notes or "Recebimento confirmado manualmente no ERP.",
+    )
+    generate_commissions_for_charge(db, charge=charge, settlement=settlement)
+    item.provider = "manual"
+    item.provider_status = "MARCADO_RECEBIDO"
+    item.confirmed_at = paid_at
+    item.last_error = None
+    item.response_snapshot = {
+        **dict(item.response_snapshot or {}),
+        "manual_receipt": {
+            "paid_amount": float(money(payload.paid_amount)),
+            "paid_at": paid_at.isoformat(),
+            "payment_method": payload.payment_method,
+            "payment_reference": payload.payment_reference,
+        },
+    }
+    refresh_billing_batch_counters(db, batch)
+    _audit(
+        db,
+        request,
+        context,
+        "finance.billing.manual_receipt_confirmed",
+        str(batch.id),
+        {"item_id": str(item.id), "charge_id": str(charge.id), "paid_amount": str(money(payload.paid_amount))},
+    )
+    db.commit()
+    return _batch_response(db, _load_batch(db, context.user.organization_id, batch.id))
 
 
 @router.post("/batches/{batch_id}/issue-inter", response_model=BillingBatchResponse)
