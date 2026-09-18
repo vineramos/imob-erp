@@ -219,13 +219,14 @@ def confirm_receipt(
     paid_at = payload.paid_at or datetime.now(timezone.utc)
     if paid_at > datetime.now(timezone.utc):
         raise HTTPException(status_code=422, detail="A data do recebimento não pode estar no futuro.")
+    effective_reference = (payload.payment_reference or f"MANUAL:{item.id}").strip()
     settlement = record_payment_with_late_charges(
         db,
         charge=charge,
         paid_amount=money(payload.paid_amount),
         paid_at=paid_at,
         payment_method=payload.payment_method,
-        payment_reference=(payload.payment_reference or f"MANUAL:{item.id}").strip(),
+        payment_reference=effective_reference,
         notes=payload.notes or "Recebimento confirmado manualmente no ERP.",
     )
     generate_commissions_for_charge(db, charge=charge, settlement=settlement)
@@ -239,7 +240,7 @@ def confirm_receipt(
             "paid_amount": float(money(payload.paid_amount)),
             "paid_at": paid_at.isoformat(),
             "payment_method": payload.payment_method,
-            "payment_reference": payload.payment_reference,
+            "payment_reference": effective_reference,
         },
     }
     refresh_billing_batch_counters(db, batch)
@@ -289,7 +290,8 @@ def issue_inter(batch_id: UUID, payload: BillingIssueRequest, request: Request, 
                 if item.confirmed_at:
                     settle_confirmed_billing_item(db, item, paid_at=item.confirmed_at)
             except (BankProviderError, ValueError) as exc:
-                item.last_error = str(exc)
+                item.confirmed_at = None
+                item.last_error = f"Falha ao liquidar recebimento: {exc}"
         except (BankProviderError, ValueError) as exc:
             item.provider = "inter"
             item.last_error = str(exc)
@@ -315,7 +317,8 @@ def sync_inter(batch_id: UUID, request: Request, context: UserContext = Depends(
                 settle_confirmed_billing_item(db, item, paid_at=item.confirmed_at)
             item.last_error = None
         except (BankProviderError, ValueError) as exc:
-            item.last_error = str(exc)
+            item.confirmed_at = None
+            item.last_error = f"Falha ao liquidar recebimento: {exc}"
     refresh_billing_batch_counters(db, batch)
     _audit(db, request, context, "finance.billing.inter_synced", str(batch.id), {"confirmed": batch.confirmed_count, "errors": batch.error_count})
     db.commit()
