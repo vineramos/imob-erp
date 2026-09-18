@@ -1,10 +1,17 @@
 from datetime import date
 from decimal import Decimal
 
-from app.api.routes.finance_banking import _billing_identifier_match, _candidate_score, _exception_reason
+from app.api.routes.finance_banking import (
+    _billing_identifier_match,
+    _candidate_score,
+    _exception_reason,
+    _parse_csv_rows,
+    _parse_ofx_rows,
+)
 from app.domains.finance.advanced_models import BillingItem
 from app.domains.finance.bank_models import BankTransaction
 from app.domains.finance.models import RentCharge
+from app.domains.finance.providers import BankProviderError, bank_provider, bank_provider_descriptors
 
 
 def _charge(number: int = 123) -> RentCharge:
@@ -152,3 +159,51 @@ def test_exception_reason_detects_ambiguous_identifier():
 
     reason, _ = _exception_reason(items)
     assert reason == "ambiguous_identifier"
+
+
+def test_matches_short_internal_charge_identifier():
+    charge = _charge(7)
+    item = _item(charge)
+    transaction = _transaction(reference="C7")
+
+    assert _billing_identifier_match(transaction, item, charge) == "C7"
+
+
+def test_generic_csv_import_preserves_bank_reference_without_bank_specific_adapter():
+    rows = _parse_csv_rows(
+        "data;descricao;valor;tipo;referencia\n20/09/2026;Recebimento aluguel;1542,47;credito;C7\n".encode("utf-8")
+    )
+
+    assert len(rows) == 1
+    assert rows[0]["direction"] == "credit"
+    assert rows[0]["amount"] == Decimal("1542.47")
+    assert rows[0]["bank_reference"] == "C7"
+
+
+def test_generic_ofx_import_preserves_fitid_and_reference():
+    rows = _parse_ofx_rows(
+        b"<OFX><BANKTRANLIST><STMTTRN><TRNTYPE>CREDIT<DTPOSTED>20260920<TRNAMT>1542.47<FITID>abc-987<REFNUM>C7<NAME>LOCATARIO<MEMO>ALUGUEL</STMTTRN></BANKTRANLIST></OFX>"
+    )
+
+    assert len(rows) == 1
+    assert rows[0]["direction"] == "credit"
+    assert rows[0]["external_id"] == "abc-987"
+    assert rows[0]["bank_reference"] == "C7"
+
+
+def test_bank_provider_registry_exposes_generic_manual_adapter_and_capabilities():
+    descriptors = {item.key: item for item in bank_provider_descriptors()}
+
+    assert "manual" in descriptors
+    assert descriptors["manual"].direct_integration is False
+    assert descriptors["manual"].capabilities.statement is False
+    assert "inter" in descriptors
+
+
+def test_unknown_bank_provider_is_rejected_without_changing_business_rules():
+    try:
+        bank_provider("banco-futuro")
+    except BankProviderError as exc:
+        assert "não suportado" in str(exc)
+    else:
+        raise AssertionError("Provider inexistente deveria ser rejeitado.")
