@@ -16,6 +16,14 @@ class BillingIssueRequest(BaseModel):
     bank_account_id: UUID
 
 
+class BillingReceiptConfirmRequest(BaseModel):
+    paid_amount: float = Field(gt=0)
+    paid_at: datetime | None = None
+    payment_method: str = Field(default="manual", min_length=2, max_length=40)
+    payment_reference: str | None = Field(default=None, max_length=180)
+    notes: str | None = Field(default=None, max_length=2000)
+
+
 class BillingItemResponse(BaseModel):
     id: UUID
     charge_id: UUID
