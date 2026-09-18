@@ -60,6 +60,24 @@ export type SignatureIntegrationStatus = {
   checked_at: string
 }
 
+
+export type IntegrationReadinessItem = {
+  key: string
+  label: string
+  status: 'ready' | 'attention' | 'disabled'
+  selected: boolean
+  configured: boolean
+  critical: boolean
+  message: string
+  environment: string | null
+}
+
+export type IntegrationReadiness = {
+  ready: boolean
+  pending_count: number
+  items: IntegrationReadinessItem[]
+}
+
 export type ApprovalRule = {
   id: string
   name: string
