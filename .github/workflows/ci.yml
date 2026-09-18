@@ -5,7 +5,7 @@ on:
     branches: [main, sprint-1-foundation]
   pull_request:
     branches: [main]
-    types: [opened, reopened, ready_for_review]
+    types: [opened, reopened, ready_for_review, synchronize]
   workflow_dispatch:
 
 concurrency:
@@ -55,7 +55,8 @@ jobs:
         with:
           python-version: '3.14'
       - run: pip install -r requirements.txt
-      - run: python -m compileall app
+      - run: pip check
+      - run: python -m compileall app tests
       - run: python -c "from sqlalchemy.orm import configure_mappers; import app.domains.foundation.models; configure_mappers()"
       - run: python -c "from app.main import app; assert app.title"
       - run: alembic heads
@@ -117,6 +118,19 @@ jobs:
             --region "$REGION" \
             --image "$IMAGE" \
             --quiet
+
+      - name: Smoke test application health
+        env:
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          REGION: ${{ vars.GCP_REGION }}
+          SERVICE: ${{ vars.GCP_SERVICE }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          SERVICE_URL="$(gcloud run services describe "$SERVICE" --project "$PROJECT_ID" --region "$REGION" --format='value(status.url)')"
+          curl --silent --show-error --fail --max-time 20 "${SERVICE_URL}/api/health" | python -c 'import json,sys; data=json.load(sys.stdin); assert data["status"] == "ok"'
+          curl --silent --show-error --fail --max-time 20 "${SERVICE_URL}/api/health/ready" | python -c 'import json,sys; data=json.load(sys.stdin); assert data["status"] == "ready" and data["database"] == "ok"'
+          echo "Application health/readiness: SUCCESS"
 
       - name: Smoke test Neon Auth
         env:
