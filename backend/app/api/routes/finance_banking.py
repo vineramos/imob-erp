@@ -28,6 +28,7 @@ from app.domains.finance.bank_schemas import (
     ReconciliationCandidate,
 )
 from app.domains.finance.core_models import FinancialTitle
+from app.domains.finance.advanced_service import generate_commissions_for_charge
 from app.domains.finance.late_charges import amount_due, record_payment_with_late_charges
 from app.domains.finance.models import MaintenanceFinancialEntry, OwnerRepasse, RentCharge
 from app.domains.foundation.access import UserContext, require_permission
@@ -836,7 +837,17 @@ def reconciliation_candidates(
     context: UserContext = Depends(require_permission("finance.view")),
     db: Session = Depends(get_db),
 ) -> list[ReconciliationCandidate]:
-    transaction = _load_transaction(db, context.user.organization_id, transaction_id)
+    transaction = db.scalar(
+        select(BankTransaction)
+        .options(selectinload(BankTransaction.reconciliations))
+        .where(
+            BankTransaction.id == transaction_id,
+            BankTransaction.organization_id == context.user.organization_id,
+        )
+        .with_for_update()
+    )
+    if transaction is None:
+        raise HTTPException(status_code=404, detail="Movimento bancário não encontrado.")
     account = _load_account(db, context.user.organization_id, transaction.bank_account_id)
     if _transaction_response(transaction).remaining_amount <= 0:
         return []
@@ -892,7 +903,7 @@ def reconcile_transaction(
 
     if payload.target_type == "rent":
         try:
-            record_payment_with_late_charges(
+            settlement = record_payment_with_late_charges(
                 db,
                 charge=target,
                 paid_amount=target_remaining,
@@ -901,6 +912,7 @@ def reconcile_transaction(
                 payment_reference=reference,
                 notes="Recebimento conciliado pelo extrato bancário.",
             )
+            generate_commissions_for_charge(db, charge=target, settlement=settlement)
         except ValueError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
     elif payload.target_type == "owner_repasse":
