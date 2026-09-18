@@ -262,7 +262,11 @@ def _transaction_identifier_tokens(transaction: BankTransaction) -> set[str]:
         if token:
             tokens.add(token)
     tokens.update(_raw_identifier_tokens(transaction.raw_data or {}))
-    for match in re.findall(r"\b(?:COB[- ]?\d{1,12}|C\d{1,12})\b", transaction.description or "", flags=re.IGNORECASE):
+    for match in re.findall(
+        r"\b(?:COB[- ]?\d{1,12}|C\d{1,12}|FIN[- ]?\d{1,12}|MFIN[- ]?\d{1,12}|REP[- ]?[A-F0-9]{6,12})\b",
+        transaction.description or "",
+        flags=re.IGNORECASE,
+    ):
         token = _identifier_token(match)
         if token:
             tokens.add(token)
@@ -531,14 +535,32 @@ def _target_details(
     raise HTTPException(status_code=422, detail="Tipo de origem financeira inválido.")
 
 
+def _target_identifier_tokens(details: dict) -> set[str]:
+    target = details.get("object")
+    target_type = details.get("target_type")
+    code = _identifier_token(details.get("code"))
+    tokens = {code} if code else set()
+
+    if target_type == "rent":
+        billing_item = details.get("billing_item")
+        if isinstance(billing_item, BillingItem) and isinstance(target, RentCharge):
+            tokens.update(_billing_identifier_tokens(billing_item, target))
+
+    payment_reference = _identifier_token(getattr(target, "payment_reference", None))
+    if payment_reference:
+        tokens.add(payment_reference)
+
+    snapshot = getattr(target, "source_snapshot", None)
+    if isinstance(snapshot, dict):
+        tokens.update(_raw_identifier_tokens(snapshot))
+    return tokens
+
+
 def _candidate_identifier_match(transaction: BankTransaction, details: dict) -> str | None:
-    if details.get("target_type") != "rent":
+    matches = _transaction_identifier_tokens(transaction) & _target_identifier_tokens(details)
+    if not matches:
         return None
-    billing_item = details.get("billing_item")
-    charge = details.get("object")
-    if not isinstance(billing_item, BillingItem) or not isinstance(charge, RentCharge):
-        return None
-    return _billing_identifier_match(transaction, billing_item, charge)
+    return sorted(matches, key=lambda value: (-len(value), value))[0]
 
 
 def _candidate_score(transaction: BankTransaction, details: dict) -> int:
