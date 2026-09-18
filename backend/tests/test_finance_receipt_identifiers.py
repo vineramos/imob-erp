@@ -3,6 +3,7 @@ from decimal import Decimal
 
 from app.api.routes.finance_banking import (
     _billing_identifier_match,
+    _candidate_identifier_match,
     _candidate_score,
     _exception_reason,
     _parse_csv_rows,
@@ -207,3 +208,25 @@ def test_unknown_bank_provider_is_rejected_without_changing_business_rules():
         assert "não suportado" in str(exc)
     else:
         raise AssertionError("Provider inexistente deveria ser rejeitado.")
+
+
+def test_generic_target_codes_match_without_bank_specific_logic():
+    transaction = _transaction(reference="FIN-000042", description="Crédito identificado")
+    details = {
+        "target_type": "financial_title",
+        "code": "FIN-000042",
+        "object": object(),
+    }
+
+    assert _candidate_identifier_match(transaction, details) == "FIN000042"
+
+
+def test_generic_target_code_can_be_extracted_from_description():
+    transaction = _transaction(reference=None, description="Pagamento manutenção MFIN-000321")
+    details = {
+        "target_type": "maintenance",
+        "code": "MFIN-000321",
+        "object": object(),
+    }
+
+    assert _candidate_identifier_match(transaction, details) == "MFIN000321"
