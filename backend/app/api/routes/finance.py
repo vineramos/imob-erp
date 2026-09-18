@@ -367,15 +367,22 @@ def pay_repasse(
     context: UserContext = Depends(require_permission("finance.repasse.execute")),
     db: Session = Depends(get_db),
 ) -> RepasseResponse:
-    item = db.scalar(select(OwnerRepasse).where(OwnerRepasse.id == repasse_id, OwnerRepasse.organization_id == context.user.organization_id))
+    item = db.scalar(
+        select(OwnerRepasse)
+        .where(OwnerRepasse.id == repasse_id, OwnerRepasse.organization_id == context.user.organization_id)
+        .with_for_update()
+    )
     if item is None:
         raise HTTPException(status_code=404, detail="Repasse não encontrado.")
+    paid_at = payload.paid_at or datetime.now(timezone.utc)
+    if paid_at > datetime.now(timezone.utc):
+        raise HTTPException(status_code=422, detail="A data do pagamento não pode estar no futuro.")
     if item.status == "paid":
         raise HTTPException(status_code=409, detail="Este repasse já foi pago.")
     if item.status == "settled_zero":
         raise HTTPException(status_code=409, detail="Este repasse possui valor zero.")
     item.status = "paid"
-    item.paid_at = payload.paid_at or datetime.now(timezone.utc)
+    item.paid_at = paid_at
     item.payment_reference = (payload.payment_reference or "").strip() or None
     item.notes = (payload.notes or "").strip() or None
     _audit(
