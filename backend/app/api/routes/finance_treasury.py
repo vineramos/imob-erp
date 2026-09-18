@@ -649,12 +649,33 @@ def execute_payment_batch(
     context: UserContext = Depends(require_permission("finance.payment.approve")),
     db: Session = Depends(get_db),
 ) -> PaymentBatchResponse:
-    batch = _load_batch(db, context.user.organization_id, batch_id)
+    batch = db.scalar(
+        select(PaymentBatch)
+        .options(selectinload(PaymentBatch.items))
+        .where(
+            PaymentBatch.id == batch_id,
+            PaymentBatch.organization_id == context.user.organization_id,
+        )
+        .with_for_update()
+    )
+    if batch is None:
+        raise HTTPException(status_code=404, detail="Lote de pagamentos não encontrado.")
     if batch.status != "approved":
         raise HTTPException(status_code=409, detail="Somente lotes aprovados podem ter a execução registrada.")
     if payload.execution_date > date.today():
         raise HTTPException(status_code=422, detail="A execução só pode ser registrada na data atual ou em data passada.")
-    account = _load_account(db, context.user.organization_id, batch.bank_account_id)
+    account = db.scalar(
+        select(BankAccount)
+        .where(
+            BankAccount.id == batch.bank_account_id,
+            BankAccount.organization_id == context.user.organization_id,
+        )
+        .with_for_update()
+    )
+    if account is None:
+        raise HTTPException(status_code=404, detail="Conta bancária não encontrada.")
+    if not account.is_active:
+        raise HTTPException(status_code=409, detail="A conta bancária está inativa.")
     _validate_batch_targets(db, batch)
     available_balance = _account_balance(db, account)
     if money(batch.total_amount) > available_balance:
