@@ -18,10 +18,24 @@ class BankAccountCreate(BaseModel):
     account_digit: str | None = Field(default=None, max_length=10)
     account_type: Literal["checking", "savings", "payment", "other"] = "checking"
     fund_scope: FundScope = "operating"
-    provider: Literal["manual", "inter", "other"] = "manual"
+    provider: str = Field(default="manual", min_length=2, max_length=40, pattern=r"^[a-z0-9_-]+$")
     provider_account_id: str | None = Field(default=None, max_length=120)
     pix_key: str | None = Field(default=None, max_length=180)
     opening_balance: Decimal = Decimal("0.00")
+
+
+class BankProviderCapabilitiesResponse(BaseModel):
+    statement: bool
+    balance: bool
+    billing: bool
+    pix_payment: bool
+
+
+class BankProviderResponse(BaseModel):
+    key: str
+    name: str
+    direct_integration: bool
+    capabilities: BankProviderCapabilitiesResponse
 
 
 class BankAccountResponse(BaseModel):
