@@ -2,7 +2,7 @@ import hashlib
 import hmac
 import json
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
@@ -10,6 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
+from app.domains.finance.providers import BankProviderError, bank_provider
 from app.core.database import get_db
 from app.domains.contracts.models import AdministrationContract, SignatureWebhookEvent
 from app.domains.foundation.access import UserContext, require_permission
@@ -40,6 +41,23 @@ class DocumentStorageStatusResponse(BaseModel):
     checked_at: datetime
 
 
+class IntegrationReadinessItem(BaseModel):
+    key: str
+    label: str
+    status: Literal["ready", "attention", "disabled"]
+    selected: bool
+    configured: bool
+    critical: bool
+    message: str
+    environment: str | None = None
+
+
+class IntegrationReadinessResponse(BaseModel):
+    ready: bool
+    pending_count: int
+    items: list[IntegrationReadinessItem]
+
+
 def _response(value: SignatureProviderStatus) -> SignatureIntegrationStatusResponse:
     return SignatureIntegrationStatusResponse(
         provider=value.provider,
@@ -66,6 +84,170 @@ def _selected_signature_provider(db: Session, organization_id) -> str:
     settings = db.scalar(select(OrganizationSettings).where(OrganizationSettings.organization_id == organization_id))
     integrations = (settings.integrations if settings else {}) or {}
     return str(integrations.get("signature_provider") or "none")
+
+
+@router.get("/integrations/readiness", response_model=IntegrationReadinessResponse)
+def integrations_readiness(
+    context: UserContext = Depends(require_permission("settings.view")),
+    db: Session = Depends(get_db),
+) -> IntegrationReadinessResponse:
+    settings = get_settings()
+    organization_settings = db.scalar(
+        select(OrganizationSettings).where(OrganizationSettings.organization_id == context.user.organization_id)
+    )
+    selected = (organization_settings.integrations if organization_settings else {}) or {}
+
+    bank_key = str(selected.get("bank_provider") or "none")
+    signature_key = str(selected.get("signature_provider") or "none")
+    email_key = str(selected.get("email_provider") or "none")
+
+    items: list[IntegrationReadinessItem] = []
+
+    auth_configured = bool(settings.neon_auth_url.strip())
+    items.append(
+        IntegrationReadinessItem(
+            key="auth",
+            label="Neon Auth",
+            status="ready" if auth_configured else "attention",
+            selected=True,
+            configured=auth_configured,
+            critical=True,
+            message=(
+                "Autenticação configurada para o ambiente."
+                if auth_configured
+                else "NEON_AUTH_URL ainda não está configurada."
+            ),
+        )
+    )
+
+    storage_status = get_document_storage().status()
+    items.append(
+        IntegrationReadinessItem(
+            key="document_storage",
+            label="Storage de documentos",
+            status="ready" if storage_status.configured else "attention",
+            selected=True,
+            configured=storage_status.configured,
+            critical=True,
+            message=storage_status.message,
+            environment=storage_status.provider,
+        )
+    )
+
+    if bank_key == "none":
+        items.append(
+            IntegrationReadinessItem(
+                key="bank",
+                label="Banco / cobrança",
+                status="disabled",
+                selected=False,
+                configured=True,
+                critical=False,
+                message="Integração bancária desativada; operação manual continua disponível.",
+            )
+        )
+    else:
+        try:
+            bank_status = bank_provider(bank_key).status()
+            bank_configured = bank_status.configured
+            bank_message = (
+                "Credenciais e certificado do provider bancário estão configurados."
+                if bank_configured
+                else "Provider bancário selecionado, mas credenciais/certificado estão pendentes."
+            )
+            bank_environment = bank_status.environment
+        except BankProviderError as exc:
+            bank_configured = False
+            bank_message = str(exc)
+            bank_environment = None
+        items.append(
+            IntegrationReadinessItem(
+                key="bank",
+                label="Banco / cobrança",
+                status="ready" if bank_configured else "attention",
+                selected=True,
+                configured=bank_configured,
+                critical=False,
+                message=bank_message,
+                environment=bank_environment,
+            )
+        )
+
+    if signature_key == "none":
+        items.append(
+            IntegrationReadinessItem(
+                key="signature",
+                label="Assinatura eletrônica",
+                status="disabled",
+                selected=False,
+                configured=True,
+                critical=False,
+                message="Assinatura eletrônica desativada.",
+            )
+        )
+    else:
+        provider = get_signature_provider(signature_key)
+        signature_status = provider.status() if provider is not None else None
+        signature_configured = bool(
+            signature_status
+            and signature_status.configured
+            and settings.clicksign_webhook_secret.strip()
+        )
+        signature_message = (
+            "Access Token e HMAC Secret do webhook estão configurados."
+            if signature_configured
+            else (
+                "Provider de assinatura selecionado; configure o Access Token e o HMAC Secret do webhook."
+                if provider is not None
+                else "Provider de assinatura não suportado."
+            )
+        )
+        items.append(
+            IntegrationReadinessItem(
+                key="signature",
+                label="Assinatura eletrônica",
+                status="ready" if signature_configured else "attention",
+                selected=True,
+                configured=signature_configured,
+                critical=False,
+                message=signature_message,
+                environment=signature_status.environment if signature_status else None,
+            )
+        )
+
+    if email_key == "none":
+        items.append(
+            IntegrationReadinessItem(
+                key="email",
+                label="E-mail transacional",
+                status="disabled",
+                selected=False,
+                configured=True,
+                critical=False,
+                message="E-mail transacional desativado.",
+            )
+        )
+    else:
+        email_configured = settings.email_smtp_configured
+        items.append(
+            IntegrationReadinessItem(
+                key="email",
+                label="E-mail transacional",
+                status="ready" if email_configured else "attention",
+                selected=True,
+                configured=email_configured,
+                critical=False,
+                message=(
+                    "SMTP configurado para envio operacional."
+                    if email_configured
+                    else "SMTP selecionado, mas host/remetente/credenciais ainda estão pendentes."
+                ),
+                environment="smtp",
+            )
+        )
+
+    pending = [item for item in items if item.selected and not item.configured]
+    return IntegrationReadinessResponse(ready=not pending, pending_count=len(pending), items=items)
 
 
 @router.get("/integrations/signature/status", response_model=SignatureIntegrationStatusResponse)
