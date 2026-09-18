@@ -8,7 +8,7 @@ ERP imobiliário modular, auditável e preparado para crescer. O projeto nasce c
 - **Backend:** FastAPI + Python
 - **Banco:** PostgreSQL no Neon
 - **Autenticação:** Neon Auth (e-mail e senha, sem cadastro público)
-- **Hospedagem planejada:** Google Cloud Run
+- **Hospedagem:** Google Cloud Run com deploy automatizado via GitHub Actions + Workload Identity Federation
 - **Assinaturas:** Clicksign via provider dedicado
 - **Banco operacional:** Banco Inter via `BankProvider`
 - **Arquivos:** object storage, nunca dentro do banco relacional
@@ -35,15 +35,22 @@ imob-erp/
 
 ## Sprint atual
 
-**Sprint 1 — Fundação**
+**Sprint 1 — Fundação + hardening operacional**
 
-- estrutura modular;
-- shell visual do ERP;
-- usuários e autenticação;
-- permissões e alçadas;
-- auditoria;
-- configurações institucionais;
-- Design System parametrizável;
-- preparação para Cloud Run, Neon, Clicksign e Banco Inter.
+Além da fundação inicial, a branch atual já inclui:
+
+- CRM, imóveis, contratos, locação, manutenção, agenda, documentos, portais e financeiro;
+- ciclo de cobrança, baixa, liquidação, comissão, repasse, tesouraria e conciliação;
+- separação entre recursos próprios e dinheiro de terceiros;
+- fechamento financeiro com verificações de rastreabilidade;
+- relatórios, DRE e informes anuais;
+- readiness técnico em `/api/health/ready`;
+- readiness consolidado de integrações na tela Configurações → Integrações;
+- build de container e deploy automatizado no Cloud Run;
+- smoke tests pós-deploy de aplicação e Neon Auth;
+- identificação do SHA efetivamente publicado para evitar deploy stale;
+- headers HTTP defensivos e container executado sem root.
+
+O runbook de produção está em `docs/OPERATIONS_RUNBOOK.md`.
 
 > Branch de desenvolvimento: `sprint-1-foundation`
