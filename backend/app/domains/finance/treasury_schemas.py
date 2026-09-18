@@ -78,6 +78,25 @@ class PaymentBatchExecutionRequest(BaseModel):
     reference: str | None = Field(default=None, max_length=180)
 
 
+class OwnerRepasseResponse(BaseModel):
+    id: UUID
+    charge_id: UUID
+    charge_code: str
+    lease_contract_id: UUID
+    lease_code: str
+    property_id: UUID
+    property_code: str
+    competence: date
+    owner_person_id: UUID
+    owner_name: str
+    ownership_percent: float
+    amount: float
+    due_date: date
+    status: str
+    paid_at: datetime | None
+    payment_reference: str | None
+
+
 class CashFlowDay(BaseModel):
     date: date
     receivables: float
