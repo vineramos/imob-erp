@@ -182,6 +182,14 @@ def record_payment_with_late_charges(
     # Import local evita ciclo: service também é usado pelos helpers de mora.
     from app.domains.finance.service import calculate_settlement
 
+    # Serializa baixas concorrentes da mesma cobrança para impedir
+    # settlement, repasse e comissão duplicados.
+    locked_charge = db.scalar(
+        select(RentCharge).where(RentCharge.id == charge.id).with_for_update()
+    )
+    if locked_charge is None:
+        raise ValueError("Cobrança não encontrada.")
+    charge = locked_charge
     if charge.status in {"paid", "cancelled"}:
         raise ValueError("Esta cobrança não está disponível para recebimento.")
     paid_at = paid_at or datetime.now(timezone.utc)
