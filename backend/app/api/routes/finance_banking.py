@@ -27,6 +27,7 @@ from app.domains.finance.bank_schemas import (
     BankTransactionResponse,
     ReconciliationCandidate,
 )
+from app.domains.finance.advanced_models import BillingItem
 from app.domains.finance.core_models import FinancialTitle
 from app.domains.finance.advanced_service import generate_commissions_for_charge
 from app.domains.finance.late_charges import amount_due, record_payment_with_late_charges
@@ -210,6 +211,83 @@ def _header(value: str) -> str:
     return re.sub(r"[^a-z0-9]+", "_", _strip_accents(value).lower()).strip("_")
 
 
+IDENTIFIER_KEYS = {
+    "seunumero",
+    "codigosolicitacao",
+    "txid",
+    "endtoendid",
+    "idtransacao",
+    "externalid",
+    "fitid",
+    "referencia",
+    "reference",
+    "numerodocumento",
+}
+
+
+def _identifier_token(value: object) -> str | None:
+    text = str(value or "").strip().upper()
+    if not text:
+        return None
+    normalized = re.sub(r"[^A-Z0-9]", "", _strip_accents(text).upper())
+    return normalized if len(normalized) >= 4 else None
+
+
+def _raw_identifier_tokens(value: object, *, parent_key: str = "") -> set[str]:
+    result: set[str] = set()
+    if isinstance(value, dict):
+        for key, child in value.items():
+            result.update(_raw_identifier_tokens(child, parent_key=_header(str(key)).replace("_", "")))
+        return result
+    if isinstance(value, list):
+        for child in value:
+            result.update(_raw_identifier_tokens(child, parent_key=parent_key))
+        return result
+    if parent_key in IDENTIFIER_KEYS:
+        token = _identifier_token(value)
+        if token:
+            result.add(token)
+    return result
+
+
+def _transaction_identifier_tokens(transaction: BankTransaction) -> set[str]:
+    tokens: set[str] = set()
+    for value in (transaction.external_id, transaction.bank_reference, transaction.document):
+        token = _identifier_token(value)
+        if token:
+            tokens.add(token)
+    tokens.update(_raw_identifier_tokens(transaction.raw_data or {}))
+    for match in re.findall(r"\b(?:COB[- ]?\d{1,12}|C\d{1,12})\b", transaction.description or "", flags=re.IGNORECASE):
+        token = _identifier_token(match)
+        if token:
+            tokens.add(token)
+    return tokens
+
+
+def _billing_identifier_tokens(item: BillingItem, charge: RentCharge) -> set[str]:
+    tokens = {
+        token
+        for token in (
+            _identifier_token(item.provider_charge_id),
+            _identifier_token(item.pix_txid),
+            _identifier_token(f"C{charge.internal_number}"),
+            _identifier_token(f"COB-{charge.internal_number:06d}"),
+        )
+        if token
+    }
+    tokens.update(_raw_identifier_tokens(item.request_snapshot or {}))
+    tokens.update(_raw_identifier_tokens(item.response_snapshot or {}))
+    return tokens
+
+
+def _billing_identifier_match(transaction: BankTransaction, item: BillingItem, charge: RentCharge) -> str | None:
+    matches = _transaction_identifier_tokens(transaction) & _billing_identifier_tokens(item, charge)
+    if not matches:
+        return None
+    # Prefere referências mais específicas/longas (provider id / txid) ao código curto C123.
+    return sorted(matches, key=lambda value: (-len(value), value))[0]
+
+
 def _parse_decimal(raw: str) -> Decimal:
     value = (raw or "").strip().replace("R$", "").replace(" ", "")
     if not value:
@@ -361,6 +439,7 @@ def _target_details(
             if entry.get("name")
         )
         outstanding = Decimal("0.00") if item.status in {"paid", "cancelled"} else amount_due(db, item, as_of=as_of)
+        billing_item = db.scalar(select(BillingItem).where(BillingItem.charge_id == item.id))
         return {
             "object": item,
             "target_type": "rent",
@@ -371,6 +450,7 @@ def _target_details(
             "description": "Cobrança mensal de locação",
             "counterparty": tenants or "Locatário",
             "due_date": item.due_date,
+            "billing_item": billing_item,
         }
 
     if target_type == "owner_repasse":
@@ -446,10 +526,21 @@ def _target_details(
     raise HTTPException(status_code=422, detail="Tipo de origem financeira inválido.")
 
 
+def _candidate_identifier_match(transaction: BankTransaction, details: dict) -> str | None:
+    if details.get("target_type") != "rent":
+        return None
+    billing_item = details.get("billing_item")
+    charge = details.get("object")
+    if not isinstance(billing_item, BillingItem) or not isinstance(charge, RentCharge):
+        return None
+    return _billing_identifier_match(transaction, billing_item, charge)
+
+
 def _candidate_score(transaction: BankTransaction, details: dict) -> int:
     remaining = money(details["remaining"])
     available = _transaction_response(transaction).remaining_amount
-    score = 0
+    identifier_match = _candidate_identifier_match(transaction, details)
+    score = 1000 if identifier_match else 0
     if remaining == available:
         score += 70
     elif remaining <= available:
@@ -537,6 +628,7 @@ def _open_candidates(db: Session, transaction: BankTransaction, account: BankAcc
         )
         if details["fund_scope"] != account.fund_scope or money(details["remaining"]) <= 0:
             continue
+        matched_identifier = _candidate_identifier_match(transaction, details)
         score = _candidate_score(transaction, details)
         result.append(
             ReconciliationCandidate(
@@ -550,6 +642,8 @@ def _open_candidates(db: Session, transaction: BankTransaction, account: BankAcc
                 due_date=details["due_date"],
                 remaining_amount=money(details["remaining"]),
                 score=score,
+                identifier_match=matched_identifier is not None,
+                matched_identifier=matched_identifier,
             )
         )
     return sorted(result, key=lambda item: (-item.score, item.due_date or date.max, item.target_code))[:80]
