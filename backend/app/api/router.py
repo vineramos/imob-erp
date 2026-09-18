@@ -27,6 +27,7 @@ from app.api.routes.finance_manual import router as finance_manual_router
 from app.api.routes.finance_monthly_cycle import router as finance_monthly_cycle_router
 from app.api.routes.finance_maintenance import router as finance_maintenance_router
 from app.api.routes.finance_overdue import router as finance_overdue_router
+from app.api.routes.finance_reports import router as finance_reports_router
 from app.api.routes.finance_treasury import router as finance_treasury_router
 from app.api.routes.foundation import router as foundation_router
 from app.api.routes.health import router as health_router
@@ -118,6 +119,7 @@ api_router.include_router(finance_core_router)
 api_router.include_router(finance_manual_router)
 api_router.include_router(finance_monthly_cycle_router)
 api_router.include_router(finance_overdue_router)
+api_router.include_router(finance_reports_router)
 api_router.include_router(finance_maintenance_router)
 api_router.include_router(finance_treasury_router)
 api_router.include_router(finance_bank_control_router)
