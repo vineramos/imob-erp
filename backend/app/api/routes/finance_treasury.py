@@ -28,6 +28,7 @@ from app.domains.finance.treasury_schemas import (
     PaymentBatchItemResponse,
     PaymentBatchResponse,
     PaymentCandidate,
+    OwnerRepasseResponse,
 )
 from app.domains.foundation.access import UserContext, require_permission
 from app.domains.foundation.audit import write_audit
@@ -408,6 +409,47 @@ def cash_flow(
         overdue_payables=overdue_payables,
         days=days,
     )
+
+
+@router.get("/repasses", response_model=list[OwnerRepasseResponse])
+def list_repasses(
+    status: str | None = Query(default=None),
+    context: UserContext = Depends(require_permission("finance.view")),
+    db: Session = Depends(get_db),
+) -> list[OwnerRepasseResponse]:
+    stmt = select(OwnerRepasse).where(OwnerRepasse.organization_id == context.user.organization_id)
+    if status:
+        stmt = stmt.where(OwnerRepasse.status == status)
+    items = db.scalars(
+        stmt.order_by(OwnerRepasse.due_date.asc(), OwnerRepasse.owner_name.asc()).limit(500)
+    ).all()
+    result: list[OwnerRepasseResponse] = []
+    for item in items:
+        charge = db.get(RentCharge, item.charge_id)
+        lease_code = "LOC-—"
+        if charge is not None:
+            lease_code = f"LOC-{charge.internal_number:06d}"
+        result.append(
+            OwnerRepasseResponse(
+                id=item.id,
+                charge_id=item.charge_id,
+                charge_code=f"COB-{charge.internal_number:06d}" if charge else "COB-—",
+                lease_contract_id=item.lease_contract_id,
+                lease_code=lease_code,
+                property_id=item.property_id,
+                property_code=str((charge.property_snapshot or {}).get("code") or "—") if charge else "—",
+                competence=item.settlement.charge.competence if item.settlement and item.settlement.charge else date.today(),
+                owner_person_id=item.owner_person_id,
+                owner_name=item.owner_name,
+                ownership_percent=float(item.ownership_percent),
+                amount=float(money(item.amount)),
+                due_date=item.due_date,
+                status=item.status,
+                paid_at=item.paid_at,
+                payment_reference=item.payment_reference,
+            )
+        )
+    return result
 
 
 @router.get("/payment-candidates", response_model=list[PaymentCandidate])
