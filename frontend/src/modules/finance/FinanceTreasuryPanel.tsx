@@ -15,10 +15,11 @@ import { FinanceCashFlowPanel } from './FinanceCashFlowPanel'
 import './finance-treasury.css'
 
 type Scope = 'operating'|'third_party'
-type TreasuryArea = 'cashflow'|'payments'
+type TreasuryArea = 'cashflow'|'payments'|'repasses'
 type BankAccount = {id:string;code:string;name:string;bank_name:string;fund_scope:Scope;current_balance:number;is_active:boolean;provider:string}
 type PaymentCandidate = {target_type:'owner_repasse'|'maintenance'|'manual';target_id:string;target_code:string;description:string;counterparty_name:string;due_date:string|null;fund_scope:Scope;remaining_amount:number;overdue:boolean}
 type PaymentBatchItem = {id:string;target_type:string;target_id:string;target_code:string;description:string;counterparty_name:string;due_date:string|null;fund_scope:Scope;amount:number;status:string;bank_transaction_id:string|null}
+type OwnerRepasse = {id:string;charge_id:string;charge_code:string;lease_contract_id:string;lease_code:string;property_id:string;property_code:string;competence:string;owner_person_id:string;owner_name:string;ownership_percent:number;amount:number;due_date:string;status:string;paid_at:string|null;payment_reference:string|null}
 type PaymentBatch = {id:string;code:string;bank_account_id:string;bank_account_name:string;name:string;scheduled_date:string;fund_scope:Scope;payment_method:string;status:string;total_amount:number;item_count:number;notes:string|null;provider_batch_id:string|null;provider_status:string|null;execution_reference:string|null;prepared_at:string|null;approved_at:string|null;executed_at:string|null;cancelled_at:string|null;created_at:string;items:PaymentBatchItem[]}
 
 const batchStatus:Record<string,string> = {draft:'Rascunho',ready:'Preparado',approved:'Aprovado',executed:'Executado',cancelled:'Cancelado'}
@@ -42,6 +43,8 @@ export function FinanceTreasuryPanel({permissions}:{permissions:string[]}){
   const [candidates,setCandidates]=useState<PaymentCandidate[]>([])
   const [selected,setSelected]=useState<Set<string>>(new Set())
   const [batches,setBatches]=useState<PaymentBatch[]>([])
+  const [repasses,setRepasses]=useState<OwnerRepasse[]>([])
+  const [repasseLoading,setRepasseLoading]=useState(false)
   const [executeTarget,setExecuteTarget]=useState<PaymentBatch|null>(null)
   const [executionDate,setExecutionDate]=useState(todayInput())
   const [executionReference,setExecutionReference]=useState('')
@@ -58,6 +61,8 @@ export function FinanceTreasuryPanel({permissions}:{permissions:string[]}){
   const loadPaymentData=useCallback(async()=>{if(!accountId){setCandidates([]);setBatches([]);return}setLoading(true);setError('');try{const [candidateResult,batchResult]=await Promise.all([apiRequest<PaymentCandidate[]>(`/finance/treasury/payment-candidates?account_id=${accountId}&until=${scheduledDate}`),apiRequest<PaymentBatch[]>(`/finance/treasury/payment-batches?account_id=${accountId}`)]);setCandidates(candidateResult);setBatches(batchResult);setSelected(current=>new Set([...current].filter(key=>candidateResult.some(item=>candidateKey(item)===key))))}catch(cause){setError(cause instanceof ApiError?cause.detail:'Não foi possível carregar os lotes de pagamento.')}finally{setLoading(false)}},[accountId,scheduledDate])
   useEffect(()=>{void loadAccounts()},[loadAccounts])
   useEffect(()=>{if(area==='payments')void loadPaymentData()},[area,loadPaymentData])
+  const loadRepasses=useCallback(async()=>{setRepasseLoading(true);setError('');try{const result=await apiRequest<OwnerRepasse[]>('/finance/repasses');setRepasses(result)}catch(cause){setError(cause instanceof ApiError?cause.detail:'Não foi possível carregar os repasses.')}finally{setRepasseLoading(false)}},[])
+  useEffect(()=>{if(area==='repasses')void loadRepasses()},[area,loadRepasses])
   useEffect(()=>{if(area==='cashflow'){setError('');setSuccess('')}},[area])
 
   function toggleCandidate(item:PaymentCandidate){const key=candidateKey(item);setSelected(current=>{const next=new Set(current);if(next.has(key))next.delete(key);else next.add(key);return next})}
@@ -70,7 +75,7 @@ export function FinanceTreasuryPanel({permissions}:{permissions:string[]}){
 
   return <section className="workspace treasury-workspace">
     <div className="page-heading finance-heading treasury-heading"><div><span className="eyebrow">Financeiro · Tesouraria</span><h1>Tesouraria</h1><p>Fluxo financeiro diário e programação de pagamentos com separação rígida entre recursos próprios e valores de terceiros.</p></div>{area==='payments'&&<button className="button secondary" type="button" onClick={()=>void loadPaymentData()} disabled={loading}><RefreshCw size={14}/> Atualizar</button>}</div>
-    <div className="panel treasury-tabs"><button type="button" className={area==='cashflow'?'active':''} onClick={()=>setArea('cashflow')}><TrendingUp size={15}/> Fluxo financeiro</button><button type="button" className={area==='payments'?'active':''} onClick={()=>setArea('payments')}><ListChecks size={15}/> Lotes de pagamentos</button></div>
+    <div className="panel treasury-tabs"><button type="button" className={area==='cashflow'?'active':''} onClick={()=>setArea('cashflow')}><TrendingUp size={15}/> Fluxo financeiro</button><button type="button" className={area==='payments'?'active':''} onClick={()=>setArea('payments')}><ListChecks size={15}/> Lotes de pagamentos</button><button type="button" className={area==='repasses'?'active':''} onClick={()=>setArea('repasses')}><WalletCards size={15}/> Repasses</button></div>
 
     {area==='cashflow'?<FinanceCashFlowPanel/>:<>
       {error&&<div className="form-alert danger-alert">{error}</div>}{success&&<div className="form-alert success-alert">{success}</div>}
