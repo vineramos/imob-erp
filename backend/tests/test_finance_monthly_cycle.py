@@ -129,3 +129,27 @@ def test_monthly_finance_cycle_tracks_charge_receipt_settlement_and_repasse(clie
     assert states["receipts"] == "complete"
     assert states["settlement"] == "complete"
     assert states["owner_repasses"] == "complete"
+
+
+def test_finance_closing_control_reports_clean_period_without_bank_anomalies(client):
+    scenario = build_signed_rental(client, publish=False)
+    competence = scenario["start"]
+
+    result = assert_response(
+        client.get(
+            "/api/reports/closing-control",
+            params={
+                "start_date": competence.isoformat(),
+                "end_date": add_months(competence, 1).isoformat(),
+            },
+        )
+    ).json()
+
+    assert result["bank_transactions"] == 0
+    assert result["bank_transactions_unreconciled"] == 0
+    assert result["reconciliation_amount_mismatch"] == 0
+    assert result["invalid_reconciliation_targets"] == 0
+    assert result["dre_duplicate_commissions"] == 0
+    assert result["dre_unclassified_commissions"] == 0
+    assert result["ready_to_close"] is True
+    assert result["issues"] == []
