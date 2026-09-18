@@ -47,6 +47,17 @@ def test_monthly_finance_cycle_tracks_charge_receipt_settlement_and_repasse(clie
         )
     )
 
+    duplicate_first = client.post(
+        f"/api/finance/charges/{first_charge['id']}/payment",
+        json={
+            "paid_amount": "2000.00",
+            "paid_at": first_paid_at.isoformat(),
+            "payment_method": "pix",
+            "payment_reference": "E2E-CICLO-DUPLICADO",
+        },
+    )
+    assert duplicate_first.status_code == 409
+
     first_closed = load_cycle(client, first_competence)
     assert first_closed["paid_charges"] == 1
     assert first_closed["settlements_count"] == 1
@@ -98,6 +109,15 @@ def test_monthly_finance_cycle_tracks_charge_receipt_settlement_and_repasse(clie
             },
         )
     )
+
+    duplicate_repasse = client.post(
+        f"/api/finance/repasses/{repasse['id']}/payment",
+        json={
+            "paid_at": second_paid_at.isoformat(),
+            "payment_reference": "E2E-CICLO-REPASSE-DUPLICADO",
+        },
+    )
+    assert duplicate_repasse.status_code == 409
 
     finished = load_cycle(client, second_competence)
     assert finished["owner_repasse_pending_count"] == 0
