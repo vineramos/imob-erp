@@ -10,6 +10,7 @@ FROM python:3.14-slim AS runtime
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PORT=8080 \
     PYTHONPATH=/app/backend \
     FRONTEND_DIST=/app/frontend-dist
@@ -25,6 +26,10 @@ COPY backend/migrations ./backend/migrations
 COPY --from=frontend-build /frontend/dist ./frontend-dist
 COPY deploy/entrypoint.sh ./entrypoint.sh
 
-RUN chmod +x /app/entrypoint.sh
+RUN adduser --disabled-password --gecos "" appuser \
+    && chmod +x /app/entrypoint.sh \
+    && chown -R appuser:appuser /app
+
+USER appuser
 
 CMD ["/app/entrypoint.sh"]
