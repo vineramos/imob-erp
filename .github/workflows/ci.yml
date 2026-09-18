@@ -117,6 +117,7 @@ jobs:
             --project "$PROJECT_ID" \
             --region "$REGION" \
             --image "$IMAGE" \
+            --update-env-vars "IMOB_RELEASE_SHA=${GITHUB_SHA}" \
             --quiet
 
       - name: Smoke test application health
@@ -128,9 +129,25 @@ jobs:
         run: |
           set -euo pipefail
           SERVICE_URL="$(gcloud run services describe "$SERVICE" --project "$PROJECT_ID" --region "$REGION" --format='value(status.url)')"
-          curl --silent --show-error --fail --max-time 20 "${SERVICE_URL}/api/health" | python -c 'import json,sys; data=json.load(sys.stdin); assert data["status"] == "ok"'
-          curl --silent --show-error --fail --max-time 20 "${SERVICE_URL}/api/health/ready" | python -c 'import json,sys; data=json.load(sys.stdin); assert data["status"] == "ready" and data["database"] == "ok"'
-          echo "Application health/readiness: SUCCESS"
+          HEALTH_FILE="$(mktemp)"
+          READY_FILE="$(mktemp)"
+          trap 'rm -f "$HEALTH_FILE" "$READY_FILE"' EXIT
+          curl --silent --show-error --fail --max-time 20 "${SERVICE_URL}/api/health" > "$HEALTH_FILE"
+          curl --silent --show-error --fail --max-time 20 "${SERVICE_URL}/api/health/ready" > "$READY_FILE"
+          python - "$HEALTH_FILE" "$READY_FILE" "$GITHUB_SHA" <<'PY'
+          import json
+          import sys
+
+          health_path, ready_path, expected_release = sys.argv[1:]
+          health = json.load(open(health_path, encoding="utf-8"))
+          ready = json.load(open(ready_path, encoding="utf-8"))
+          assert health["status"] == "ok"
+          assert ready["status"] == "ready"
+          assert ready["database"] == "ok"
+          assert health["release"] == expected_release
+          assert ready["release"] == expected_release
+          PY
+          echo "Application health/readiness/release: SUCCESS"
 
       - name: Smoke test Neon Auth
         env:
