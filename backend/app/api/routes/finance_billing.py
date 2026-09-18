@@ -20,8 +20,9 @@ from app.domains.finance.advanced_schemas import (
     BillingRunResponse,
 )
 from app.domains.finance.advanced_service import ensure_billing_batch, money, refresh_billing_batch_counters
+from app.domains.finance.advanced_service import generate_commissions_for_charge
 from app.domains.finance.billing_settlement import settle_confirmed_billing_item
-from app.domains.finance.late_charges import amount_due, charge_late_payment_terms
+from app.domains.finance.late_charges import amount_due, charge_late_payment_terms, record_payment_with_late_charges
 from app.domains.finance.models import RentCharge
 from app.domains.finance.providers import BankProviderError, InterBankProvider
 from app.domains.foundation.access import UserContext, require_permission
