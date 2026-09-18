@@ -362,6 +362,7 @@ def _target_details(
         outstanding = Decimal("0.00") if item.status in {"paid", "cancelled"} else amount_due(db, item, as_of=as_of)
         return {
             "object": item,
+            "target_type": "rent",
             "direction": "receivable",
             "fund_scope": "third_party",
             "remaining": outstanding,
@@ -383,6 +384,7 @@ def _target_details(
         outstanding = Decimal("0.00") if item.status in {"paid", "settled_zero"} else money(item.amount)
         return {
             "object": item,
+            "target_type": "owner_repasse",
             "direction": "payable",
             "fund_scope": "third_party",
             "remaining": outstanding,
@@ -406,6 +408,7 @@ def _target_details(
         snapshot = dict(item.source_snapshot or {})
         return {
             "object": item,
+            "target_type": "maintenance",
             "direction": item.direction,
             "fund_scope": scope,
             "remaining": outstanding,
@@ -429,6 +432,7 @@ def _target_details(
         outstanding = Decimal("0.00") if item.status == "cancelled" else money(max(Decimal("0.00"), item.amount - item.settled_amount))
         return {
             "object": item,
+            "target_type": target_type,
             "direction": item.direction,
             "fund_scope": item.fund_scope,
             "remaining": outstanding,
