@@ -288,7 +288,8 @@ def issue_inter(batch_id: UUID, payload: BillingIssueRequest, request: Request, 
             try:
                 _apply_detail(item, provider.charge(provider_id))
                 if item.confirmed_at:
-                    settle_confirmed_billing_item(db, item, paid_at=item.confirmed_at)
+                    with db.begin_nested():
+                        settle_confirmed_billing_item(db, item, paid_at=item.confirmed_at)
             except (BankProviderError, ValueError) as exc:
                 item.confirmed_at = None
                 item.last_error = f"Falha ao liquidar recebimento: {exc}"
@@ -314,7 +315,8 @@ def sync_inter(batch_id: UUID, request: Request, context: UserContext = Depends(
         try:
             _apply_detail(item, provider.charge(item.provider_charge_id))
             if item.confirmed_at:
-                settle_confirmed_billing_item(db, item, paid_at=item.confirmed_at)
+                with db.begin_nested():
+                    settle_confirmed_billing_item(db, item, paid_at=item.confirmed_at)
             item.last_error = None
         except (BankProviderError, ValueError) as exc:
             item.confirmed_at = None
