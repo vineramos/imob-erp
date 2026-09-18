@@ -299,6 +299,21 @@ export function LeaseContractsPage({ permissions }: Props) {
   }, [])
 
   useEffect(() => { void load() }, [load])
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const propertyId = params.get('propertyId')
+    if (!propertyId || !canCreate || loading) return
+    const property = properties.find((item) => item.id === propertyId)
+    if (!property) return
+    setEditing(null)
+    setForm({ ...defaultForm(defaults), property_id: property.id, rent_amount: property.rent_amount })
+    setChangeSummary('')
+    setSignerLookupIndex(null)
+    setShowForm(true)
+    window.history.replaceState({}, '', '/app/contracts')
+  }, [canCreate, defaults, loading, properties])
+
+
 
   const tenantCandidates = useMemo(
     () => persons.filter((person) => person.is_active && (person.role_keys.includes('tenant') || person.role_keys.length === 0)),
