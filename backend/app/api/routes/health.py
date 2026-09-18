@@ -1,3 +1,5 @@
+import os
+
 from fastapi import APIRouter, HTTPException
 from sqlalchemy import text
 
@@ -8,7 +10,11 @@ router = APIRouter(prefix="/health", tags=["health"])
 
 @router.get("")
 def health_check() -> dict[str, str]:
-    return {"status": "ok", "service": "imob-erp-api"}
+    return {
+        "status": "ok",
+        "service": "imob-erp-api",
+        "release": os.getenv("IMOB_RELEASE_SHA", "development"),
+    }
 
 
 @router.get("/ready")
@@ -25,4 +31,9 @@ def readiness_check() -> dict[str, str]:
             connection.execute(text("SELECT 1"))
     except Exception as exc:
         raise HTTPException(status_code=503, detail="Banco de dados indisponível.") from exc
-    return {"status": "ready", "service": "imob-erp-api", "database": "ok"}
+    return {
+        "status": "ready",
+        "service": "imob-erp-api",
+        "database": "ok",
+        "release": os.getenv("IMOB_RELEASE_SHA", "development"),
+    }
