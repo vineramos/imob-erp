@@ -538,7 +538,8 @@ def _candidate_identifier_match(transaction: BankTransaction, details: dict) -> 
 
 def _candidate_score(transaction: BankTransaction, details: dict) -> int:
     remaining = money(details["remaining"])
-    available = _transaction_response(transaction).remaining_amount
+    reconciled = sum((money(entry.amount) for entry in transaction.reconciliations), Decimal("0.00"))
+    available = money(max(Decimal("0.00"), money(transaction.amount) - reconciled))
     identifier_match = _candidate_identifier_match(transaction, details)
     score = 1000 if identifier_match else 0
     if remaining == available:
