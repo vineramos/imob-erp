@@ -393,6 +393,171 @@ def dre_values(
     return {key: money(value) for key, value in values.items()}
 
 
+
+def finance_closing_control(
+    db: Session,
+    *,
+    organization_id: UUID,
+    start_date: date,
+    end_date: date,
+):
+    from app.domains.finance.bank_models import BankReconciliation, BankTransaction
+
+    issues = []
+    transactions = db.scalars(
+        select(BankTransaction)
+        .where(
+            BankTransaction.organization_id == organization_id,
+            BankTransaction.transaction_date >= start_date,
+            BankTransaction.transaction_date <= end_date,
+        )
+        .order_by(BankTransaction.transaction_date, BankTransaction.internal_number)
+    ).all()
+
+    reconciled_count = 0
+    unreconciled_count = 0
+    mismatch_count = 0
+    invalid_target_count = 0
+
+    def issue(severity, code, message, entity_type, entity_id, reference=None):
+        issues.append({
+            "severity": severity,
+            "code": code,
+            "message": message,
+            "entity_type": entity_type,
+            "entity_id": entity_id,
+            "reference": reference,
+        })
+
+    for tx in transactions:
+        reconciliations = list(tx.reconciliations or [])
+        total_reconciled = money(sum((money(item.amount) for item in reconciliations), ZERO))
+        tx_amount = money(tx.amount)
+
+        if tx.status in {"reconciled", "partial"} and not reconciliations:
+            unreconciled_count += 1
+            issue(
+                "error",
+                "BANK_TX_WITHOUT_ORIGIN",
+                f"Movimentação bancária {tx.internal_number} está {tx.status}, mas não possui conciliação.",
+                "bank_transaction",
+                tx.id,
+                str(tx.internal_number),
+            )
+        elif not reconciliations:
+            unreconciled_count += 1
+            issue(
+                "warning",
+                "BANK_TX_PENDING_RECONCILIATION",
+                f"Movimentação bancária {tx.internal_number} ainda não possui origem financeira conciliada.",
+                "bank_transaction",
+                tx.id,
+                str(tx.internal_number),
+            )
+        else:
+            reconciled_count += 1
+
+        if total_reconciled != tx_amount:
+            mismatch_count += 1
+            issue(
+                "error",
+                "BANK_RECONCILIATION_AMOUNT_MISMATCH",
+                f"Movimentação {tx.internal_number}: banco R$ {tx_amount:.2f}, conciliação R$ {total_reconciled:.2f}.",
+                "bank_transaction",
+                tx.id,
+                str(tx.internal_number),
+            )
+
+        expected_direction = "receivable" if tx.direction == "credit" else "payable"
+        for rec in reconciliations:
+            if rec.target_direction != expected_direction:
+                invalid_target_count += 1
+                issue(
+                    "error",
+                    "BANK_RECONCILIATION_DIRECTION",
+                    f"Conciliação {rec.target_code} possui direção {rec.target_direction}, incompatível com movimento {tx.direction}.",
+                    "bank_reconciliation",
+                    rec.id,
+                    rec.target_code,
+                )
+                continue
+
+            target = None
+            if rec.target_type == "rent":
+                target = db.get(RentCharge, rec.target_id)
+                valid = target is not None and target.status == "paid"
+            elif rec.target_type == "owner_repasse":
+                target = db.get(OwnerRepasse, rec.target_id)
+                valid = target is not None and target.status == "paid"
+            elif rec.target_type == "maintenance":
+                target = db.get(MaintenanceFinancialEntry, rec.target_id)
+                valid = target is not None and target.status == "settled"
+            else:
+                target = db.get(FinancialTitle, rec.target_id)
+                valid = target is not None and target.status == "settled"
+
+            if not valid:
+                invalid_target_count += 1
+                issue(
+                    "error",
+                    "BANK_RECONCILIATION_INVALID_TARGET",
+                    f"Conciliação {rec.target_code} aponta para uma obrigação/recebível que não está liquidado ou não existe.",
+                    "bank_reconciliation",
+                    rec.id,
+                    rec.target_code,
+                )
+
+    commission_entries = db.scalars(
+        select(CommissionEntry).where(CommissionEntry.organization_id == organization_id)
+    ).all()
+    duplicate_commissions = 0
+    unclassified_commissions = 0
+    seen = {}
+    for entry in commission_entries:
+        sync_commission_status(db, entry)
+        if entry.status != "paid":
+            continue
+        reference = entry.paid_at.date() if entry.paid_at else None
+        if reference is None or reference < start_date or reference > end_date:
+            continue
+        key = (entry.source_type, entry.source_id, entry.rule_id)
+        seen[key] = seen.get(key, 0) + 1
+        title = db.get(FinancialTitle, entry.financial_title_id) if entry.financial_title_id else None
+        if title is None or title.source_type != "commission":
+            unclassified_commissions += 1
+            issue(
+                "error",
+                "DRE_COMMISSION_UNCLASSIFIED",
+                f"Comissão {entry.source_code} liquidada sem título financeiro classificado como comissão.",
+                "commission_entry",
+                entry.id,
+                entry.source_code,
+            )
+
+    for key, count in seen.items():
+        if count > 1:
+            duplicate_commissions += count - 1
+            issue(
+                "error",
+                "DRE_COMMISSION_DUPLICATE",
+                f"Existem {count} lançamentos de comissão para a mesma origem/regra: {key[1]}.",
+                "commission_entry",
+                key[1],
+                str(key[1]),
+            )
+
+    return {
+        "bank_transactions": len(transactions),
+        "bank_transactions_reconciled": reconciled_count,
+        "bank_transactions_unreconciled": unreconciled_count,
+        "reconciliation_amount_mismatch": mismatch_count,
+        "invalid_reconciliation_targets": invalid_target_count,
+        "dre_duplicate_commissions": duplicate_commissions,
+        "dre_unclassified_commissions": unclassified_commissions,
+        "ready_to_close": not any(item["severity"] == "error" for item in issues),
+        "issues": issues,
+    }
+
 def annual_income_values(
     db: Session,
     *,
