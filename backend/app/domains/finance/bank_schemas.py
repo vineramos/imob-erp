@@ -110,6 +110,29 @@ class ReconciliationCandidate(BaseModel):
     matched_identifier: str | None = None
 
 
+class BankReconciliationException(BaseModel):
+    transaction_id: UUID
+    transaction_code: str
+    transaction_date: date
+    direction: BankDirection
+    amount: Decimal
+    remaining_amount: Decimal
+    description: str
+    bank_reference: str | None
+    reason: Literal[
+        "ambiguous_identifier",
+        "identifier_detected",
+        "strong_candidate",
+        "review_required",
+        "no_candidate",
+    ]
+    reason_label: str
+    candidate_count: int
+    top_candidate_code: str | None = None
+    top_candidate_score: int | None = None
+    matched_identifier: str | None = None
+
+
 class BankReconciliationRequest(BaseModel):
     target_type: Literal["rent", "owner_repasse", "maintenance", "manual", "financial_title"]
     target_id: UUID
