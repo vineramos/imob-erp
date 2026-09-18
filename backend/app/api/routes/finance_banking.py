@@ -20,6 +20,7 @@ from app.domains.finance.bank_schemas import (
     BankAccountCreate,
     BankAccountResponse,
     BankImportResponse,
+    BankProviderResponse,
     BankReconciliationException,
     BankingOverview,
     BankReconciliationRequest,
@@ -33,6 +34,7 @@ from app.domains.finance.core_models import FinancialTitle
 from app.domains.finance.advanced_service import generate_commissions_for_charge
 from app.domains.finance.late_charges import amount_due, record_payment_with_late_charges
 from app.domains.finance.models import MaintenanceFinancialEntry, OwnerRepasse, RentCharge
+from app.domains.finance.providers import BANK_PROVIDER_REGISTRY, bank_provider_descriptors
 from app.domains.foundation.access import UserContext, require_permission
 from app.domains.foundation.audit import write_audit
 
@@ -717,6 +719,27 @@ def reconciliation_exceptions(
     return result
 
 
+@router.get("/providers", response_model=list[BankProviderResponse])
+def list_bank_providers(
+    context: UserContext = Depends(require_permission("finance.view")),
+) -> list[BankProviderResponse]:
+    _ = context
+    return [
+        BankProviderResponse(
+            key=item.key,
+            name=item.name,
+            direct_integration=item.direct_integration,
+            capabilities={
+                "statement": item.capabilities.statement,
+                "balance": item.capabilities.balance,
+                "billing": item.capabilities.billing,
+                "pix_payment": item.capabilities.pix_payment,
+            },
+        )
+        for item in bank_provider_descriptors()
+    ]
+
+
 @router.get("/accounts", response_model=list[BankAccountResponse])
 def list_bank_accounts(
     context: UserContext = Depends(require_permission("finance.view")),
@@ -737,6 +760,12 @@ def create_bank_account(
     context: UserContext = Depends(require_permission("finance.reconcile")),
     db: Session = Depends(get_db),
 ) -> BankAccountResponse:
+    provider_key = payload.provider.strip().lower()
+    if provider_key not in BANK_PROVIDER_REGISTRY:
+        raise HTTPException(
+            status_code=422,
+            detail="Provider bancário não instalado. Use 'manual' para bancos sem integração direta.",
+        )
     item = BankAccount(
         organization_id=context.user.organization_id,
         name=payload.name.strip(),
@@ -747,7 +776,7 @@ def create_bank_account(
         account_digit=(payload.account_digit or "").strip() or None,
         account_type=payload.account_type,
         fund_scope=payload.fund_scope,
-        provider=payload.provider,
+        provider=provider_key,
         provider_account_id=(payload.provider_account_id or "").strip() or None,
         pix_key=(payload.pix_key or "").strip() or None,
         opening_balance=money(payload.opening_balance),
