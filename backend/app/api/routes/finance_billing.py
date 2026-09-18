@@ -220,16 +220,19 @@ def confirm_receipt(
     if paid_at > datetime.now(timezone.utc):
         raise HTTPException(status_code=422, detail="A data do recebimento não pode estar no futuro.")
     effective_reference = (payload.payment_reference or f"MANUAL:{item.id}").strip()
-    settlement = record_payment_with_late_charges(
-        db,
-        charge=charge,
-        paid_amount=money(payload.paid_amount),
-        paid_at=paid_at,
-        payment_method=payload.payment_method,
-        payment_reference=effective_reference,
-        notes=payload.notes or "Recebimento confirmado manualmente no ERP.",
-    )
-    generate_commissions_for_charge(db, charge=charge, settlement=settlement)
+    # Mantém baixa, settlement, repasses e comissões como uma única
+    # unidade de trabalho; se a geração de comissão falhar, nada é baixado.
+    with db.begin_nested():
+        settlement = record_payment_with_late_charges(
+            db,
+            charge=charge,
+            paid_amount=money(payload.paid_amount),
+            paid_at=paid_at,
+            payment_method=payload.payment_method,
+            payment_reference=effective_reference,
+            notes=payload.notes or "Recebimento confirmado manualmente no ERP.",
+        )
+        generate_commissions_for_charge(db, charge=charge, settlement=settlement)
     item.provider = "manual"
     item.provider_status = "MARCADO_RECEBIDO"
     item.confirmed_at = paid_at
