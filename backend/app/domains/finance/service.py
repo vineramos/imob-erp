@@ -513,8 +513,27 @@ def calculate_settlement(db: Session, charge: RentCharge, paid_at: datetime) -> 
 
     _create_third_party_titles(db, charge, paid_at)
 
-    owners = [owner for owner in list(charge.owner_snapshot or []) if owner.get("person_id")]
+    owners = [owner for owner in list(charge.owner_snapshot or []) if isinstance(owner, dict) and owner.get("person_id")]
+    if owner_entitlement > 0 and not owners:
+        raise ValueError("Não é possível liquidar a cobrança: o contrato não possui proprietários válidos para gerar o repasse.")
+    total_ownership = Decimal("0.00")
+    for owner in owners:
+        try:
+            person_id = UUID(str(owner["person_id"]))
+        except (TypeError, ValueError):
+            raise ValueError("Não é possível liquidar a cobrança: existe um proprietário com identificador inválido.")
+        percent = Decimal(str(owner.get("ownership_percent") or 0))
+        if percent < 0 or percent > 100:
+            raise ValueError("Não é possível liquidar a cobrança: o percentual de propriedade deve estar entre 0% e 100%.")
+        total_ownership += percent
+    if owners and money(total_ownership) != Decimal("100.00"):
+        raise ValueError(
+            f"Não é possível liquidar a cobrança: os percentuais de propriedade devem totalizar 100% (atual: {total_ownership}%)."
+        )
+
     repasse_days = int(terms.get("owner_repasse_business_days") or 0)
+    if repasse_days < 0:
+        raise ValueError("Não é possível liquidar a cobrança: o prazo de repasse não pode ser negativo.")
     repasse_due = business_days_after(paid_at.date(), repasse_days)
     allocated = Decimal("0.00")
     for index, owner in enumerate(owners):
