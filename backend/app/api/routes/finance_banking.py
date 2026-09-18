@@ -233,6 +233,8 @@ def _identifier_token(value: object) -> str | None:
     if not text:
         return None
     normalized = re.sub(r"[^A-Z0-9]", "", _strip_accents(text).upper())
+    if re.fullmatch(r"C\d{1,12}", normalized) or re.fullmatch(r"COB\d{1,12}", normalized):
+        return normalized
     return normalized if len(normalized) >= 4 else None
 
 
