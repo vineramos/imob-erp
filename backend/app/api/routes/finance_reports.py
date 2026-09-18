@@ -9,8 +9,8 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.domains.finance.advanced_models import CommissionEntry
 from app.domains.finance.advanced_pdf import build_annual_income_pdf, build_dre_pdf
-from app.domains.finance.advanced_schemas import AnnualIncomeLine, AnnualIncomeReport, DreLine, DreReport, FinanceReportOverview
-from app.domains.finance.advanced_service import annual_income_values, dre_values, money, sync_commission_status
+from app.domains.finance.advanced_schemas import AnnualIncomeLine, AnnualIncomeReport, DreLine, DreReport, FinanceClosingControlResponse, FinanceReportOverview
+from app.domains.finance.advanced_service import annual_income_values, dre_values, finance_closing_control, money, sync_commission_status
 from app.domains.finance.core_models import FinancialTitle
 from app.domains.finance.models import FinancialSettlement, MaintenanceFinancialEntry, OwnerRepasse, RentCharge
 from app.domains.foundation.access import UserContext, require_permission
@@ -206,6 +206,28 @@ def overview(
         overdue_count=len(overdue),
         paid_charges=len(paid),
         open_charges=len(open_items),
+    )
+
+
+@router.get("/closing-control", response_model=FinanceClosingControlResponse)
+def closing_control(
+    start_date: date = Query(...),
+    end_date: date = Query(...),
+    context: UserContext = Depends(require_permission("reports.view")),
+    db: Session = Depends(get_db),
+) -> FinanceClosingControlResponse:
+    if end_date < start_date:
+        raise HTTPException(status_code=422, detail="Período inválido.")
+    result = finance_closing_control(
+        db,
+        organization_id=context.user.organization_id,
+        start_date=start_date,
+        end_date=end_date,
+    )
+    return FinanceClosingControlResponse(
+        start_date=start_date,
+        end_date=end_date,
+        **result,
     )
 
 
