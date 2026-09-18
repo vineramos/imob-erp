@@ -52,7 +52,7 @@ def _owner_login(client, owner: dict) -> None:
 
 
 def test_owner_portal_respects_coproperty_share_deductions_and_cash_year(client, identity):
-    start = first_month()
+    # Usa competência do ano anterior para validar o informe pelo ano-caixa\n    # sem registrar um pagamento futuro.\n    start = add_months(first_month(), -12)
     owner = create_person(
         client,
         name="Coproprietário Portal A",
