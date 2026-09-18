@@ -194,7 +194,30 @@ class FinanceReportOverview(BaseModel):
     open_charges: int
 
 
-class AnnualIncomeLine(BaseModel):
+
+
+class FinanceClosingIssue(BaseModel):
+    severity: Literal["error", "warning"]
+    code: str
+    message: str
+    entity_type: str
+    entity_id: UUID
+    reference: str | None = None
+
+
+class FinanceClosingControlResponse(BaseModel):
+    start_date: date
+    end_date: date
+    bank_transactions: int
+    bank_transactions_reconciled: int
+    bank_transactions_unreconciled: int
+    reconciliation_amount_mismatch: int
+    invalid_reconciliation_targets: int
+    dre_duplicate_commissions: int
+    dre_unclassified_commissions: int
+    ready_to_close: bool
+    issues: list[FinanceClosingIssue]
+\nclass AnnualIncomeLine(BaseModel):
     competence: date
     payment_date: date | None
     property_code: str
