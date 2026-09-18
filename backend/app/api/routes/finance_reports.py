@@ -8,8 +8,8 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.domains.finance.advanced_models import CommissionEntry
-from app.domains.finance.advanced_pdf import build_annual_income_pdf, build_dre_pdf
-from app.domains.finance.advanced_schemas import AnnualIncomeLine, AnnualIncomeReport, DreLine, DreReport, FinanceClosingControlResponse, FinanceReportOverview
+from app.domains.finance.advanced_pdf import build_dre_pdf
+from app.domains.finance.advanced_schemas import DreLine, DreReport, FinanceClosingControlResponse, FinanceReportOverview
 from app.domains.finance.advanced_service import annual_income_values, dre_values, finance_closing_control, money, sync_commission_status
 from app.domains.finance.core_models import FinancialTitle
 from app.domains.finance.models import FinancialSettlement, MaintenanceFinancialEntry, OwnerRepasse, RentCharge
@@ -84,36 +84,6 @@ def _dre(db: Session, organization_id: UUID, start_date: date, end_date: date, r
         result=float(result),
         margin_percent=round(margin, 2),
         lines=lines,
-    )
-
-
-def _annual(db: Session, organization_id: UUID, year: int, party_type: str, person_id: UUID) -> AnnualIncomeReport:
-    try:
-        person, raw_lines, allocation_method = annual_income_values(
-            db,
-            organization_id=organization_id,
-            year=year,
-            party_type=party_type,
-            person_id=person_id,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    converted = []
-    for raw in raw_lines:
-        data = {key: float(value) if isinstance(value, Decimal) else value for key, value in raw.items()}
-        converted.append(AnnualIncomeLine(**data))
-    return AnnualIncomeReport(
-        year=year,
-        party_type=party_type,
-        person_id=person.id,
-        person_name=person.name,
-        allocation_method=allocation_method,
-        total_rent=float(money(sum((money(item["rent_amount"]) for item in raw_lines), ZERO))),
-        total_additional_charges=float(money(sum((money(item["additional_charges"]) for item in raw_lines), ZERO))),
-        total_paid=float(money(sum((money(item["total_amount"]) for item in raw_lines), ZERO))),
-        total_administration_fee=float(money(sum((money(item["administration_fee"]) for item in raw_lines), ZERO))),
-        total_owner_net=float(money(sum((money(item["owner_net_amount"]) for item in raw_lines), ZERO))),
-        lines=converted,
     )
 
 
@@ -230,32 +200,3 @@ def closing_control(
         **result,
     )
 
-
-@router.get("/annual-income", response_model=AnnualIncomeReport)
-def annual_income(
-    year: int = Query(..., ge=2000, le=2200),
-    party_type: str = Query(default="tenant", pattern="^(tenant|owner)$"),
-    person_id: UUID = Query(...),
-    context: UserContext = Depends(require_permission("reports.view")),
-    db: Session = Depends(get_db),
-) -> AnnualIncomeReport:
-    return _annual(db, context.user.organization_id, year, party_type, person_id)
-
-
-@router.get("/annual-income.pdf")
-def annual_income_pdf(
-    year: int = Query(..., ge=2000, le=2200),
-    party_type: str = Query(default="tenant", pattern="^(tenant|owner)$"),
-    person_id: UUID = Query(...),
-    context: UserContext = Depends(require_permission("reports.export")),
-    db: Session = Depends(get_db),
-) -> Response:
-    report = _annual(db, context.user.organization_id, year, party_type, person_id)
-    organization = db.get(Organization, context.user.organization_id)
-    payload = build_annual_income_pdf(report, organization.display_name if organization else "Imobiliária")
-    filename = f"informe-{party_type}-{report.person_name.lower().replace(' ', '-')}-{year}.pdf"
-    return Response(
-        content=payload,
-        media_type="application/pdf",
-        headers={"Content-Disposition": f'inline; filename="{filename}"'},
-    )
