@@ -30,7 +30,9 @@ def add_months(value: date, months: int) -> date:
 
 
 def first_month() -> date:
-    # Mantém as jornadas financeiras em competências já encerradas para que\n    # regras que proíbem liquidações/pagamentos no futuro sejam testadas de forma determinística.\n    return add_months(date.today().replace(day=1), -2)
+    # Mantém as jornadas financeiras em competências já encerradas para que
+    # regras que proíbem liquidações/pagamentos no futuro sejam testadas de forma determinística.
+    return add_months(date.today().replace(day=1), -2)
 
 
 def midday(value: date) -> datetime:
