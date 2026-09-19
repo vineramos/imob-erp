@@ -94,6 +94,9 @@ class BankTransaction(Base):
     reconciliations: Mapped[list["BankReconciliation"]] = relationship(
         back_populates="transaction", cascade="all, delete-orphan", order_by="BankReconciliation.reconciled_at"
     )
+    exception: Mapped["BankReconciliationExceptionRecord | None"] = relationship(
+        back_populates="transaction", cascade="all, delete-orphan", uselist=False
+    )
 
 
 class BankReconciliation(Base):
@@ -114,3 +117,36 @@ class BankReconciliation(Base):
     reconciled_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     transaction: Mapped[BankTransaction] = relationship(back_populates="reconciliations")
+
+
+class BankReconciliationExceptionRecord(Base):
+    __tablename__ = "bank_reconciliation_exceptions"
+    __table_args__ = (
+        UniqueConstraint("bank_transaction_id", name="uq_bank_reconciliation_exceptions_transaction"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organization_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("organizations.id"), nullable=False, index=True)
+    bank_transaction_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("bank_transactions.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+
+    reason: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    severity: Mapped[str] = mapped_column(String(20), nullable=False, default="exception", index=True)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="open", index=True)
+    reason_label: Mapped[str] = mapped_column(String(500), nullable=False)
+    candidate_count: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    top_candidate_code: Mapped[str | None] = mapped_column(String(80))
+    top_candidate_score: Mapped[int | None] = mapped_column(BigInteger)
+    matched_identifier: Mapped[str | None] = mapped_column(String(180))
+    resolution_note: Mapped[str | None] = mapped_column(Text)
+
+    ignored_by_user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("app_users.id"))
+    resolved_by_user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("app_users.id"))
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    transaction: Mapped[BankTransaction] = relationship(back_populates="exception")
