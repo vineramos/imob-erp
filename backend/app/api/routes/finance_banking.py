@@ -704,23 +704,124 @@ def _open_candidates(db: Session, transaction: BankTransaction, account: BankAcc
     return sorted(result, key=lambda item: (-item.score, item.due_date or date.max, item.target_code))[:80]
 
 
-def _exception_reason(candidates: list[ReconciliationCandidate]) -> tuple[str, str]:
+def _exception_reason(candidates: list[ReconciliationCandidate]) -> tuple[str, str, str]:
     identifier_matches = [item for item in candidates if item.identifier_match]
     if len(identifier_matches) > 1:
-        return "ambiguous_identifier", "Mais de um título compartilha a referência bancária; revisão manual necessária."
+        return (
+            "ambiguous_identifier",
+            "Mais de um título compartilha a referência bancária; revisão manual necessária.",
+            "exception",
+        )
     if len(identifier_matches) == 1:
-        return "identifier_detected", "Referência bancária identificada; falta concluir a conciliação."
+        return (
+            "identifier_detected",
+            "Referência bancária identificada; pendência rotineira pronta para revisão.",
+            "routine",
+        )
     if candidates and candidates[0].score >= 70:
-        return "strong_candidate", "Há um candidato forte, mas sem identificador bancário determinístico."
+        return (
+            "strong_candidate",
+            "Há um candidato forte, mas sem identificador bancário determinístico.",
+            "routine",
+        )
     if candidates:
-        return "review_required", "Há títulos compatíveis, mas sem evidência suficiente para conciliar automaticamente."
-    return "no_candidate", "Nenhum título compatível foi encontrado para este movimento."
+        return (
+            "review_required",
+            "Há títulos compatíveis, mas sem evidência suficiente para conciliar automaticamente.",
+            "exception",
+        )
+    return (
+        "no_candidate",
+        "Nenhum título compatível foi encontrado para este movimento.",
+        "exception",
+    )
+
+
+def _sync_exception_record(
+    db: Session,
+    *,
+    transaction: BankTransaction,
+    candidates: list[ReconciliationCandidate],
+) -> BankReconciliationExceptionRecord:
+    reason, reason_label, severity = _exception_reason(candidates)
+    top = candidates[0] if candidates else None
+    identifier = next((item.matched_identifier for item in candidates if item.identifier_match), None)
+    record = db.scalar(
+        select(BankReconciliationExceptionRecord).where(
+            BankReconciliationExceptionRecord.bank_transaction_id == transaction.id
+        )
+    )
+    if record is None:
+        record = BankReconciliationExceptionRecord(
+            organization_id=transaction.organization_id,
+            bank_transaction_id=transaction.id,
+            reason=reason,
+            severity=severity,
+            status="open",
+            reason_label=reason_label,
+            candidate_count=len(candidates),
+            top_candidate_code=top.target_code if top else None,
+            top_candidate_score=top.score if top else None,
+            matched_identifier=identifier,
+        )
+        db.add(record)
+        db.flush()
+        return record
+
+    classification_changed = record.reason != reason or record.severity != severity
+    record.reason = reason
+    record.severity = severity
+    record.reason_label = reason_label
+    record.candidate_count = len(candidates)
+    record.top_candidate_code = top.target_code if top else None
+    record.top_candidate_score = top.score if top else None
+    record.matched_identifier = identifier
+
+    # Se a causa mudou, um item previamente ignorado volta para revisão.
+    # Isso evita esconder indefinidamente uma exceção que ganhou nova evidência.
+    if classification_changed and record.status == "ignored":
+        record.status = "open"
+        record.ignored_by_user_id = None
+        record.resolution_note = None
+        record.resolved_at = None
+    return record
+
+
+def _exception_response(
+    record: BankReconciliationExceptionRecord,
+    transaction: BankTransaction,
+) -> BankReconciliationException:
+    tx = _transaction_response(transaction)
+    return BankReconciliationException(
+        id=record.id,
+        transaction_id=transaction.id,
+        transaction_code=tx.code,
+        transaction_date=transaction.transaction_date,
+        direction=transaction.direction,
+        amount=money(transaction.amount),
+        remaining_amount=tx.remaining_amount,
+        description=transaction.description,
+        bank_reference=transaction.bank_reference,
+        reason=record.reason,
+        severity=record.severity,
+        status=record.status,
+        reason_label=record.reason_label,
+        candidate_count=int(record.candidate_count),
+        top_candidate_code=record.top_candidate_code,
+        top_candidate_score=int(record.top_candidate_score) if record.top_candidate_score is not None else None,
+        matched_identifier=record.matched_identifier,
+        resolution_note=record.resolution_note,
+        resolved_at=record.resolved_at,
+        updated_at=record.updated_at,
+    )
 
 
 @router.get("/exceptions", response_model=list[BankReconciliationException])
 def reconciliation_exceptions(
     account_id: UUID = Query(...),
     competence: date | None = Query(default=None),
+    include_routine: bool = Query(default=False),
+    include_ignored: bool = Query(default=False),
     context: UserContext = Depends(require_permission("finance.view")),
     db: Session = Depends(get_db),
 ) -> list[BankReconciliationException]:
@@ -741,33 +842,114 @@ def reconciliation_exceptions(
     ).unique().all()
 
     result: list[BankReconciliationException] = []
+    dirty = False
     for transaction in transactions:
         tx = _transaction_response(transaction)
         if tx.remaining_amount <= 0:
-            continue
-        candidates = _open_candidates(db, transaction, account)
-        reason, reason_label = _exception_reason(candidates)
-        top = candidates[0] if candidates else None
-        identifier = next((item.matched_identifier for item in candidates if item.identifier_match), None)
-        result.append(
-            BankReconciliationException(
-                transaction_id=transaction.id,
-                transaction_code=tx.code,
-                transaction_date=transaction.transaction_date,
-                direction=transaction.direction,
-                amount=money(transaction.amount),
-                remaining_amount=tx.remaining_amount,
-                description=transaction.description,
-                bank_reference=transaction.bank_reference,
-                reason=reason,
-                reason_label=reason_label,
-                candidate_count=len(candidates),
-                top_candidate_code=top.target_code if top else None,
-                top_candidate_score=top.score if top else None,
-                matched_identifier=identifier,
+            record = db.scalar(
+                select(BankReconciliationExceptionRecord).where(
+                    BankReconciliationExceptionRecord.bank_transaction_id == transaction.id
+                )
             )
-        )
+            if record is not None and record.status not in {"resolved", "ignored"}:
+                record.status = "resolved"
+                record.resolved_at = datetime.now(timezone.utc)
+                record.resolution_note = record.resolution_note or "Resolvida automaticamente após conciliação integral."
+                dirty = True
+            continue
+
+        candidates = _open_candidates(db, transaction, account)
+        record = _sync_exception_record(db, transaction=transaction, candidates=candidates)
+        dirty = True
+        if record.severity == "routine" and not include_routine:
+            continue
+        if record.status == "ignored" and not include_ignored:
+            continue
+        if record.status == "resolved":
+            continue
+        result.append(_exception_response(record, transaction))
+
+    if dirty:
+        db.commit()
     return result
+
+
+def _load_exception(
+    db: Session,
+    organization_id: UUID,
+    exception_id: UUID,
+) -> BankReconciliationExceptionRecord:
+    record = db.scalar(
+        select(BankReconciliationExceptionRecord).where(
+            BankReconciliationExceptionRecord.id == exception_id,
+            BankReconciliationExceptionRecord.organization_id == organization_id,
+        )
+    )
+    if record is None:
+        raise HTTPException(status_code=404, detail="Exceção de conciliação não encontrada.")
+    return record
+
+
+@router.post("/exceptions/{exception_id}/ignore", response_model=BankReconciliationException)
+def ignore_reconciliation_exception(
+    exception_id: UUID,
+    payload: BankReconciliationExceptionAction,
+    request: Request,
+    context: UserContext = Depends(require_permission("finance.reconcile")),
+    db: Session = Depends(get_db),
+) -> BankReconciliationException:
+    record = _load_exception(db, context.user.organization_id, exception_id)
+    transaction = _load_transaction(db, context.user.organization_id, record.bank_transaction_id)
+    if _transaction_response(transaction).remaining_amount <= 0:
+        raise HTTPException(status_code=409, detail="O movimento já está integralmente conciliado.")
+    record.status = "ignored"
+    record.ignored_by_user_id = context.user.id
+    record.resolved_by_user_id = None
+    record.resolved_at = datetime.now(timezone.utc)
+    record.resolution_note = (payload.note or "").strip() or "Ignorada manualmente para não bloquear a fila operacional."
+    _audit(
+        db,
+        request,
+        context,
+        action="finance.bank_reconciliation_exception.ignored",
+        entity_type="bank_reconciliation_exception",
+        entity_id=str(record.id),
+        after={"transaction_id": str(transaction.id), "reason": record.reason, "note": record.resolution_note},
+    )
+    db.commit()
+    db.refresh(record)
+    return _exception_response(record, transaction)
+
+
+@router.post("/exceptions/{exception_id}/reopen", response_model=BankReconciliationException)
+def reopen_reconciliation_exception(
+    exception_id: UUID,
+    payload: BankReconciliationExceptionAction,
+    request: Request,
+    context: UserContext = Depends(require_permission("finance.reconcile")),
+    db: Session = Depends(get_db),
+) -> BankReconciliationException:
+    record = _load_exception(db, context.user.organization_id, exception_id)
+    transaction = _load_transaction(db, context.user.organization_id, record.bank_transaction_id)
+    if _transaction_response(transaction).remaining_amount <= 0:
+        raise HTTPException(status_code=409, detail="O movimento já está integralmente conciliado.")
+    record.status = "open"
+    record.ignored_by_user_id = None
+    record.resolved_by_user_id = None
+    record.resolved_at = None
+    record.resolution_note = (payload.note or "").strip() or None
+    _audit(
+        db,
+        request,
+        context,
+        action="finance.bank_reconciliation_exception.reopened",
+        entity_type="bank_reconciliation_exception",
+        entity_id=str(record.id),
+        after={"transaction_id": str(transaction.id), "reason": record.reason},
+    )
+    db.commit()
+    db.refresh(record)
+    return _exception_response(record, transaction)
 
 
 @router.get("/providers", response_model=list[BankProviderResponse])
