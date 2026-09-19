@@ -653,6 +653,7 @@ def _open_candidates(db: Session, transaction: BankTransaction, account: BankAcc
     )
 
     result: list[ReconciliationCandidate] = []
+    transaction_remaining = _transaction_response(transaction).remaining_amount
     for target_type, target_id in candidates:
         details = _target_details(
             db,
@@ -665,6 +666,20 @@ def _open_candidates(db: Session, transaction: BankTransaction, account: BankAcc
             continue
         matched_identifier = _candidate_identifier_match(transaction, details)
         score = _candidate_score(transaction, details)
+        target_remaining = money(details["remaining"])
+        suggested_allocation = money(min(transaction_remaining, target_remaining))
+        difference = money(transaction_remaining - target_remaining)
+        if difference == 0:
+            difference_kind = "exact"
+        elif difference > 0:
+            difference_kind = "bank_excess"
+        else:
+            difference_kind = "title_exceeds_bank"
+        settlement_compatible = (
+            transaction_remaining >= target_remaining
+            if target_type in {"rent", "owner_repasse"}
+            else suggested_allocation > 0
+        )
         result.append(
             ReconciliationCandidate(
                 target_type=target_type,
@@ -675,7 +690,12 @@ def _open_candidates(db: Session, transaction: BankTransaction, account: BankAcc
                 description=details["description"],
                 counterparty_name=details["counterparty"],
                 due_date=details["due_date"],
-                remaining_amount=money(details["remaining"]),
+                remaining_amount=target_remaining,
+                transaction_remaining_amount=transaction_remaining,
+                suggested_allocation=suggested_allocation,
+                difference_amount=difference,
+                difference_kind=difference_kind,
+                settlement_compatible=settlement_compatible,
                 score=score,
                 identifier_match=matched_identifier is not None,
                 matched_identifier=matched_identifier,
