@@ -704,7 +704,7 @@ def _open_candidates(db: Session, transaction: BankTransaction, account: BankAcc
     return sorted(result, key=lambda item: (-item.score, item.due_date or date.max, item.target_code))[:80]
 
 
-def _exception_reason(candidates: list[ReconciliationCandidate]) -> tuple[str, str, str]:
+def _exception_classification(candidates: list[ReconciliationCandidate]) -> tuple[str, str, str]:
     identifier_matches = [item for item in candidates if item.identifier_match]
     if len(identifier_matches) > 1:
         return (
@@ -737,13 +737,18 @@ def _exception_reason(candidates: list[ReconciliationCandidate]) -> tuple[str, s
     )
 
 
+def _exception_reason(candidates: list[ReconciliationCandidate]) -> tuple[str, str]:
+    reason, label, _severity = _exception_classification(candidates)
+    return reason, label
+
+
 def _sync_exception_record(
     db: Session,
     *,
     transaction: BankTransaction,
     candidates: list[ReconciliationCandidate],
 ) -> BankReconciliationExceptionRecord:
-    reason, reason_label, severity = _exception_reason(candidates)
+    reason, reason_label, severity = _exception_classification(candidates)
     top = candidates[0] if candidates else None
     identifier = next((item.matched_identifier for item in candidates if item.identifier_match), None)
     record = db.scalar(
