@@ -207,3 +207,61 @@ def test_candidate_reports_bank_excess_without_forcing_unsafe_settlement(client,
     assert decimal(candidate["difference_amount"]) == Decimal("42.47")
     assert candidate["difference_kind"] == "bank_excess"
     assert candidate["settlement_compatible"] is True
+
+
+def test_bank_excess_can_settle_title_and_keep_residual_transaction_open(client, identity):
+    account = _account(client)
+    competence = date.today().replace(day=1)
+
+    assert SessionLocal is not None
+    with SessionLocal() as db:
+        title = FinancialTitle(
+            organization_id=identity["organization_id"],
+            direction="receivable",
+            fund_scope="operating",
+            source_type="manual",
+            source_id=None,
+            category="Teste",
+            description="Título com diferença bancária",
+            counterparty_name="Cliente Teste",
+            competence=competence,
+            due_date=date.today(),
+            amount=Decimal("1500.00"),
+            settled_amount=Decimal("0.00"),
+            status="pending",
+            source_snapshot={},
+            created_by_user_id=identity["user_id"],
+        )
+        db.add(title)
+        db.commit()
+        db.refresh(title)
+        title_id = str(title.id)
+
+    tx = _movement(client, account["id"], amount="1542.47", reference="RESIDUAL-42-47")
+    candidates = assert_response(
+        client.get(f"/api/finance/banking/transactions/{tx['id']}/candidates")
+    ).json()
+    candidate = next(entry for entry in candidates if entry["target_id"] == title_id)
+    assert candidate["difference_kind"] == "bank_excess"
+    assert decimal(candidate["suggested_allocation"]) == Decimal("1500.00")
+
+    reconciled = assert_response(
+        client.post(
+            f"/api/finance/banking/transactions/{tx['id']}/reconcile",
+            json={
+                "target_type": "manual",
+                "target_id": title_id,
+                "amount": candidate["suggested_allocation"],
+                "notes": "Liquidação do título; residual bancário permanece para classificação separada.",
+            },
+        )
+    ).json()
+    assert reconciled["status"] == "partial"
+    assert decimal(reconciled["reconciled_amount"]) == Decimal("1500.00")
+    assert decimal(reconciled["remaining_amount"]) == Decimal("42.47")
+
+    with SessionLocal() as db:
+        settled = db.get(FinancialTitle, uuid.UUID(title_id))
+        assert settled is not None
+        assert settled.status == "settled"
+        assert decimal(settled.settled_amount) == Decimal("1500.00")
