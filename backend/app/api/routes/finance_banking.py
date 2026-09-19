@@ -1373,6 +1373,28 @@ def reconcile_transaction(
     db.flush()
     allocated_after = money(tx_response.reconciled_amount + allocation)
     transaction.status = "reconciled" if allocated_after >= transaction.amount else "partial"
+
+    exception_record = db.scalar(
+        select(BankReconciliationExceptionRecord).where(
+            BankReconciliationExceptionRecord.bank_transaction_id == transaction.id
+        )
+    )
+    if exception_record is not None:
+        if transaction.status == "reconciled":
+            exception_record.status = "resolved"
+            exception_record.resolved_by_user_id = context.user.id
+            exception_record.resolved_at = datetime.now(timezone.utc)
+            exception_record.resolution_note = (
+                f"Resolvida pela conciliação com {details['code']}."
+            )
+        elif exception_record.status == "ignored":
+            # Uma conciliação parcial é nova evidência operacional: reabre a fila
+            # para que o saldo bancário remanescente não fique oculto.
+            exception_record.status = "open"
+            exception_record.ignored_by_user_id = None
+            exception_record.resolved_at = None
+            exception_record.resolution_note = None
+
     _audit(
         db,
         request,
