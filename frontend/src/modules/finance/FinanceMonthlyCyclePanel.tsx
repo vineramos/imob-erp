@@ -28,6 +28,23 @@ type CycleStep = {
   action_target:string|null
 }
 type CycleAction = { key:string; title:string; detail:string; target:string }
+type ClosingReadiness = {
+  competence:string
+  period_end:string
+  can_close:boolean
+  bank_accounts_count:number
+  accounts_closed_count:number
+  unclosed_accounts_count:number
+  unreconciled_bank_transactions_count:number
+  open_bank_exceptions_count:number
+  ignored_bank_exceptions_count:number
+  settlement_gap_count:number
+  settlement_integrity_issues_count:number
+  pending_third_party_count:number
+  pending_owner_repasses_count:number
+  blocker_count:number
+  blockers:string[]
+}
 type Cycle = {
   competence:string
   eligible_contracts:number
@@ -54,7 +71,7 @@ type Cycle = {
   steps:CycleStep[]
 }
 
-type FinanceTarget = 'overview'|'billing'|'rent'
+type FinanceTarget = 'overview'|'billing'|'rent'|'banking'|'bank-control'
 type Props = { onNavigateArea:(target:FinanceTarget)=>void }
 
 const stateLabels:Record<CycleState,string> = {
@@ -79,6 +96,7 @@ function monthLabel(month:string){
 export function FinanceMonthlyCyclePanel({onNavigateArea}:Props){
   const [month,setMonth]=useState(currentMonth())
   const [cycle,setCycle]=useState<Cycle|null>(null)
+  const [readiness,setReadiness]=useState<ClosingReadiness|null>(null)
   const [loading,setLoading]=useState(true)
   const [error,setError]=useState('')
   const competence=`${month}-01`
@@ -87,7 +105,12 @@ export function FinanceMonthlyCyclePanel({onNavigateArea}:Props){
     setLoading(true)
     setError('')
     try{
-      setCycle(await apiRequest<Cycle>(`/finance/monthly-cycle?competence=${competence}`))
+      const [nextCycle,nextReadiness]=await Promise.all([
+        apiRequest<Cycle>(`/finance/monthly-cycle?competence=${competence}`),
+        apiRequest<ClosingReadiness>(`/finance/monthly-cycle/closing-readiness?competence=${competence}`),
+      ])
+      setCycle(nextCycle)
+      setReadiness(nextReadiness)
     }catch(cause){
       setError(cause instanceof ApiError?cause.detail:'Não foi possível carregar o ciclo financeiro mensal.')
     }finally{
@@ -103,7 +126,7 @@ export function FinanceMonthlyCyclePanel({onNavigateArea}:Props){
       window.location.assign(`/app/${target}`)
       return
     }
-    if(target==='overview'||target==='billing'||target==='rent')onNavigateArea(target)
+    if(target==='overview'||target==='billing'||target==='rent'||target==='banking'||target==='bank-control')onNavigateArea(target)
   }
 
   return <section className="workspace finance-cycle-workspace">
@@ -132,6 +155,23 @@ export function FinanceMonthlyCyclePanel({onNavigateArea}:Props){
         </div>
         {cycle.next_action&&<button className="button primary" type="button" onClick={()=>navigate(cycle.next_action?.target)}>Ir para ação</button>}
       </article>
+
+      {readiness&&<article className={`panel finance-closing-readiness ${readiness.can_close?'ready':'blocked'}`}>
+        <div className="finance-closing-readiness-head">
+          <div><span className="eyebrow">Fechamento mensal</span><strong>{readiness.can_close?'Competência pronta para fechamento':'Existem bloqueadores antes do fechamento'}</strong><p>{readiness.can_close?'Banco, liquidações e obrigações registradas não apresentam bloqueios no fechamento.':readiness.blocker_count+' ponto(s) precisam ser tratados antes de considerar a competência encerrada.'}</p></div>
+          <div className="finance-closing-readiness-score"><b>{readiness.blocker_count}</b><span>bloqueadores</span></div>
+        </div>
+        <div className="finance-closing-readiness-stats">
+          <span>Contas fechadas <b>{readiness.accounts_closed_count}/{readiness.bank_accounts_count}</b></span>
+          <span>Movimentos bancários pendentes <b>{readiness.unreconciled_bank_transactions_count}</b></span>
+          <span>Exceções bancárias <b>{readiness.open_bank_exceptions_count}</b></span>
+          <span>Liquidações divergentes <b>{readiness.settlement_gap_count+readiness.settlement_integrity_issues_count}</b></span>
+          <span>Terceiros pendentes <b>{readiness.pending_third_party_count}</b></span>
+          <span>Repasses pendentes <b>{readiness.pending_owner_repasses_count}</b></span>
+        </div>
+        {!readiness.can_close&&<div className="finance-closing-blockers">{readiness.blockers.map((item,index)=><span key={index}><AlertTriangle size={13}/>{item}</span>)}</div>}
+        {!readiness.can_close&&<div className="finance-closing-actions"><button className="button secondary compact" type="button" onClick={()=>navigate('banking')}>Abrir conciliação</button><button className="button secondary compact" type="button" onClick={()=>navigate('bank-control')}>Controle bancário</button></div>}
+      </article>}
 
       <div className="finance-cycle-metrics">
         <article className="panel finance-cycle-metric"><span>Cobrado</span><strong>{money(cycle.gross_amount)}</strong><small>{cycle.charges_count} cobrança(s) · {cycle.missing_charges} faltante(s)</small></article>
