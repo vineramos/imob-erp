@@ -61,3 +61,23 @@ O workflow `public-safety` faz checkout com histórico completo e inspeciona blo
 - padrões de tokens GitHub/Google/AWS/Stripe.
 
 A verificação do histórico é deliberada: apagar um segredo em um commit posterior não o remove de um repositório público.
+
+
+## Operação diária de extratos
+
+O módulo mantém histórico das últimas importações por conta bancária, com nome do arquivo, origem (CSV/OFX), horário, quantidade total de linhas, movimentos novos e linhas duplicadas.
+
+O mesmo arquivo binário não pode ser importado duas vezes na mesma conta. O bloqueio usa SHA-256 do conteúdo completo e retorna conflito antes de criar um novo lote. Isso complementa a deduplicação por fingerprint de cada movimento: arquivos diferentes ainda podem compartilhar movimentos e, nesse caso, apenas as linhas repetidas são ignoradas.
+
+O endpoint `GET /api/finance/banking/reconciliation-summary` expõe a saúde operacional da competência, separando:
+
+- pendências rotineiras;
+- exceções reais abertas;
+- exceções ignoradas;
+- matches determinísticos;
+- candidatos fortes;
+- referências ambíguas;
+- itens que exigem revisão;
+- movimentos sem candidato.
+
+A interface usa esse resumo para evitar tratar toda pendência de conciliação como erro.
