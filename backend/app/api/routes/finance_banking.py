@@ -25,10 +25,12 @@ from app.domains.finance.bank_models import (
 from app.domains.finance.bank_schemas import (
     BankAccountCreate,
     BankAccountResponse,
+    BankImportHistoryItem,
     BankImportResponse,
     BankProviderResponse,
     BankReconciliationException,
     BankReconciliationExceptionAction,
+    BankReconciliationSummary,
     BankingOverview,
     BankReconciliationRequest,
     BankReconciliationResponse,
