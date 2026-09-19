@@ -1517,3 +1517,120 @@ def reconcile_transaction(
     )
     db.commit()
     return _transaction_response(_load_transaction(db, context.user.organization_id, transaction.id))
+
+
+@router.post("/exceptions/{exception_id}/resolve", response_model=BankTransactionResponse)
+def resolve_reconciliation_exception(
+    exception_id: UUID,
+    payload: BankExceptionResolveRequest,
+    request: Request,
+    context: UserContext = Depends(require_permission("finance.view")),
+    db: Session = Depends(get_db),
+) -> BankTransactionResponse:
+    record = _load_exception(db, context.user.organization_id, exception_id)
+    if record.status == "resolved":
+        raise HTTPException(status_code=409, detail="Esta exceção já foi resolvida.")
+    notes = (payload.note or "").strip()
+    resolution_note = f"Resolução manual da exceção {str(record.id)[:8].upper()}."
+    if notes:
+        resolution_note = f"{resolution_note} {notes}"
+    return reconcile_transaction(
+        record.bank_transaction_id,
+        BankReconciliationRequest(
+            target_type=payload.target_type,
+            target_id=payload.target_id,
+            amount=payload.amount,
+            notes=resolution_note,
+        ),
+        request,
+        context,
+        db,
+    )
+
+
+@router.post("/transactions/{transaction_id}/residual-adjustment", response_model=BankTransactionResponse)
+def classify_bank_residual(
+    transaction_id: UUID,
+    payload: BankResidualAdjustmentCreate,
+    request: Request,
+    context: UserContext = Depends(require_permission("finance.view")),
+    db: Session = Depends(get_db),
+) -> BankTransactionResponse:
+    transaction = _load_transaction(db, context.user.organization_id, transaction_id)
+    account = _load_account(db, context.user.organization_id, transaction.bank_account_id)
+    required = "finance.reconcile" if transaction.direction == "credit" else "finance.payment.approve"
+    if not context.has(required):
+        raise HTTPException(status_code=403, detail=f"Permissão necessária: {required}")
+
+    remaining = _transaction_response(transaction).remaining_amount
+    if remaining <= 0:
+        raise HTTPException(status_code=409, detail="Este movimento não possui saldo residual para classificar.")
+    amount = money(payload.amount or remaining)
+    if amount <= 0 or amount > remaining:
+        raise HTTPException(status_code=409, detail="O valor do ajuste deve estar dentro do saldo residual do movimento.")
+
+    direction = "receivable" if transaction.direction == "credit" else "payable"
+    category_labels = {
+        "bank_fee": "Tarifa bancária",
+        "interest": "Juros",
+        "penalty": "Multa",
+        "discount": "Desconto",
+        "revenue": "Receita bancária",
+        "expense": "Despesa bancária",
+        "adjustment": "Ajuste bancário",
+    }
+    adjustment = FinancialTitle(
+        organization_id=context.user.organization_id,
+        direction=direction,
+        fund_scope=account.fund_scope,
+        source_type="bank_adjustment",
+        source_id=transaction.id,
+        category=category_labels[payload.category],
+        description=payload.description.strip(),
+        counterparty_name=account.bank_name or account.name,
+        competence=transaction.transaction_date.replace(day=1),
+        due_date=transaction.transaction_date,
+        amount=amount,
+        settled_amount=Decimal("0.00"),
+        status="pending",
+        notes=(payload.note or "").strip() or None,
+        source_snapshot={
+            "bank_transaction_id": str(transaction.id),
+            "bank_transaction_code": f"EXT-{transaction.internal_number:06d}",
+            "bank_account_id": str(account.id),
+            "bank_account_name": account.name,
+            "classification": payload.category,
+            "original_description": transaction.description,
+            "bank_reference": transaction.bank_reference,
+        },
+        created_by_user_id=context.user.id,
+    )
+    db.add(adjustment)
+    db.flush()
+
+    _audit(
+        db,
+        request,
+        context,
+        action="finance.bank_residual.classified",
+        entity_type="financial_title",
+        entity_id=str(adjustment.id),
+        after={
+            "transaction_id": str(transaction.id),
+            "category": payload.category,
+            "amount": str(amount),
+            "fund_scope": account.fund_scope,
+        },
+    )
+    return reconcile_transaction(
+        transaction.id,
+        BankReconciliationRequest(
+            target_type="financial_title",
+            target_id=adjustment.id,
+            amount=amount,
+            notes=f"Residual bancário classificado como {category_labels[payload.category]}.",
+        ),
+        request,
+        context,
+        db,
+    )
