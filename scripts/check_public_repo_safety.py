@@ -61,34 +61,44 @@ def is_forbidden_path(path: str) -> bool:
 def main() -> int:
     failures: list[str] = []
     paths_by_object = object_paths()
-    object_types = str(
-        git("cat-file", "--batch-check=%(objectname) %(objecttype)", *paths_by_object.keys())
-    ) if False else ""
 
-    # Query object types one by one. The repository is intentionally small and
-    # this keeps the implementation portable across Git versions.
-    for oid, paths in paths_by_object.items():
-        object_type = str(git("cat-file", "-t", oid)).strip()
-        if object_type != "blob":
-            continue
+    process = subprocess.Popen(
+        ["git", "cat-file", "--batch"],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+    )
+    assert process.stdin is not None
+    assert process.stdout is not None
 
-        for path in sorted(paths):
-            if is_forbidden_path(path):
-                failures.append(f"forbidden credential-like file in history: {path} ({oid[:12]})")
+    try:
+        for oid, paths in paths_by_object.items():
+            process.stdin.write(f"{oid}\n".encode())
+            process.stdin.flush()
+            header = process.stdout.readline().decode("utf-8", errors="replace").strip()
+            parts = header.split()
+            if len(parts) < 3 or parts[1] != "blob":
+                if len(parts) >= 3:
+                    size = int(parts[2])
+                    process.stdout.read(size + 1)
+                continue
 
-        try:
-            size = int(str(git("cat-file", "-s", oid)).strip())
-        except ValueError:
-            continue
-        if size > 2_000_000:
-            continue
+            size = int(parts[2])
+            content = process.stdout.read(size)
+            process.stdout.read(1)  # newline inserted by --batch
 
-        content = git("cat-file", "blob", oid, text=False)
-        assert isinstance(content, bytes)
-        for label, pattern in SECRET_PATTERNS:
-            if pattern.search(content):
-                display_path = sorted(paths)[0] if paths else "<unknown>"
-                failures.append(f"{label} signature found: {display_path} ({oid[:12]})")
+            for path in sorted(paths):
+                if is_forbidden_path(path):
+                    failures.append(f"forbidden credential-like file in history: {path} ({oid[:12]})")
+
+            if size > 2_000_000:
+                continue
+            for label, pattern in SECRET_PATTERNS:
+                if pattern.search(content):
+                    display_path = sorted(paths)[0] if paths else "<unknown>"
+                    failures.append(f"{label} signature found: {display_path} ({oid[:12]})")
+    finally:
+        process.stdin.close()
+        process.wait(timeout=10)
 
     if failures:
         print("PUBLIC REPOSITORY SAFETY CHECK: FAILED", file=sys.stderr)
