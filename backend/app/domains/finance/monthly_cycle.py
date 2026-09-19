@@ -9,9 +9,16 @@ from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session
 
 from app.domains.communications.models import CommunicationMessage
+from app.domains.finance.bank_control_models import BankDailyClose
+from app.domains.finance.bank_models import BankAccount, BankReconciliationExceptionRecord, BankTransaction
 from app.domains.finance.core_models import FinancialTitle
 from app.domains.finance.models import FinancialSettlement, OwnerRepasse, RentCharge
-from app.domains.finance.monthly_cycle_schemas import MonthlyCycleAction, MonthlyCycleResponse, MonthlyCycleStep
+from app.domains.finance.monthly_cycle_schemas import (
+    MonthlyClosingReadiness,
+    MonthlyCycleAction,
+    MonthlyCycleResponse,
+    MonthlyCycleStep,
+)
 from app.domains.finance.service import charge_item_agency_retention, money
 from app.domains.leases.models import LeaseContract
 
@@ -471,4 +478,168 @@ def build_monthly_cycle(
         attention_count=attention_count,
         next_action=next_action,
         steps=steps,
+    )
+
+
+
+def build_monthly_closing_readiness(
+    db: Session,
+    *,
+    organization_id: UUID,
+    competence: date,
+) -> MonthlyClosingReadiness:
+    competence = month_start(competence)
+    period_end = month_end(competence)
+
+    accounts = db.scalars(
+        select(BankAccount).where(
+            BankAccount.organization_id == organization_id,
+            BankAccount.is_active.is_(True),
+        )
+    ).all()
+    account_ids = [item.id for item in accounts]
+
+    closed_account_ids = set()
+    if account_ids:
+        closed_account_ids = set(
+            db.scalars(
+                select(BankDailyClose.bank_account_id).where(
+                    BankDailyClose.organization_id == organization_id,
+                    BankDailyClose.bank_account_id.in_(account_ids),
+                    BankDailyClose.closing_date == period_end,
+                    BankDailyClose.status == "confirmed",
+                )
+            ).all()
+        )
+
+    period_transactions = []
+    if account_ids:
+        period_transactions = db.scalars(
+            select(BankTransaction).where(
+                BankTransaction.organization_id == organization_id,
+                BankTransaction.bank_account_id.in_(account_ids),
+                BankTransaction.transaction_date >= competence,
+                BankTransaction.transaction_date <= period_end,
+            )
+        ).all()
+    unreconciled = [item for item in period_transactions if item.status != "reconciled"]
+    transaction_ids = [item.id for item in period_transactions]
+
+    open_exceptions: list[BankReconciliationExceptionRecord] = []
+    if transaction_ids:
+        open_exceptions = db.scalars(
+            select(BankReconciliationExceptionRecord).where(
+                BankReconciliationExceptionRecord.organization_id == organization_id,
+                BankReconciliationExceptionRecord.bank_transaction_id.in_(transaction_ids),
+                BankReconciliationExceptionRecord.status.in_(("open", "ignored")),
+            )
+        ).all()
+
+    charges = db.scalars(
+        select(RentCharge).where(
+            RentCharge.organization_id == organization_id,
+            RentCharge.competence == competence,
+            RentCharge.status != "cancelled",
+        )
+    ).all()
+    charge_ids = [item.id for item in charges]
+    paid_charge_ids = {item.id for item in charges if item.status == "paid" and item.paid_at is not None}
+
+    settlements = []
+    if charge_ids:
+        settlements = db.scalars(
+            select(FinancialSettlement).where(
+                FinancialSettlement.organization_id == organization_id,
+                FinancialSettlement.charge_id.in_(charge_ids),
+            )
+        ).all()
+    settlement_by_charge = {item.charge_id: item for item in settlements}
+    settlement_gap = len(paid_charge_ids - set(settlement_by_charge))
+
+    settlement_ids = [item.id for item in settlements]
+    repasses = []
+    if settlement_ids:
+        repasses = db.scalars(
+            select(OwnerRepasse).where(
+                OwnerRepasse.organization_id == organization_id,
+                OwnerRepasse.settlement_id.in_(settlement_ids),
+            )
+        ).all()
+    repasses_by_settlement: dict[UUID, list[OwnerRepasse]] = {}
+    for item in repasses:
+        repasses_by_settlement.setdefault(item.settlement_id, []).append(item)
+
+    integrity_issues = 0
+    for settlement in settlements:
+        expected = money(settlement.owner_entitlement_amount)
+        actual = _sum(item.amount for item in repasses_by_settlement.get(settlement.id, []))
+        if abs(expected - actual) > Decimal("0.01"):
+            integrity_issues += 1
+
+    third_party_titles = db.scalars(
+        select(FinancialTitle).where(
+            FinancialTitle.organization_id == organization_id,
+            FinancialTitle.competence == competence,
+            FinancialTitle.direction == "payable",
+            FinancialTitle.fund_scope == "third_party",
+        )
+    ).all()
+    pending_third_party = [
+        item for item in third_party_titles
+        if item.status not in CLOSED_TITLE_STATUSES and money(item.amount) > money(item.settled_amount)
+    ]
+
+    pending_repasses = [
+        item for item in repasses
+        if item.status not in CLOSED_REPASSE_STATUSES and money(item.amount) > 0
+    ]
+
+    unclosed_accounts = max(0, len(accounts) - len(closed_account_ids))
+    open_bank_exceptions = sum(1 for item in open_exceptions if item.status == "open")
+    ignored_bank_exceptions = sum(1 for item in open_exceptions if item.status == "ignored")
+
+    blockers: list[str] = []
+    if unclosed_accounts:
+        blockers.append(f"{unclosed_accounts} conta(s) bancária(s) sem fechamento confirmado no último dia da competência.")
+    if unreconciled:
+        blockers.append(f"{len(unreconciled)} movimento(s) bancário(s) da competência ainda não estão integralmente conciliados.")
+    if open_bank_exceptions:
+        blockers.append(f"{open_bank_exceptions} exceção(ões) bancária(s) aberta(s) exigem resolução.")
+    if ignored_bank_exceptions:
+        blockers.append(f"{ignored_bank_exceptions} exceção(ões) bancária(s) ignorada(s) precisam de revisão antes do fechamento.")
+    if settlement_gap:
+        blockers.append(f"{settlement_gap} recebimento(s) pago(s) ainda não possuem liquidação financeira.")
+    if integrity_issues:
+        blockers.append(f"{integrity_issues} liquidação(ões) possuem divergência entre direito do proprietário e repasses gerados.")
+    if pending_third_party:
+        blockers.append(f"{len(pending_third_party)} obrigação(ões) de terceiros permanecem pendentes.")
+    if pending_repasses:
+        blockers.append(f"{len(pending_repasses)} repasse(s) ao proprietário permanecem pendentes.")
+
+    blocker_count = (
+        unclosed_accounts
+        + len(unreconciled)
+        + open_bank_exceptions
+        + ignored_bank_exceptions
+        + settlement_gap
+        + integrity_issues
+        + len(pending_third_party)
+        + len(pending_repasses)
+    )
+    return MonthlyClosingReadiness(
+        competence=competence,
+        period_end=period_end,
+        can_close=blocker_count == 0,
+        bank_accounts_count=len(accounts),
+        accounts_closed_count=len(closed_account_ids),
+        unclosed_accounts_count=unclosed_accounts,
+        unreconciled_bank_transactions_count=len(unreconciled),
+        open_bank_exceptions_count=open_bank_exceptions,
+        ignored_bank_exceptions_count=ignored_bank_exceptions,
+        settlement_gap_count=settlement_gap,
+        settlement_integrity_issues_count=integrity_issues,
+        pending_third_party_count=len(pending_third_party),
+        pending_owner_repasses_count=len(pending_repasses),
+        blocker_count=blocker_count,
+        blockers=blockers,
     )
