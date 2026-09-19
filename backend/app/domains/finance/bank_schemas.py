@@ -119,11 +119,11 @@ class ReconciliationCandidate(BaseModel):
     counterparty_name: str
     due_date: date | None
     remaining_amount: Decimal
-    transaction_remaining_amount: Decimal
-    suggested_allocation: Decimal
-    difference_amount: Decimal
-    difference_kind: Literal["exact", "bank_excess", "title_exceeds_bank"]
-    settlement_compatible: bool
+    transaction_remaining_amount: Decimal = Decimal("0.00")
+    suggested_allocation: Decimal = Decimal("0.00")
+    difference_amount: Decimal = Decimal("0.00")
+    difference_kind: Literal["exact", "bank_excess", "title_exceeds_bank"] = "exact"
+    settlement_compatible: bool = True
     score: int
     identifier_match: bool = False
     matched_identifier: str | None = None
