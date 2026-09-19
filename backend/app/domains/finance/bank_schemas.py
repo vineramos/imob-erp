@@ -109,6 +109,28 @@ class BankImportResponse(BaseModel):
     duplicate_rows: int
 
 
+class BankImportHistoryItem(BaseModel):
+    import_id: UUID
+    filename: str
+    source: str
+    total_rows: int
+    created_rows: int
+    duplicate_rows: int
+    imported_at: datetime
+
+
+class BankReconciliationSummary(BaseModel):
+    pending_count: int
+    routine_count: int
+    exception_count: int
+    ignored_count: int
+    deterministic_count: int
+    strong_candidate_count: int
+    ambiguous_count: int
+    review_required_count: int
+    no_candidate_count: int
+
+
 class ReconciliationCandidate(BaseModel):
     target_type: str
     target_id: UUID
