@@ -184,6 +184,20 @@ class BankReconciliationExceptionAction(BaseModel):
     note: str | None = Field(default=None, max_length=1000)
 
 
+class BankResidualAdjustmentCreate(BaseModel):
+    category: Literal["bank_fee", "interest", "penalty", "discount", "revenue", "expense", "adjustment"]
+    description: str = Field(min_length=3, max_length=240)
+    amount: Decimal | None = Field(default=None, gt=0)
+    note: str | None = Field(default=None, max_length=1000)
+
+
+class BankExceptionResolveRequest(BaseModel):
+    target_type: Literal["rent", "owner_repasse", "maintenance", "manual", "financial_title"]
+    target_id: UUID
+    amount: Decimal | None = Field(default=None, gt=0)
+    note: str | None = Field(default=None, max_length=1000)
+
+
 class BankReconciliationRequest(BaseModel):
     target_type: Literal["rent", "owner_repasse", "maintenance", "manual", "financial_title"]
     target_id: UUID
