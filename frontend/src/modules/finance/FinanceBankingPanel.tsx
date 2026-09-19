@@ -6,6 +6,7 @@ import {
   ChevronLeft,
   ChevronRight,
   FileUp,
+  History,
   Landmark,
   Link2,
   Plus,
@@ -28,6 +29,8 @@ type Overview={account:Account;competence:string;credits_amount:number;debits_am
 type Candidate={target_type:string;target_id:string;target_code:string;direction:'receivable'|'payable';fund_scope:FundScope;description:string;counterparty_name:string;due_date:string|null;remaining_amount:number;transaction_remaining_amount:number;suggested_allocation:number;difference_amount:number;difference_kind:'exact'|'bank_excess'|'title_exceeds_bank';settlement_compatible:boolean;score:number;identifier_match:boolean;matched_identifier:string|null}
 type ReconciliationException={id:string;transaction_id:string;transaction_code:string;transaction_date:string;direction:'credit'|'debit';amount:number;remaining_amount:number;description:string;bank_reference:string|null;reason:'ambiguous_identifier'|'identifier_detected'|'strong_candidate'|'review_required'|'no_candidate';severity:'routine'|'exception';status:'open'|'ignored'|'resolved';reason_label:string;candidate_count:number;top_candidate_code:string|null;top_candidate_score:number|null;matched_identifier:string|null;resolution_note:string|null;resolved_at:string|null;updated_at:string}
 type BankProvider={key:string;name:string;direct_integration:boolean;capabilities:{statement:boolean;balance:boolean;billing:boolean;pix_payment:boolean}}
+type ImportHistory={import_id:string;filename:string;source:string;total_rows:number;created_rows:number;duplicate_rows:number;imported_at:string}
+type ReconciliationSummary={pending_count:number;routine_count:number;exception_count:number;ignored_count:number;deterministic_count:number;strong_candidate_count:number;ambiguous_count:number;review_required_count:number;no_candidate_count:number}
 
 const statusLabel:Record<string,string>={pending:'Pendente',partial:'Parcial',reconciled:'Conciliado'}
 const targetLabel:Record<string,string>={rent:'Locação',owner_repasse:'Repasse',maintenance:'Manutenção',manual:'Manual',financial_title:'Título financeiro'}
