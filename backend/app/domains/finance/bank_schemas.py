@@ -119,12 +119,18 @@ class ReconciliationCandidate(BaseModel):
     counterparty_name: str
     due_date: date | None
     remaining_amount: Decimal
+    transaction_remaining_amount: Decimal
+    suggested_allocation: Decimal
+    difference_amount: Decimal
+    difference_kind: Literal["exact", "bank_excess", "title_exceeds_bank"]
+    settlement_compatible: bool
     score: int
     identifier_match: bool = False
     matched_identifier: str | None = None
 
 
 class BankReconciliationException(BaseModel):
+    id: UUID
     transaction_id: UUID
     transaction_code: str
     transaction_date: date
@@ -140,11 +146,20 @@ class BankReconciliationException(BaseModel):
         "review_required",
         "no_candidate",
     ]
+    severity: Literal["routine", "exception"]
+    status: Literal["open", "ignored", "resolved"]
     reason_label: str
     candidate_count: int
     top_candidate_code: str | None = None
     top_candidate_score: int | None = None
     matched_identifier: str | None = None
+    resolution_note: str | None = None
+    resolved_at: datetime | None = None
+    updated_at: datetime
+
+
+class BankReconciliationExceptionAction(BaseModel):
+    note: str | None = Field(default=None, max_length=1000)
 
 
 class BankReconciliationRequest(BaseModel):
