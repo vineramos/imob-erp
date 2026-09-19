@@ -1202,6 +1202,37 @@ def create_manual_transaction(
     return _transaction_response(_load_transaction(db, context.user.organization_id, item.id))
 
 
+@router.get("/accounts/{account_id}/imports", response_model=list[BankImportHistoryItem])
+def list_statement_imports(
+    account_id: UUID,
+    limit: int = Query(default=20, ge=1, le=100),
+    context: UserContext = Depends(require_permission("finance.view")),
+    db: Session = Depends(get_db),
+) -> list[BankImportHistoryItem]:
+    account = _load_account(db, context.user.organization_id, account_id)
+    items = db.scalars(
+        select(BankStatementImport)
+        .where(
+            BankStatementImport.organization_id == context.user.organization_id,
+            BankStatementImport.bank_account_id == account.id,
+        )
+        .order_by(BankStatementImport.imported_at.desc())
+        .limit(limit)
+    ).all()
+    return [
+        BankImportHistoryItem(
+            import_id=item.id,
+            filename=item.filename,
+            source=item.source,
+            total_rows=int(item.total_rows),
+            created_rows=int(item.created_rows),
+            duplicate_rows=int(item.duplicate_rows),
+            imported_at=item.imported_at,
+        )
+        for item in items
+    ]
+
+
 @router.post("/accounts/{account_id}/import", response_model=BankImportResponse)
 async def import_statement(
     account_id: UUID,
@@ -1230,12 +1261,29 @@ async def import_statement(
     if not rows:
         raise HTTPException(status_code=422, detail="Nenhum movimento válido foi encontrado no extrato.")
 
+    file_hash = hashlib.sha256(content).hexdigest()
+    previous_import = db.scalar(
+        select(BankStatementImport).where(
+            BankStatementImport.organization_id == context.user.organization_id,
+            BankStatementImport.bank_account_id == account.id,
+            BankStatementImport.file_hash == file_hash,
+        )
+    )
+    if previous_import is not None:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Este mesmo arquivo já foi importado nesta conta "
+                f"em {previous_import.imported_at.strftime('%d/%m/%Y %H:%M')}."
+            ),
+        )
+
     import_item = BankStatementImport(
         organization_id=context.user.organization_id,
         bank_account_id=account.id,
         source=source,
         filename=filename,
-        file_hash=hashlib.sha256(content).hexdigest(),
+        file_hash=file_hash,
         total_rows=len(rows),
         imported_by_user_id=context.user.id,
     )
