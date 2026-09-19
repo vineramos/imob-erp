@@ -1,5 +1,7 @@
 name: CI
 
+# CI refresh marker: 2026-09-18
+
 on:
   push:
     branches: [main, sprint-1-foundation]
