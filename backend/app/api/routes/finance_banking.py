@@ -841,7 +841,9 @@ def _sync_account_exception_records(
         start = month_start(competence)
         stmt = stmt.where(BankTransaction.transaction_date >= start, BankTransaction.transaction_date < month_end(start))
     transactions = db.scalars(
-        stmt.order_by(BankTransaction.transaction_date.desc(), BankTransaction.internal_number.desc()).limit(1500)
+        stmt.order_by(BankTransaction.transaction_date.desc(), BankTransaction.internal_number.desc())
+        .limit(1500)
+        .with_for_update()
     ).unique().all()
 
     result: list[tuple[BankReconciliationExceptionRecord, BankTransaction]] = []
