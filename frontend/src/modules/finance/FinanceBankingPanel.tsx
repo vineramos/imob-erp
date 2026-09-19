@@ -37,6 +37,7 @@ const targetLabel:Record<string,string>={rent:'Locação',owner_repasse:'Repasse
 const exceptionLabel:Record<ReconciliationException['reason'],string>={ambiguous_identifier:'Referência ambígua',identifier_detected:'Identificador encontrado',strong_candidate:'Candidato forte',review_required:'Revisão necessária',no_candidate:'Sem candidato'}
 function money(value:number|null|undefined){return Number(value||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'})}
 function dateLabel(value:string|null|undefined){if(!value)return '—';return new Date(`${value.slice(0,10)}T12:00:00`).toLocaleDateString('pt-BR')}
+function dateTimeLabel(value:string|null|undefined){if(!value)return '—';return new Date(value).toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'short'})}
 function currentMonth(){const now=new Date();return `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`}
 function today(){const now=new Date();const offset=now.getTimezoneOffset();return new Date(now.getTime()-offset*60000).toISOString().slice(0,10)}
 function normalizeMoneyInput(value:string){const normalized=value.trim().replace(/\./g,'').replace(',','.');const parsed=Number(normalized||0);return Number.isFinite(parsed)?parsed.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}):'0,00'}
