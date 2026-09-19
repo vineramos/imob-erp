@@ -1,6 +1,6 @@
 """persist bank reconciliation exceptions
 
-Revision ID: 0037_bank_reconciliation_exceptions
+Revision ID: 0037_bank_recon_exceptions
 Revises: 0036_property_map_locations
 """
 
@@ -8,7 +8,7 @@ from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
-revision = "0037_bank_reconciliation_exceptions"
+revision = "0037_bank_recon_exceptions"
 down_revision = "0036_property_map_locations"
 branch_labels = None
 depends_on = None
