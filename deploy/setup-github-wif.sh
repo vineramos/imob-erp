@@ -1,18 +1,42 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-PROJECT_ID="imob-erp-vine-260829"
-PROJECT_NUMBER="472913336861"
-REGION="us-east1"
-SERVICE="imob-erp"
-ARTIFACT_REPOSITORY="cloud-run-source-deploy"
-RUNTIME_SERVICE_ACCOUNT="imob-runtime@${PROJECT_ID}.iam.gserviceaccount.com"
-DEPLOYER_NAME="imob-deployer"
+# Configuração pública/operacional. IDs reais de projeto e repositório devem
+# ser informados no ambiente local ao executar este script.
+PROJECT_ID="${PROJECT_ID:-}"
+REGION="${REGION:-us-east1}"
+SERVICE="${SERVICE:-imob-erp}"
+ARTIFACT_REPOSITORY="${ARTIFACT_REPOSITORY:-cloud-run-source-deploy}"
+RUNTIME_SA_NAME="${RUNTIME_SA_NAME:-imob-runtime}"
+DEPLOYER_NAME="${DEPLOYER_NAME:-imob-deployer}"
+POOL_ID="${POOL_ID:-github-actions}"
+PROVIDER_ID="${PROVIDER_ID:-github}"
+GITHUB_REPOSITORY="${GITHUB_REPOSITORY:-}"
+GITHUB_BRANCH="${GITHUB_BRANCH:-sprint-1-foundation}"
+
+require_value() {
+  local name="$1"
+  local value="$2"
+  if [[ -z "$value" ]]; then
+    echo "❌ Defina $name antes de executar este script." >&2
+    exit 1
+  fi
+}
+
+command -v gcloud >/dev/null || { echo 'Google Cloud CLI (gcloud) não encontrado.' >&2; exit 1; }
+command -v gh >/dev/null || { echo 'GitHub CLI (gh) não encontrado.' >&2; exit 1; }
+
+require_value PROJECT_ID "$PROJECT_ID"
+require_value GITHUB_REPOSITORY "$GITHUB_REPOSITORY"
+
+gh auth status >/dev/null
+gcloud config set project "$PROJECT_ID" >/dev/null
+
+PROJECT_NUMBER="$(gcloud projects describe "$PROJECT_ID" --format='value(projectNumber)')"
+require_value PROJECT_NUMBER "$PROJECT_NUMBER"
+
+RUNTIME_SERVICE_ACCOUNT="${RUNTIME_SA_NAME}@${PROJECT_ID}.iam.gserviceaccount.com"
 DEPLOYER_SERVICE_ACCOUNT="${DEPLOYER_NAME}@${PROJECT_ID}.iam.gserviceaccount.com"
-POOL_ID="github-actions"
-PROVIDER_ID="github"
-GITHUB_REPOSITORY="vineramos/imob-erp"
-GITHUB_BRANCH="sprint-1-foundation"
 
 retry_iam() {
   local attempt=1
@@ -36,7 +60,6 @@ retry_iam() {
 }
 
 printf '\n==> Configurando deploy automático do Imob ERP\n'
-gcloud config set project "$PROJECT_ID" >/dev/null
 
 gcloud services enable \
   iamcredentials.googleapis.com \
@@ -95,7 +118,7 @@ for ROLE in \
     --member="serviceAccount:${DEPLOYER_SERVICE_ACCOUNT}" \
     --role="$ROLE" \
     --condition=None >/dev/null
- done
+done
 
 retry_iam gcloud iam service-accounts add-iam-policy-binding "$RUNTIME_SERVICE_ACCOUNT" \
   --member="serviceAccount:${DEPLOYER_SERVICE_ACCOUNT}" \
@@ -110,9 +133,6 @@ PROVIDER_RESOURCE="$(gcloud iam workload-identity-pools providers describe "$PRO
   --workload-identity-pool="$POOL_ID" \
   --location=global \
   --format='value(name)')"
-
-command -v gh >/dev/null || { echo 'GitHub CLI (gh) não encontrado.' >&2; exit 1; }
-gh auth status >/dev/null
 
 gh variable set GCP_PROJECT_ID --body "$PROJECT_ID" --repo "$GITHUB_REPOSITORY"
 gh variable set GCP_REGION --body "$REGION" --repo "$GITHUB_REPOSITORY"
