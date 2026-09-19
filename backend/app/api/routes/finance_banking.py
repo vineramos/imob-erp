@@ -823,22 +823,18 @@ def _exception_response(
     )
 
 
-@router.get("/exceptions", response_model=list[BankReconciliationException])
-def reconciliation_exceptions(
-    account_id: UUID = Query(...),
-    competence: date | None = Query(default=None),
-    include_routine: bool = Query(default=False),
-    include_ignored: bool = Query(default=False),
-    context: UserContext = Depends(require_permission("finance.view")),
-    db: Session = Depends(get_db),
-) -> list[BankReconciliationException]:
-    account = _load_account(db, context.user.organization_id, account_id)
+def _sync_account_exception_records(
+    db: Session,
+    *,
+    account: BankAccount,
+    competence: date | None,
+) -> list[tuple[BankReconciliationExceptionRecord, BankTransaction]]:
     stmt = (
         select(BankTransaction)
         .options(selectinload(BankTransaction.reconciliations))
         .where(
-            BankTransaction.organization_id == context.user.organization_id,
-            BankTransaction.bank_account_id == account_id,
+            BankTransaction.organization_id == account.organization_id,
+            BankTransaction.bank_account_id == account.id,
         )
     )
     if competence:
@@ -848,8 +844,7 @@ def reconciliation_exceptions(
         stmt.order_by(BankTransaction.transaction_date.desc(), BankTransaction.internal_number.desc()).limit(1500)
     ).unique().all()
 
-    result: list[BankReconciliationException] = []
-    dirty = False
+    result: list[tuple[BankReconciliationExceptionRecord, BankTransaction]] = []
     for transaction in transactions:
         tx = _transaction_response(transaction)
         if tx.remaining_amount <= 0:
@@ -862,12 +857,29 @@ def reconciliation_exceptions(
                 record.status = "resolved"
                 record.resolved_at = datetime.now(timezone.utc)
                 record.resolution_note = record.resolution_note or "Resolvida automaticamente após conciliação integral."
-                dirty = True
             continue
 
         candidates = _open_candidates(db, transaction, account)
         record = _sync_exception_record(db, transaction=transaction, candidates=candidates)
-        dirty = True
+        result.append((record, transaction))
+
+    db.flush()
+    return result
+
+
+@router.get("/exceptions", response_model=list[BankReconciliationException])
+def reconciliation_exceptions(
+    account_id: UUID = Query(...),
+    competence: date | None = Query(default=None),
+    include_routine: bool = Query(default=False),
+    include_ignored: bool = Query(default=False),
+    context: UserContext = Depends(require_permission("finance.view")),
+    db: Session = Depends(get_db),
+) -> list[BankReconciliationException]:
+    account = _load_account(db, context.user.organization_id, account_id)
+    records = _sync_account_exception_records(db, account=account, competence=competence)
+    result: list[BankReconciliationException] = []
+    for record, transaction in records:
         if record.severity == "routine" and not include_routine:
             continue
         if record.status == "ignored" and not include_ignored:
@@ -875,10 +887,44 @@ def reconciliation_exceptions(
         if record.status == "resolved":
             continue
         result.append(_exception_response(record, transaction))
-
-    if dirty:
-        db.commit()
+    db.commit()
     return result
+
+
+@router.get("/reconciliation-summary", response_model=BankReconciliationSummary)
+def reconciliation_summary(
+    account_id: UUID = Query(...),
+    competence: date | None = Query(default=None),
+    context: UserContext = Depends(require_permission("finance.view")),
+    db: Session = Depends(get_db),
+) -> BankReconciliationSummary:
+    account = _load_account(db, context.user.organization_id, account_id)
+    records = _sync_account_exception_records(db, account=account, competence=competence)
+
+    active = [(record, transaction) for record, transaction in records if record.status != "resolved"]
+    summary = BankReconciliationSummary(
+        pending_count=len(active),
+        routine_count=sum(1 for record, _ in active if record.severity == "routine" and record.status == "open"),
+        exception_count=sum(1 for record, _ in active if record.severity == "exception" and record.status == "open"),
+        ignored_count=sum(1 for record, _ in active if record.status == "ignored"),
+        deterministic_count=sum(
+            1 for record, _ in active if record.reason == "identifier_detected" and record.status == "open"
+        ),
+        strong_candidate_count=sum(
+            1 for record, _ in active if record.reason == "strong_candidate" and record.status == "open"
+        ),
+        ambiguous_count=sum(
+            1 for record, _ in active if record.reason == "ambiguous_identifier" and record.status == "open"
+        ),
+        review_required_count=sum(
+            1 for record, _ in active if record.reason == "review_required" and record.status == "open"
+        ),
+        no_candidate_count=sum(
+            1 for record, _ in active if record.reason == "no_candidate" and record.status == "open"
+        ),
+    )
+    db.commit()
+    return summary
 
 
 def _load_exception(
