@@ -53,3 +53,22 @@ class MonthlyCycleResponse(BaseModel):
     attention_count: int
     next_action: MonthlyCycleAction | None
     steps: list[MonthlyCycleStep]
+
+
+
+class MonthlyClosingReadiness(BaseModel):
+    competence: date
+    period_end: date
+    can_close: bool
+    bank_accounts_count: int
+    accounts_closed_count: int
+    unclosed_accounts_count: int
+    unreconciled_bank_transactions_count: int
+    open_bank_exceptions_count: int
+    ignored_bank_exceptions_count: int
+    settlement_gap_count: int
+    settlement_integrity_issues_count: int
+    pending_third_party_count: int
+    pending_owner_repasses_count: int
+    blocker_count: int
+    blockers: list[str]
