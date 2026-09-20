@@ -20,6 +20,7 @@ from app.domains.finance.monthly_cycle_schemas import (
     MonthlyCycleResponse,
     MonthlyCycleStep,
 )
+from app.domains.finance.treasury_models import PaymentBatch
 from app.domains.finance.service import charge_item_agency_retention, money
 from app.domains.leases.models import LeaseContract
 
@@ -595,6 +596,22 @@ def build_monthly_closing_readiness(
         if item.status not in CLOSED_REPASSE_STATUSES and money(item.amount) > 0
     ]
 
+    payment_batches = db.scalars(
+        select(PaymentBatch).where(
+            PaymentBatch.organization_id == organization_id,
+            PaymentBatch.scheduled_date >= competence,
+            PaymentBatch.scheduled_date <= period_end,
+        )
+    ).all()
+    open_payment_batches = [
+        item for item in payment_batches
+        if item.status in {"draft", "ready", "approved", "submitted"}
+    ]
+    failed_payment_batches = [
+        item for item in payment_batches
+        if str(item.provider_status or "").lower() in {"error", "partial_error", "failed"}
+    ]
+
     unclosed_accounts = max(0, len(accounts) - len(closed_account_ids))
     open_bank_exceptions = sum(1 for item in open_exceptions if item.status == "open")
     ignored_bank_exceptions = sum(1 for item in open_exceptions if item.status == "ignored")
@@ -616,6 +633,10 @@ def build_monthly_closing_readiness(
         blockers.append(f"{len(pending_third_party)} obrigação(ões) de terceiros permanecem pendentes.")
     if pending_repasses:
         blockers.append(f"{len(pending_repasses)} repasse(s) ao proprietário permanecem pendentes.")
+    if open_payment_batches:
+        blockers.append(f"{len(open_payment_batches)} lote(s) de pagamento da competência ainda não foram concluídos.")
+    if failed_payment_batches:
+        blockers.append(f"{len(failed_payment_batches)} lote(s) possuem falha de provider e exigem revisão.")
 
     blocker_count = (
         unclosed_accounts
@@ -626,6 +647,8 @@ def build_monthly_closing_readiness(
         + integrity_issues
         + len(pending_third_party)
         + len(pending_repasses)
+        + len(open_payment_batches)
+        + len(failed_payment_batches)
     )
     return MonthlyClosingReadiness(
         competence=competence,
@@ -641,6 +664,8 @@ def build_monthly_closing_readiness(
         settlement_integrity_issues_count=integrity_issues,
         pending_third_party_count=len(pending_third_party),
         pending_owner_repasses_count=len(pending_repasses),
+        open_payment_batches_count=len(open_payment_batches),
+        failed_payment_batches_count=len(failed_payment_batches),
         blocker_count=blocker_count,
         blockers=blockers,
     )
