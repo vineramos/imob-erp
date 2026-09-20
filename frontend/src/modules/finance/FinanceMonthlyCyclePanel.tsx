@@ -71,8 +71,10 @@ type Cycle = {
   steps:CycleStep[]
 }
 
+type ClosureEvent={id:string;action:'closed'|'reopened';reason:string|null;actor_user_id:string|null;created_at:string}
+type MonthlyClosure={id:string|null;competence:string;status:'open'|'closed';closed_at:string|null;reopened_at:string|null;closing_note:string|null;reopen_reason:string|null;readiness:ClosingReadiness;events:ClosureEvent[]}
 type FinanceTarget = 'overview'|'billing'|'rent'|'banking'|'bank-control'
-type Props = { onNavigateArea:(target:FinanceTarget)=>void }
+type Props = { onNavigateArea:(target:FinanceTarget)=>void; permissions:string[] }
 
 const stateLabels:Record<CycleState,string> = {
   complete:'Concluído',
@@ -93,24 +95,28 @@ function monthLabel(month:string){
   return date.toLocaleDateString('pt-BR',{month:'long',year:'numeric'})
 }
 
-export function FinanceMonthlyCyclePanel({onNavigateArea}:Props){
+export function FinanceMonthlyCyclePanel({onNavigateArea,permissions}:Props){
   const [month,setMonth]=useState(currentMonth())
   const [cycle,setCycle]=useState<Cycle|null>(null)
   const [readiness,setReadiness]=useState<ClosingReadiness|null>(null)
+  const [closure,setClosure]=useState<MonthlyClosure|null>(null)
   const [loading,setLoading]=useState(true)
+  const [saving,setSaving]=useState(false)
   const [error,setError]=useState('')
+  const [success,setSuccess]=useState('')
   const competence=`${month}-01`
 
   const load=useCallback(async()=>{
     setLoading(true)
     setError('')
     try{
-      const [nextCycle,nextReadiness]=await Promise.all([
+      const [nextCycle,nextClosure]=await Promise.all([
         apiRequest<Cycle>(`/finance/monthly-cycle?competence=${competence}`),
-        apiRequest<ClosingReadiness>(`/finance/monthly-cycle/closing-readiness?competence=${competence}`),
+        apiRequest<MonthlyClosure>(`/finance/monthly-cycle/closure?competence=${competence}`),
       ])
       setCycle(nextCycle)
-      setReadiness(nextReadiness)
+      setClosure(nextClosure)
+      setReadiness(nextClosure.readiness)
     }catch(cause){
       setError(cause instanceof ApiError?cause.detail:'Não foi possível carregar o ciclo financeiro mensal.')
     }finally{
@@ -119,6 +125,24 @@ export function FinanceMonthlyCyclePanel({onNavigateArea}:Props){
   },[competence])
 
   useEffect(()=>{void load()},[load])
+
+  async function closeCompetence(){
+    if(!readiness?.can_close)return
+    setSaving(true);setError('');setSuccess('')
+    try{
+      const next=await apiRequest<MonthlyClosure>(`/finance/monthly-cycle/closure/close?competence=${competence}`,{method:'POST',body:JSON.stringify({note:'Fechamento confirmado pelo checklist financeiro.'})})
+      setClosure(next);setReadiness(next.readiness);setSuccess('Competência fechada. Alterações retroativas críticas ficaram bloqueadas.')
+    }catch(cause){setError(cause instanceof ApiError?cause.detail:'Não foi possível fechar a competência.')}finally{setSaving(false)}
+  }
+  async function reopenCompetence(){
+    const reason=window.prompt('Informe o motivo obrigatório para reabrir esta competência:')
+    if(!reason)return
+    setSaving(true);setError('');setSuccess('')
+    try{
+      const next=await apiRequest<MonthlyClosure>(`/finance/monthly-cycle/closure/reopen?competence=${competence}`,{method:'POST',body:JSON.stringify({reason})})
+      setClosure(next);setReadiness(next.readiness);setSuccess('Competência reaberta e registrada no histórico.')
+    }catch(cause){setError(cause instanceof ApiError?cause.detail:'Não foi possível reabrir a competência.')}finally{setSaving(false)}
+  }
 
   function navigate(target:string|null|undefined){
     if(!target)return
@@ -144,7 +168,7 @@ export function FinanceMonthlyCyclePanel({onNavigateArea}:Props){
       </div>
     </div>
 
-    {error&&<div className="form-alert danger-alert">{error}</div>}
+    {error&&<div className="form-alert danger-alert">{error}</div>}{success&&<div className="form-alert success-alert">{success}</div>}
     {loading&&!cycle?<article className="panel settings-loading">Carregando ciclo financeiro...</article>:cycle&&<>
       <article className={`panel finance-cycle-next ${cycle.next_action?'has-action':'is-clear'}`}>
         <div className="finance-cycle-next-icon">{cycle.next_action?<AlertTriangle size={20}/>:<CheckCircle2 size={20}/>}</div>
@@ -170,7 +194,9 @@ export function FinanceMonthlyCyclePanel({onNavigateArea}:Props){
           <span>Repasses pendentes <b>{readiness.pending_owner_repasses_count}</b></span>
         </div>
         {!readiness.can_close&&<div className="finance-closing-blockers">{readiness.blockers.map((item,index)=><span key={index}><AlertTriangle size={13}/>{item}</span>)}</div>}
-        {!readiness.can_close&&<div className="finance-closing-actions"><button className="button secondary compact" type="button" onClick={()=>navigate('banking')}>Abrir conciliação</button><button className="button secondary compact" type="button" onClick={()=>navigate('bank-control')}>Controle bancário</button></div>}
+        <div className="finance-closing-actions">{!readiness.can_close&&<><button className="button secondary compact" type="button" onClick={()=>navigate('banking')}>Abrir conciliação</button><button className="button secondary compact" type="button" onClick={()=>navigate('bank-control')}>Controle bancário</button></>}{permissions.includes('finance.payment.approve')&&closure?.status==='open'&&readiness.can_close&&<button className="button primary compact" type="button" disabled={saving} onClick={()=>void closeCompetence()}>Fechar competência</button>}{permissions.includes('finance.payment.approve')&&closure?.status==='closed'&&<button className="button secondary compact" type="button" disabled={saving} onClick={()=>void reopenCompetence()}>Reabrir competência</button>}</div>
+        {closure?.status==='closed'&&<div className="finance-closure-seal"><ShieldCheck size={14}/><span>Fechada em {closure.closed_at?new Date(closure.closed_at).toLocaleString('pt-BR'):'—'}. Conciliações e execuções retroativas críticas estão bloqueadas até reabertura.</span></div>}
+        {closure&&closure.events.length>0&&<details className="finance-closure-history"><summary>Histórico de fechamento ({closure.events.length})</summary>{closure.events.map(item=><div key={item.id}><strong>{item.action==='closed'?'Fechada':'Reaberta'}</strong><span>{new Date(item.created_at).toLocaleString('pt-BR')}</span>{item.reason&&<small>{item.reason}</small>}</div>)}</details>}
       </article>}
 
       <div className="finance-cycle-metrics">
