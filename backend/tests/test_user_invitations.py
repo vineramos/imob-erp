@@ -7,7 +7,7 @@ from app.domains.foundation.models import AppUser, AuditLog, UserInvitation
 
 def test_admin_creates_single_use_invitation(client):
     response = client.post(
-        "/settings/users/invitations",
+        "/api/settings/users/invitations",
         json={
             "name": "Maria Financeiro",
             "email": "Maria.Financeiro@example.com",
@@ -21,7 +21,7 @@ def test_admin_creates_single_use_invitation(client):
     assert payload["user"]["access_status"] == "pending"
     assert payload["token"]
 
-    details = client.get(f"/auth/invitations/{payload['token']}")
+    details = client.get(f"/api/auth/invitations/{payload['token']}")
     assert details.status_code == 200
     assert details.json()["name"] == "Maria Financeiro"
 
@@ -38,7 +38,7 @@ def test_admin_creates_single_use_invitation(client):
 
 def test_admin_role_invitation_requires_reason(client):
     response = client.post(
-        "/settings/users/invitations",
+        "/api/settings/users/invitations",
         json={"name": "Sem Motivo", "email": "sem-motivo@example.com", "role_keys": ["admin"]},
     )
     assert response.status_code == 422
@@ -55,7 +55,7 @@ def test_public_signup_is_closed_after_bootstrap(client, monkeypatch):
 
     monkeypatch.setattr(auth_proxy, "_upstream_request", unexpected_upstream)
     response = client.post(
-        "/auth/sign-up",
+        "/api/auth/sign-up",
         json={"name": "Intruso", "email": "intruso@example.com", "password": "uma-senha-com-12"},
     )
     assert response.status_code == 403
