@@ -87,6 +87,32 @@ def _user_name(db: Session, user_id: UUID | None) -> str | None:
     return db.scalar(select(AppUser.name).where(AppUser.id == user_id))
 
 
+def _sod_override(
+    *,
+    context: UserContext,
+    conflicting_user_id: UUID | None,
+    action_label: str,
+    override_sod: bool,
+    reason: str | None,
+) -> str | None:
+    if conflicting_user_id is None or conflicting_user_id != context.user.id:
+        return (reason or "").strip() or None
+    if not override_sod:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Segregação de funções: o mesmo usuário não pode {action_label}. Encaminhe para outro usuário autorizado.",
+        )
+    if not context.has("finance.sod.override"):
+        raise HTTPException(status_code=403, detail="Permissão necessária: finance.sod.override")
+    normalized = (reason or "").strip()
+    if len(normalized) < 10:
+        raise HTTPException(
+            status_code=422,
+            detail="A exceção de segregação exige justificativa com pelo menos 10 caracteres.",
+        )
+    return f"[OVERRIDE SOD] {normalized}"
+
+
 def _batch_response(db: Session, item: PaymentBatch) -> PaymentBatchResponse:
     account = _load_account(db, item.organization_id, item.bank_account_id)
     return PaymentBatchResponse(
