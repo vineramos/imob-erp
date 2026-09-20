@@ -76,7 +76,6 @@ def test_monthly_closure_state_and_reopen_history(client, identity):
 def test_closed_competence_blocks_bank_reconciliation_and_reopen_releases_it(client, identity):
     account = _account(client)
     competence = date.today().replace(day=1)
-    _force_closed(identity, competence)
 
     tx = assert_response(
         client.post(
@@ -90,6 +89,7 @@ def test_closed_competence_blocks_bank_reconciliation_and_reopen_releases_it(cli
             },
         )
     ).json()
+    _force_closed(identity, competence)
 
     blocked = client.post(
         f"/api/finance/banking/transactions/{tx['id']}/residual-adjustment",
@@ -145,3 +145,23 @@ def test_monthly_close_is_refused_while_readiness_has_blockers(client):
     )
     assert response.status_code == 409
     assert "bloqueadores" in response.json()["detail"].lower()
+
+
+
+def test_closed_competence_blocks_new_bank_transaction(client, identity):
+    account = _account(client)
+    competence = date.today().replace(day=1)
+    _force_closed(identity, competence)
+
+    response = client.post(
+        f"/api/finance/banking/accounts/{account['id']}/transactions",
+        json={
+            "transaction_date": date.today().isoformat(),
+            "direction": "credit",
+            "amount": "10.00",
+            "description": "Movimento que não deve entrar",
+            "bank_reference": "LOCK-NEW-10",
+        },
+    )
+    assert response.status_code == 409
+    assert "fechada" in response.json()["detail"].lower()
