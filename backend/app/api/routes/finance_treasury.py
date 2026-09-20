@@ -24,6 +24,7 @@ from app.domains.finance.treasury_models import PaymentBatch, PaymentBatchItem
 from app.domains.finance.treasury_schemas import (
     CashFlowDay,
     CashFlowOverview,
+    PaymentBatchActionRequest,
     PaymentBatchCreate,
     PaymentBatchExecutionRequest,
     PaymentBatchItemResponse,
@@ -32,6 +33,7 @@ from app.domains.finance.treasury_schemas import (
     OwnerRepasseResponse,
 )
 from app.domains.foundation.access import UserContext, require_permission
+from app.domains.foundation.models import AppUser
 from app.domains.foundation.audit import write_audit
 
 router = APIRouter(prefix="/finance/treasury", tags=["finance-treasury"])
@@ -51,6 +53,7 @@ def _audit(
     entity_type: str,
     entity_id: str | None,
     after: dict | None = None,
+    reason: str | None = None,
 ) -> None:
     ip_address, user_agent = _request_metadata(request)
     write_audit(
@@ -61,6 +64,7 @@ def _audit(
         entity_type=entity_type,
         entity_id=entity_id,
         after_data=after,
+        reason=reason,
         ip_address=ip_address,
         user_agent=user_agent,
     )
