@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 
 from app.core.database import SessionLocal
@@ -152,8 +152,7 @@ def test_homologation_treasury_prepare_approve_execute_and_daily_close(client, i
 def test_homologation_clean_month_can_close_and_retroactive_change_is_blocked(client):
     """Fechamento mensal: conta fechada -> prontidão limpa -> mês fechado -> trava retroativa."""
     competence = add_months(date.today().replace(day=1), -1)
-    period_end = add_months(competence, 1)
-    period_end = period_end.fromordinal(period_end.toordinal() - 1)
+    period_end = add_months(competence, 1) - timedelta(days=1)
     account = _account(client, name="Conta E2E Fechamento", opening_balance="0.00")
 
     daily = assert_response(
