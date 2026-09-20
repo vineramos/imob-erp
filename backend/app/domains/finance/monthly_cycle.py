@@ -13,6 +13,7 @@ from app.domains.finance.bank_control_models import BankDailyClose
 from app.domains.finance.bank_models import BankAccount, BankReconciliationExceptionRecord, BankTransaction
 from app.domains.finance.core_models import FinancialTitle
 from app.domains.finance.models import FinancialSettlement, OwnerRepasse, RentCharge
+from app.domains.finance.monthly_closing_models import FinanceMonthlyClosure
 from app.domains.finance.monthly_cycle_schemas import (
     MonthlyClosingReadiness,
     MonthlyCycleAction,
@@ -643,3 +644,15 @@ def build_monthly_closing_readiness(
         blocker_count=blocker_count,
         blockers=blockers,
     )
+
+
+
+def is_competence_closed(db: Session, *, organization_id: UUID, value: date) -> bool:
+    competence = month_start(value)
+    return db.scalar(
+        select(FinanceMonthlyClosure.id).where(
+            FinanceMonthlyClosure.organization_id == organization_id,
+            FinanceMonthlyClosure.competence == competence,
+            FinanceMonthlyClosure.status == "closed",
+        ).limit(1)
+    ) is not None
