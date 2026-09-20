@@ -60,6 +60,8 @@ export type SignatureIntegrationStatus = {
   checked_at: string
 }
 
+export type BankIntegrationStatus = SignatureIntegrationStatus
+
 
 export type IntegrationReadinessItem = {
   key: string
