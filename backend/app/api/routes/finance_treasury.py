@@ -19,6 +19,7 @@ from app.core.database import get_db
 from app.domains.finance.bank_models import BankAccount, BankReconciliation, BankTransaction
 from app.domains.finance.core_models import FinancialTitle
 from app.domains.finance.models import MaintenanceFinancialEntry, OwnerRepasse, RentCharge
+from app.domains.finance.monthly_cycle import is_competence_closed
 from app.domains.finance.treasury_models import PaymentBatch, PaymentBatchItem
 from app.domains.finance.treasury_schemas import (
     CashFlowDay,
@@ -664,6 +665,15 @@ def execute_payment_batch(
         raise HTTPException(status_code=409, detail="Somente lotes aprovados podem ter a execução registrada.")
     if payload.execution_date > date.today():
         raise HTTPException(status_code=422, detail="A execução só pode ser registrada na data atual ou em data passada.")
+    if is_competence_closed(
+        db,
+        organization_id=context.user.organization_id,
+        value=payload.execution_date,
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail="A competência da execução está fechada. Reabra a competência antes de registrar o pagamento.",
+        )
     account = db.scalar(
         select(BankAccount)
         .where(
