@@ -17,3 +17,13 @@
 .finance-closing-blockers svg{flex:none;margin-top:1px}
 .finance-closing-actions{display:flex;gap:7px;justify-content:flex-end}
 @media(max-width:760px){.finance-closing-readiness-head{flex-direction:column}.finance-closing-readiness-score{align-items:flex-start}.finance-closing-readiness-stats{grid-template-columns:1fr}.finance-closing-actions{justify-content:flex-start;flex-wrap:wrap}}
+
+.finance-closure-seal{display:flex;align-items:flex-start;gap:7px;padding:8px 10px;border-radius:7px;background:color-mix(in srgb,var(--success) 8%,transparent);font-size:9.5px;line-height:1.4}
+.finance-closure-seal svg{flex:none;margin-top:1px}
+.finance-closure-history{border-top:1px solid var(--border);padding-top:9px}
+.finance-closure-history summary{cursor:pointer;font-size:9.5px;font-weight:700}
+.finance-closure-history>div{display:grid;grid-template-columns:90px 150px 1fr;gap:8px;padding:7px 0;border-bottom:1px dashed var(--border);align-items:start}
+.finance-closure-history>div:last-child{border-bottom:0}
+.finance-closure-history strong{font-size:9px}
+.finance-closure-history span,.finance-closure-history small{font-size:8.5px;color:var(--text-muted)}
+@media(max-width:760px){.finance-closure-history>div{grid-template-columns:1fr}.finance-closure-history>div>*{margin:0}}
