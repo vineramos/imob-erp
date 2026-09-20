@@ -82,6 +82,8 @@ Variáveis:
 
 O provider usa OAuth2 + mTLS. O ERP continua operacional com provider manual quando o Inter não estiver configurado.
 
+Em **Configurações → Integrações**, o status apenas confirma se as credenciais estão presentes. O botão **Testar conexão** executa uma consulta autenticada de saldo para validar, em conjunto, OAuth2, certificado mTLS e acesso à conta. A resposta exibida nunca devolve client secret, token ou conteúdo do certificado.
+
 Dinheiro de terceiros e caixa operacional permanecem separados por `fund_scope`.
 
 ## Storage de documentos
