@@ -153,15 +153,18 @@ async def _upstream_request(
     *,
     payload: dict[str, Any] | None = None,
     session_cookie: str | None = None,
+    origin: str | None = None,
 ) -> httpx.Response:
-    # Este é um hop servidor→servidor. Não replica o Origin do navegador para
-    # o Neon Auth: aliases do Cloud Run podem não estar entre trusted_origins,
-    # e CSRF/origin validation pertence ao limite navegador→Imob.
+    # Este é um hop servidor→servidor. O Origin só é encaminhado por rotas que
+    # dependem dele (como reset de senha); as demais evitam ampliar a superfície
+    # de validação CSRF/trusted origins do Neon Auth.
     headers = {"Accept": "application/json"}
     if payload is not None:
         headers["Content-Type"] = "application/json"
     if session_cookie:
         headers["Cookie"] = session_cookie
+    if origin:
+        headers["Origin"] = origin
 
     try:
         async with httpx.AsyncClient(timeout=20.0, follow_redirects=False) as client:
@@ -470,12 +473,13 @@ async def request_password_reset(
 
 @router.post("/reset-password")
 async def reset_password(payload: ResetPasswordPayload, request: Request) -> JSONResponse:
-    del request
+    origin = _normalized_origin(request.headers.get("origin", "")) or _normalized_origin(str(request.base_url))
     try:
         upstream = await _upstream_request(
             "POST",
             "/reset-password",
             payload={"newPassword": payload.new_password, "token": payload.token},
+            origin=origin,
         )
     except RuntimeError:
         return _response({"detail": "Serviço de autenticação temporariamente indisponível"}, status.HTTP_503_SERVICE_UNAVAILABLE)

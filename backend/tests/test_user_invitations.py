@@ -1,3 +1,4 @@
+import httpx
 from sqlalchemy import select
 
 from app.api.routes import auth_proxy
@@ -60,3 +61,20 @@ def test_public_signup_is_closed_after_bootstrap(client, monkeypatch):
     )
     assert response.status_code == 403
     assert called is False
+
+
+def test_password_reset_forwards_validated_origin(client, monkeypatch):
+    captured: dict[str, str | None] = {}
+
+    async def fake_upstream(method, path, **kwargs):
+        captured["origin"] = kwargs.get("origin")
+        return httpx.Response(200, json={"ok": True})
+
+    monkeypatch.setattr(auth_proxy, "_upstream_request", fake_upstream)
+    response = client.post(
+        "/api/auth/reset-password",
+        headers={"Origin": "https://imob-erp.example.com"},
+        json={"newPassword": "senha-segura-com-12", "token": "token-de-recuperacao"},
+    )
+    assert response.status_code == 200
+    assert captured["origin"] == "https://imob-erp.example.com"
