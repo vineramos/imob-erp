@@ -32,6 +32,15 @@ class SignatureIntegrationStatusResponse(BaseModel):
     checked_at: datetime
 
 
+class BankIntegrationStatusResponse(BaseModel):
+    provider: str
+    environment: str
+    configured: bool
+    reachable: bool | None
+    message: str
+    checked_at: datetime
+
+
 class DocumentStorageStatusResponse(BaseModel):
     provider: str
     configured: bool
@@ -84,6 +93,50 @@ def _selected_signature_provider(db: Session, organization_id) -> str:
     settings = db.scalar(select(OrganizationSettings).where(OrganizationSettings.organization_id == organization_id))
     integrations = (settings.integrations if settings else {}) or {}
     return str(integrations.get("signature_provider") or "none")
+
+
+def _selected_bank_provider(db: Session, organization_id) -> str:
+    settings = db.scalar(select(OrganizationSettings).where(OrganizationSettings.organization_id == organization_id))
+    integrations = (settings.integrations if settings else {}) or {}
+    return str(integrations.get("bank_provider") or "none")
+
+
+def _bank_status_response(provider_key: str, *, probe: bool = False) -> BankIntegrationStatusResponse:
+    checked_at = datetime.now(timezone.utc)
+    if provider_key == "none":
+        return BankIntegrationStatusResponse(
+            provider="none", environment="disabled", configured=False, reachable=None,
+            message="Nenhum provedor bancário está selecionado.", checked_at=checked_at,
+        )
+    try:
+        provider = bank_provider(provider_key)
+        provider_status = provider.status()
+    except BankProviderError as exc:
+        return BankIntegrationStatusResponse(
+            provider=provider_key, environment="unknown", configured=False,
+            reachable=False if probe else None, message=str(exc), checked_at=checked_at,
+        )
+    if not provider_status.configured:
+        return BankIntegrationStatusResponse(
+            provider=provider_key, environment=provider_status.environment, configured=False, reachable=None,
+            message="Provider selecionado, mas credenciais e certificado ainda não estão configurados.", checked_at=checked_at,
+        )
+    if not probe:
+        return BankIntegrationStatusResponse(
+            provider=provider_key, environment=provider_status.environment, configured=True, reachable=None,
+            message="Credenciais presentes. Execute o teste para validar autenticação e acesso bancário.", checked_at=checked_at,
+        )
+    try:
+        provider.balance()
+    except BankProviderError as exc:
+        return BankIntegrationStatusResponse(
+            provider=provider_key, environment=provider_status.environment, configured=True, reachable=False,
+            message=str(exc), checked_at=checked_at,
+        )
+    return BankIntegrationStatusResponse(
+        provider=provider_key, environment=provider_status.environment, configured=True, reachable=True,
+        message="Autenticação, certificado e consulta bancária validados com sucesso.", checked_at=checked_at,
+    )
 
 
 @router.get("/integrations/readiness", response_model=IntegrationReadinessResponse)
@@ -269,6 +322,25 @@ def signature_status(
     if provider is None:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Provider de assinatura não suportado.")
     return _response(provider.status())
+
+
+@router.get("/integrations/bank/status", response_model=BankIntegrationStatusResponse)
+def bank_status(
+    context: UserContext = Depends(require_permission("settings.view")),
+    db: Session = Depends(get_db),
+) -> BankIntegrationStatusResponse:
+    return _bank_status_response(_selected_bank_provider(db, context.user.organization_id))
+
+
+@router.post("/integrations/bank/test", response_model=BankIntegrationStatusResponse)
+def test_bank_connection(
+    context: UserContext = Depends(require_permission("settings.company.manage")),
+    db: Session = Depends(get_db),
+) -> BankIntegrationStatusResponse:
+    provider_key = _selected_bank_provider(db, context.user.organization_id)
+    if provider_key == "none":
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Selecione um provedor bancário primeiro.")
+    return _bank_status_response(provider_key, probe=True)
 
 
 @router.post("/integrations/signature/test", response_model=SignatureIntegrationStatusResponse)
