@@ -25,6 +25,7 @@ from app.domains.finance.core_models import FinancialTitle
 from app.domains.finance.models import MaintenanceFinancialEntry, OwnerRepasse
 from app.domains.finance.providers import BankProviderError, bank_provider
 from app.domains.finance.treasury_models import PaymentBatch, PaymentBatchItem
+from app.domains.finance.treasury_schemas import PaymentBatchActionRequest
 from app.domains.foundation.access import UserContext, require_permission
 from app.domains.foundation.audit import write_audit
 from app.domains.maintenance.models import MaintenancePartner
@@ -66,7 +67,29 @@ def _batch(db: Session, organization_id: UUID, batch_id: UUID) -> PaymentBatch:
     return item
 
 
-def _audit(db: Session, request: Request, context: UserContext, *, action: str, entity_type: str, entity_id: str, after: dict | None = None) -> None:
+def _execution_sod_reason(
+    *,
+    batch: PaymentBatch,
+    context: UserContext,
+    payload: PaymentBatchActionRequest | None,
+) -> str | None:
+    action = payload or PaymentBatchActionRequest()
+    if batch.approved_by_user_id != context.user.id:
+        return (action.reason or "").strip() or None
+    if not action.override_sod:
+        raise HTTPException(
+            status_code=409,
+            detail="Segregação de funções: o usuário que aprovou o lote não pode enviá-lo ao banco.",
+        )
+    if not context.has("finance.sod.override"):
+        raise HTTPException(status_code=403, detail="Permissão necessária: finance.sod.override")
+    reason = (action.reason or "").strip()
+    if len(reason) < 10:
+        raise HTTPException(status_code=422, detail="A exceção de segregação exige justificativa com pelo menos 10 caracteres.")
+    return f"[OVERRIDE SOD] {reason}"
+
+
+def _audit(db: Session, request: Request, context: UserContext, *, action: str, entity_type: str, entity_id: str, after: dict | None = None, reason: str | None = None) -> None:
     forwarded = request.headers.get("x-forwarded-for", "").split(",", 1)[0].strip()
     write_audit(
         db,
@@ -76,6 +99,7 @@ def _audit(db: Session, request: Request, context: UserContext, *, action: str, 
         entity_type=entity_type,
         entity_id=entity_id,
         after_data=after,
+        reason=reason,
         ip_address=forwarded or (request.client.host if request.client else None),
         user_agent=request.headers.get("user-agent"),
     )
@@ -412,10 +436,12 @@ def provider_payment_batch(
 def submit_payment_batch(
     batch_id: UUID,
     request: Request,
-    context: UserContext = Depends(require_permission("finance.payment.approve")),
+    payload: PaymentBatchActionRequest | None = None,
+    context: UserContext = Depends(require_permission("finance.payment.execute")),
     db: Session = Depends(get_db),
 ) -> ProviderPaymentBatchResponse:
     batch = _batch(db, context.user.organization_id, batch_id)
+    audit_reason = _execution_sod_reason(batch=batch, context=context, payload=payload)
     if batch.status not in {"approved", "submitted"}:
         raise HTTPException(status_code=409, detail="Somente lotes aprovados podem ser enviados ao banco.")
     if batch.payment_method != "pix":
@@ -506,7 +532,8 @@ def submit_payment_batch(
         action="finance.payment_batch.submitted_to_provider",
         entity_type="payment_batch",
         entity_id=str(batch.id),
-        after={"provider": account.provider, "sent": sent, "failed": failed},
+        after={"provider": account.provider, "sent": sent, "failed": failed, "executed_by_user_id": str(context.user.id)},
+        reason=audit_reason,
     )
     db.commit()
     return _provider_batch_response(db, batch)
@@ -516,7 +543,7 @@ def submit_payment_batch(
 def sync_payment_batch(
     batch_id: UUID,
     request: Request,
-    context: UserContext = Depends(require_permission("finance.payment.approve")),
+    context: UserContext = Depends(require_permission("finance.payment.execute")),
     db: Session = Depends(get_db),
 ) -> ProviderPaymentBatchResponse:
     batch = _batch(db, context.user.organization_id, batch_id)
