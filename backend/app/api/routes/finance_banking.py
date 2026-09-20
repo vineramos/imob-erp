@@ -1588,7 +1588,7 @@ def classify_bank_residual(
     transaction_id: UUID,
     payload: BankResidualAdjustmentCreate,
     request: Request,
-    context: UserContext = Depends(require_permission("finance.view")),
+    context: UserContext = Depends(require_permission("finance.adjustment.create")),
     db: Session = Depends(get_db),
 ) -> BankTransactionResponse:
     transaction = _load_transaction(db, context.user.organization_id, transaction_id)
