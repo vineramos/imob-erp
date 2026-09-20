@@ -1,6 +1,7 @@
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Literal
+from uuid import UUID
 
 from pydantic import BaseModel
 
@@ -72,3 +73,32 @@ class MonthlyClosingReadiness(BaseModel):
     pending_owner_repasses_count: int
     blocker_count: int
     blockers: list[str]
+
+
+
+class MonthlyClosureRequest(BaseModel):
+    note: str | None = None
+
+
+class MonthlyReopenRequest(BaseModel):
+    reason: str
+
+
+class MonthlyClosureEventResponse(BaseModel):
+    id: UUID
+    action: Literal["closed", "reopened"]
+    reason: str | None
+    actor_user_id: UUID | None
+    created_at: datetime
+
+
+class MonthlyClosureResponse(BaseModel):
+    id: UUID | None
+    competence: date
+    status: Literal["open", "closed"]
+    closed_at: datetime | None = None
+    reopened_at: datetime | None = None
+    closing_note: str | None = None
+    reopen_reason: str | None = None
+    readiness: MonthlyClosingReadiness
+    events: list[MonthlyClosureEventResponse] = []
