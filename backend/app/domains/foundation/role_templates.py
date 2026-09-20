@@ -30,13 +30,42 @@ ROLE_TEMPLATES: tuple[RoleTemplate, ...] = (
     RoleTemplate(
         "finance",
         "Financeiro",
-        "Cobranças, banco, conciliação, pagamentos e repasses.",
+        "Operação financeira diária: cobrança, banco, conciliação e preparação de pagamentos.",
         frozenset({
             "dashboard.view", "properties.view", "contracts.view", "finance.view",
             "finance.charge.create", "finance.reconcile", "finance.payment.prepare",
-            "finance.repasse.execute", "documents.view", "agenda.view", "agenda.manage",
+            "finance.adjustment.create", "finance.repasse.execute",
+            "documents.view", "agenda.view", "agenda.manage",
             "reports.view", "reports.export",
             "communications.view", "communications.manage", "communications.send",
+        }),
+    ),
+    RoleTemplate(
+        "finance_approver",
+        "Aprovador financeiro",
+        "Aprovação de pagamentos e fechamento de competência, separado da preparação.",
+        frozenset({
+            "dashboard.view", "properties.view", "contracts.view", "finance.view",
+            "finance.payment.approve", "finance.period.close",
+            "documents.view", "reports.view", "audit.view",
+        }),
+    ),
+    RoleTemplate(
+        "finance_executor",
+        "Executor financeiro",
+        "Execução de pagamentos já aprovados e consulta operacional.",
+        frozenset({
+            "dashboard.view", "finance.view", "finance.payment.execute",
+            "documents.view", "reports.view",
+        }),
+    ),
+    RoleTemplate(
+        "finance_controller",
+        "Controladoria financeira",
+        "Reabertura de competências e exceções de segregação com justificativa auditada.",
+        frozenset({
+            "dashboard.view", "finance.view", "finance.period.reopen",
+            "finance.sod.override", "reports.view", "reports.export", "audit.view",
         }),
     ),
     RoleTemplate(
