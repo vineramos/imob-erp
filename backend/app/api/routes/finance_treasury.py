@@ -81,6 +81,12 @@ def _load_batch(db: Session, organization_id: UUID, batch_id: UUID) -> PaymentBa
     return item
 
 
+def _user_name(db: Session, user_id: UUID | None) -> str | None:
+    if user_id is None:
+        return None
+    return db.scalar(select(AppUser.name).where(AppUser.id == user_id))
+
+
 def _batch_response(db: Session, item: PaymentBatch) -> PaymentBatchResponse:
     account = _load_account(db, item.organization_id, item.bank_account_id)
     return PaymentBatchResponse(
@@ -99,6 +105,16 @@ def _batch_response(db: Session, item: PaymentBatch) -> PaymentBatchResponse:
         provider_batch_id=item.provider_batch_id,
         provider_status=item.provider_status,
         execution_reference=item.execution_reference,
+        created_by_user_id=item.created_by_user_id,
+        created_by_name=_user_name(db, item.created_by_user_id),
+        prepared_by_user_id=item.prepared_by_user_id,
+        prepared_by_name=_user_name(db, item.prepared_by_user_id),
+        approved_by_user_id=item.approved_by_user_id,
+        approved_by_name=_user_name(db, item.approved_by_user_id),
+        executed_by_user_id=item.executed_by_user_id,
+        executed_by_name=_user_name(db, item.executed_by_user_id),
+        cancelled_by_user_id=item.cancelled_by_user_id,
+        cancelled_by_name=_user_name(db, item.cancelled_by_user_id),
         prepared_at=item.prepared_at,
         approved_at=item.approved_at,
         executed_at=item.executed_at,
