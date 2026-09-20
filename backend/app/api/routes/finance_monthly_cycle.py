@@ -123,7 +123,7 @@ def close_monthly_competence(
     payload: MonthlyClosureRequest,
     request: Request,
     competence: date | None = Query(default=None),
-    context: UserContext = Depends(require_permission("finance.payment.approve")),
+    context: UserContext = Depends(require_permission("finance.period.close")),
     db: Session = Depends(get_db),
 ) -> MonthlyClosureResponse:
     target = (competence or date.today()).replace(day=1)
@@ -192,7 +192,7 @@ def reopen_monthly_competence(
     payload: MonthlyReopenRequest,
     request: Request,
     competence: date | None = Query(default=None),
-    context: UserContext = Depends(require_permission("finance.payment.approve")),
+    context: UserContext = Depends(require_permission("finance.period.reopen")),
     db: Session = Depends(get_db),
 ) -> MonthlyClosureResponse:
     target = (competence or date.today()).replace(day=1)
