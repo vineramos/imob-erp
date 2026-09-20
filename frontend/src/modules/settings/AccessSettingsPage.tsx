@@ -1,7 +1,7 @@
-import { LockKeyhole, Plus, Save, ShieldCheck, UserRoundCog, UsersRound } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { Copy, LockKeyhole, Plus, Save, ShieldCheck, UserRoundCog, UsersRound, X } from 'lucide-react'
+import { FormEvent, useEffect, useMemo, useState } from 'react'
 import { ApiError, apiRequest } from '../../api/client'
-import type { AppUser, Role } from '../../api/types'
+import type { AppUser, Role, UserInvitation } from '../../api/types'
 import { authConfigured } from '../../auth/client'
 
 const fallbackRoles: Role[] = [
@@ -17,7 +17,7 @@ const fallbackRoles: Role[] = [
 ]
 
 const fallbackUsers: AppUser[] = [
-  { id: 'dev-admin', name: 'Administrador', email: 'dev@local', is_active: true, blocked_at: null, created_at: new Date().toISOString(), role_keys: ['admin'] },
+  { id: 'dev-admin', name: 'Administrador', email: 'dev@local', is_active: true, blocked_at: null, created_at: new Date().toISOString(), role_keys: ['admin'], access_status: 'active' },
 ]
 
 const permissionNames: Record<string, string> = {
@@ -51,6 +51,12 @@ export function AccessSettingsPage({ canManagePermissions }: Props) {
   const [savingUser, setSavingUser] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
+  const [inviteOpen, setInviteOpen] = useState(false)
+  const [inviteName, setInviteName] = useState('')
+  const [inviteEmail, setInviteEmail] = useState('')
+  const [inviteRoles, setInviteRoles] = useState<string[]>([])
+  const [inviteReason, setInviteReason] = useState('')
+  const [inviteLink, setInviteLink] = useState('')
 
   async function loadAccess() {
     if (!authConfigured) return
@@ -74,8 +80,8 @@ export function AccessSettingsPage({ canManagePermissions }: Props) {
 
   const selectedRole = useMemo(() => roles.find((role) => role.key === selectedRoleKey) ?? roles[0], [roles, selectedRoleKey])
   const selectedUser = useMemo(() => users.find((user) => user.id === selectedUserId) ?? null, [users, selectedUserId])
-  const activeUsers = users.filter((user) => user.is_active).length
-  const blockedUsers = users.length - activeUsers
+  const activeUsers = users.filter((user) => user.access_status === 'active').length
+  const blockedUsers = users.filter((user) => user.access_status === 'blocked').length
 
   function manageUser(user: AppUser) {
     setSelectedUserId(user.id)
@@ -125,11 +131,34 @@ export function AccessSettingsPage({ canManagePermissions }: Props) {
     } finally { setSavingUser(false) }
   }
 
+  function openInvite() {
+    setInviteName(''); setInviteEmail(''); setInviteRoles([]); setInviteReason(''); setInviteLink(''); setError(''); setSuccess(''); setInviteOpen(true)
+  }
+
+  async function createInvitation(event: FormEvent) {
+    event.preventDefault()
+    if (inviteRoles.length === 0) { setError('Selecione ao menos um perfil para o novo usuário.'); return }
+    if (inviteRoles.includes('admin') && !inviteReason.trim()) { setError('Informe a justificativa para conceder o perfil Administrador.'); return }
+    setSavingUser(true); setError(''); setSuccess('')
+    try {
+      const result = await apiRequest<UserInvitation>('/settings/users/invitations', {
+        method: 'POST',
+        body: JSON.stringify({ name: inviteName.trim(), email: inviteEmail.trim().toLowerCase(), role_keys: inviteRoles, reason: inviteReason.trim() || null }),
+      })
+      setUsers((current) => [...current, result.user].sort((a, b) => a.name.localeCompare(b.name)))
+      setInviteLink(`${window.location.origin}/?invite=${encodeURIComponent(result.token)}`)
+      setSuccess('Usuário preparado. Copie o link abaixo e envie à pessoa convidada.')
+      await loadAccess()
+    } catch (cause) {
+      setError(cause instanceof ApiError ? cause.detail : 'Não foi possível criar o convite.')
+    } finally { setSavingUser(false) }
+  }
+
   return (
     <section className="workspace settings-workspace">
       <div className="page-heading settings-heading">
         <div><span className="eyebrow">Configurações · Administrador</span><h1>Usuários e permissões</h1><p>Perfis facilitam a configuração, mas a autorização real é feita por permissões granulares e auditáveis.</p></div>
-        <button className="button primary" type="button" disabled title="Convites serão ativados junto ao fluxo seguro de provisionamento do Neon Auth"><Plus size={16} /> Novo usuário</button>
+        <button className="button primary" type="button" disabled={!canManagePermissions} onClick={openInvite} title={canManagePermissions ? 'Convidar novo usuário' : 'Requer permissão para gerenciar perfis'}><Plus size={16} /> Novo usuário</button>
       </div>
 
       {error && <div className="form-alert danger-alert">{error}</div>}
@@ -142,6 +171,21 @@ export function AccessSettingsPage({ canManagePermissions }: Props) {
         <article className="metric-card"><span>Acessos bloqueados</span><strong>{blockedUsers}</strong><small>Bloqueio preserva histórico</small></article>
         <article className="metric-card"><span>Permissões catalogadas</span><strong>{new Set(roles.flatMap((role) => role.permissions)).size}</strong><small>Controle por ação</small></article>
       </div>
+
+      {inviteOpen && <div className="portfolio-modal-backdrop" onMouseDown={(event) => { if (event.currentTarget === event.target && !savingUser) setInviteOpen(false) }}>
+        <form className="panel portfolio-modal user-invite-modal" onSubmit={createInvitation} role="dialog" aria-modal="true" aria-labelledby="user-invite-title">
+          <div className="portfolio-modal-header"><div><span className="eyebrow">Controle de acesso</span><h2 id="user-invite-title">Convidar novo usuário</h2><p>Defina os perfis agora. O convidado receberá um link de uso único para criar a própria senha.</p></div><button className="portfolio-modal-close" type="button" disabled={savingUser} onClick={() => setInviteOpen(false)}><X size={17}/></button></div>
+          <div className="portfolio-modal-body settings-column">
+            {error && <div className="form-alert danger-alert">{error}</div>}
+            {success && <div className="form-alert success-alert">{success}</div>}
+            <div className="form-grid two-columns"><label className="field"><span>Nome</span><input required minLength={2} maxLength={160} value={inviteName} onChange={(event) => setInviteName(event.target.value)} /></label><label className="field"><span>E-mail</span><input required type="email" value={inviteEmail} onChange={(event) => setInviteEmail(event.target.value)} /></label></div>
+            <div><span className="field-section-label">Perfis iniciais</span><div className="role-checkbox-grid">{roles.filter((role) => role.is_active).map((role) => <label className="role-checkbox" key={role.key}><input type="checkbox" checked={inviteRoles.includes(role.key)} onChange={() => setInviteRoles((current) => current.includes(role.key) ? current.filter((key) => key !== role.key) : [...current, role.key])}/><span><strong>{role.name}</strong><small>{role.description}</small></span></label>)}</div></div>
+            <label className="field"><span>Justificativa {inviteRoles.includes('admin') ? '(obrigatória)' : '(opcional)'}</span><textarea rows={3} maxLength={500} value={inviteReason} onChange={(event) => setInviteReason(event.target.value)} placeholder="Contexto para a concessão do acesso" /></label>
+            {inviteLink && <div className="invite-link-result"><strong>Link do convite · válido por 72 horas</strong><div><input readOnly value={inviteLink}/><button className="button secondary" type="button" onClick={() => void navigator.clipboard.writeText(inviteLink)}><Copy size={15}/> Copiar</button></div><small>O link é exibido somente agora e deixa de funcionar após o primeiro uso.</small></div>}
+          </div>
+          <div className="canonical-modal-actions"><button className="button secondary" type="button" disabled={savingUser} onClick={() => setInviteOpen(false)}>{inviteLink ? 'Fechar' : 'Cancelar'}</button>{!inviteLink && <button className="button primary" disabled={savingUser} type="submit">{savingUser ? 'Criando convite...' : 'Criar convite'}</button>}</div>
+        </form>
+      </div>}
 
       {loading ? <article className="panel settings-loading">Carregando estrutura de acesso...</article> : <>
         <div className="dashboard-grid access-grid">
@@ -161,7 +205,7 @@ export function AccessSettingsPage({ canManagePermissions }: Props) {
           <div className="panel-heading panel-heading-row"><div><span className="eyebrow">Equipe</span><h2>Usuários do ERP</h2></div><UsersRound size={20} /></div>
           <div className="user-table">
             <div className="user-row user-header user-row-actions"><span>Usuário</span><span>Perfil</span><span>Status</span><span>Ação</span></div>
-            {users.map((user) => <div className="user-row user-row-actions" key={user.id}><div className="user-cell"><div className="avatar avatar-user">{user.name.trim().slice(0, 2).toUpperCase()}</div><div><strong>{user.name}</strong><span>{user.email}</span></div></div><span>{roleLabel(user.role_keys, roles) || 'Sem perfil'}</span><span><i className={`status-badge ${user.is_active ? 'success' : 'danger'}`}>{user.is_active ? 'Ativo' : 'Bloqueado'}</i></span><button className="button secondary compact-button" type="button" onClick={() => manageUser(user)}>Gerenciar</button></div>)}
+            {users.map((user) => <div className="user-row user-row-actions" key={user.id}><div className="user-cell"><div className="avatar avatar-user">{user.name.trim().slice(0, 2).toUpperCase()}</div><div><strong>{user.name}</strong><span>{user.email}</span></div></div><span>{roleLabel(user.role_keys, roles) || 'Sem perfil'}</span><span><i className={`status-badge ${user.access_status === 'active' ? 'success' : user.access_status === 'pending' ? 'warning' : 'danger'}`}>{user.access_status === 'active' ? 'Ativo' : user.access_status === 'pending' ? 'Convite pendente' : 'Bloqueado'}</i></span><button className="button secondary compact-button" type="button" onClick={() => manageUser(user)}>Gerenciar</button></div>)}
             {users.length === 0 && <div className="audit-empty"><strong>Nenhum usuário habilitado.</strong><span>O primeiro Administrador será criado no bootstrap seguro.</span></div>}
           </div>
         </article>

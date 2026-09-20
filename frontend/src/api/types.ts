@@ -115,6 +115,13 @@ export type AppUser = {
   blocked_at: string | null
   created_at: string
   role_keys: string[]
+  access_status: 'active' | 'pending' | 'blocked'
+}
+
+export type UserInvitation = {
+  user: AppUser
+  token: string
+  expires_at: string
 }
 
 export type AuditEvent = {

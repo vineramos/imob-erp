@@ -192,6 +192,22 @@ class UserResponse(BaseModel):
     blocked_at: datetime | None = None
     created_at: datetime
     role_keys: list[str]
+    access_status: Literal["active", "pending", "blocked"]
+
+
+class UserInvitationCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=2, max_length=160)
+    email: EmailStr
+    role_keys: list[str] = Field(min_length=1, max_length=20)
+    reason: str | None = Field(default=None, max_length=500)
+
+
+class UserInvitationResponse(BaseModel):
+    user: UserResponse
+    token: str
+    expires_at: datetime
 
 
 class UserStatusUpdate(BaseModel):

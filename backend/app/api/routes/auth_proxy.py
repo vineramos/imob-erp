@@ -1,18 +1,23 @@
 from __future__ import annotations
 
 import base64
+from datetime import datetime, timezone
+import hashlib
 from typing import Any
 from urllib.parse import urlsplit
 
 import httpx
-from fastapi import APIRouter, Depends, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.security import HTTPAuthorizationCredentials
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import text
-from sqlalchemy.orm import Session
+from sqlalchemy import func, select, text
+from sqlalchemy.orm import Session, selectinload
 
 from app.core.config import get_settings
 from app.core.database import get_db
+from app.core.security import get_auth_identity
+from app.domains.foundation.models import AppUser, AuditLog, UserInvitation
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -42,6 +47,11 @@ class ResetPasswordPayload(BaseModel):
 
     new_password: str = Field(alias="newPassword")
     token: str
+
+
+class AcceptInvitationPayload(BaseModel):
+    token: str = Field(min_length=20, max_length=200)
+    password: str = Field(min_length=12, max_length=200)
 
 
 def _auth_endpoint(path: str) -> str:
@@ -301,8 +311,13 @@ async def sign_in(payload: SignInPayload, request: Request) -> JSONResponse:
 
 
 @router.post("/sign-up")
-async def sign_up(payload: SignUpPayload, request: Request) -> JSONResponse:
+async def sign_up(payload: SignUpPayload, request: Request, db: Session = Depends(get_db)) -> JSONResponse:
     del request
+    if (db.scalar(select(func.count(AppUser.id))) or 0) > 0:
+        return _response(
+            {"detail": "O cadastro público está encerrado. Solicite um convite ao administrador."},
+            status.HTTP_403_FORBIDDEN,
+        )
     try:
         upstream = await _upstream_request(
             "POST",
@@ -324,6 +339,103 @@ async def sign_up(payload: SignUpPayload, request: Request) -> JSONResponse:
             status.HTTP_400_BAD_REQUEST,
         )
     return await _complete_sign_in(upstream, invalid_message="Não foi possível criar o acesso")
+
+
+def _invitation_for_token(db: Session, raw_token: str, *, lock: bool = False) -> UserInvitation | None:
+    digest = hashlib.sha256(raw_token.strip().encode("utf-8")).hexdigest()
+    query = select(UserInvitation).where(UserInvitation.token_digest == digest)
+    if lock:
+        query = query.with_for_update()
+    return db.scalar(query)
+
+
+def _invitation_error(invitation: UserInvitation | None) -> str | None:
+    if invitation is None:
+        return "Convite inválido."
+    if invitation.revoked_at is not None:
+        return "Este convite foi cancelado."
+    if invitation.accepted_at is not None:
+        return "Este convite já foi utilizado."
+    expires_at = invitation.expires_at
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    if expires_at <= datetime.now(timezone.utc):
+        return "Este convite expirou. Solicite um novo ao administrador."
+    return None
+
+
+@router.get("/invitations/{token}")
+def invitation_details(token: str, db: Session = Depends(get_db)) -> JSONResponse:
+    invitation = _invitation_for_token(db, token)
+    error = _invitation_error(invitation)
+    if error or invitation is None:
+        return _response({"detail": error or "Convite inválido."}, status.HTTP_404_NOT_FOUND)
+    user = db.get(AppUser, invitation.user_id)
+    if user is None:
+        return _response({"detail": "Convite inválido."}, status.HTTP_404_NOT_FOUND)
+    return _response({"name": user.name, "email": user.email, "expires_at": invitation.expires_at.isoformat()})
+
+
+@router.post("/accept-invitation")
+async def accept_invitation(payload: AcceptInvitationPayload, request: Request, db: Session = Depends(get_db)) -> JSONResponse:
+    invitation = _invitation_for_token(db, payload.token, lock=True)
+    error = _invitation_error(invitation)
+    if error or invitation is None:
+        return _response({"detail": error or "Convite inválido."}, status.HTTP_400_BAD_REQUEST)
+    user = db.scalar(select(AppUser).options(selectinload(AppUser.roles)).where(AppUser.id == invitation.user_id))
+    if user is None or not user.auth_user_id.startswith("pending:"):
+        return _response({"detail": "Convite inválido."}, status.HTTP_400_BAD_REQUEST)
+
+    try:
+        upstream = await _upstream_request(
+            "POST",
+            "/sign-up/email",
+            payload={"name": user.name, "email": user.email, "password": payload.password},
+        )
+    except RuntimeError:
+        return _response({"detail": "Serviço de autenticação temporariamente indisponível"}, status.HTTP_503_SERVICE_UNAVAILABLE)
+    if upstream.status_code >= 500:
+        return _response({"detail": "Serviço de autenticação temporariamente indisponível"}, status.HTTP_503_SERVICE_UNAVAILABLE)
+    if upstream.status_code >= 400:
+        return _response(
+            {"detail": _upstream_message(upstream, "Não foi possível ativar o convite. Se o e-mail já possui acesso, fale com o administrador.")},
+            status.HTTP_400_BAD_REQUEST,
+        )
+
+    session_pair = _extract_upstream_session_cookie(upstream)
+    if session_pair is None:
+        return _response({"detail": "A conta foi criada, mas a sessão segura não foi emitida."}, status.HTTP_502_BAD_GATEWAY)
+    access_token = _extract_access_token(_json_payload(upstream))
+    if access_token is None:
+        access_token = await _access_token_for_session(f"{session_pair[0]}={session_pair[1]}")
+    if access_token is None:
+        return _response({"detail": "A conta foi criada, mas sua identidade não pôde ser confirmada."}, status.HTTP_502_BAD_GATEWAY)
+    try:
+        identity = get_auth_identity(HTTPAuthorizationCredentials(scheme="Bearer", credentials=access_token))
+        subject = identity.subject
+        claimed_email = (identity.email or "").strip().lower()
+    except HTTPException:
+        subject, claimed_email = "", ""
+    if not subject or (claimed_email and claimed_email != user.email.lower()):
+        return _response({"detail": "A identidade criada não corresponde ao convite."}, status.HTTP_502_BAD_GATEWAY)
+
+    now = datetime.now(timezone.utc)
+    user.auth_user_id = subject
+    invitation.accepted_at = now
+    forwarded_for = request.headers.get("x-forwarded-for", "").split(",", 1)[0].strip()
+    db.add(AuditLog(
+        organization_id=user.organization_id,
+        actor_user_id=user.id,
+        action="security.user.invitation_accepted",
+        module="settings",
+        entity_type="app_user",
+        entity_id=str(user.id),
+        after_data={"email": user.email, "role_keys": sorted(role.key for role in user.roles)},
+        ip_address=forwarded_for or (request.client.host if request.client else None),
+        user_agent=request.headers.get("user-agent"),
+    ))
+    db.commit()
+    return await _complete_sign_in(upstream, invalid_message="Não foi possível ativar o convite")
 
 
 @router.post("/request-password-reset")

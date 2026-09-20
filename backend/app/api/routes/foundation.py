@@ -1,4 +1,7 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+import hashlib
+import secrets
+import uuid
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
@@ -9,7 +12,7 @@ from app.core.database import get_db
 from app.domains.foundation.access import UserContext, require_permission
 from app.domains.foundation.audit import write_audit
 from app.domains.foundation.defaults import ERP_THEME_DEFAULT, INTEGRATIONS_DEFAULTS, OPERATIONAL_DEFAULTS
-from app.domains.foundation.models import ApprovalRule, AppUser, AuditLog, Organization, OrganizationSettings, Role
+from app.domains.foundation.models import ApprovalRule, AppUser, AuditLog, Organization, OrganizationSettings, Role, UserInvitation
 from app.domains.foundation.schemas import (
     ApprovalRulePayload,
     ApprovalRuleResponse,
@@ -22,6 +25,8 @@ from app.domains.foundation.schemas import (
     RoleResponse,
     ThemeConfig,
     UserResponse,
+    UserInvitationCreate,
+    UserInvitationResponse,
     UserRolesUpdate,
     UserStatusUpdate,
 )
@@ -75,6 +80,7 @@ def _user_or_404(db: Session, context: UserContext, user_id: UUID) -> AppUser:
 
 
 def _user_response(user: AppUser) -> UserResponse:
+    access_status = "pending" if user.auth_user_id.startswith("pending:") else ("active" if user.is_active and user.blocked_at is None else "blocked")
     return UserResponse(
         id=user.id,
         name=user.name,
@@ -83,6 +89,7 @@ def _user_response(user: AppUser) -> UserResponse:
         blocked_at=user.blocked_at,
         created_at=user.created_at,
         role_keys=sorted(role.key for role in user.roles if role.is_active),
+        access_status=access_status,
     )
 
 
@@ -461,6 +468,80 @@ def get_users(
         .order_by(AppUser.name.asc(), AppUser.email.asc())
     ).unique().all()
     return [_user_response(user) for user in users]
+
+
+@router.post(
+    "/settings/users/invitations",
+    response_model=UserInvitationResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_user_invitation(
+    payload: UserInvitationCreate,
+    request: Request,
+    context: UserContext = Depends(require_permission("permissions.manage")),
+    db: Session = Depends(get_db),
+) -> UserInvitationResponse:
+    email = str(payload.email).strip().lower()
+    existing = db.scalar(
+        select(AppUser).where(
+            AppUser.organization_id == context.user.organization_id,
+            func.lower(AppUser.email) == email,
+        )
+    )
+    if existing is not None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Já existe um usuário com este e-mail.")
+
+    requested_keys = set(payload.role_keys)
+    roles = db.scalars(
+        select(Role).where(
+            Role.organization_id == context.user.organization_id,
+            Role.key.in_(requested_keys),
+            Role.is_active.is_(True),
+        )
+    ).all()
+    if {role.key for role in roles} != requested_keys:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Um ou mais perfis são inválidos ou estão inativos.")
+    if "admin" in requested_keys and not (payload.reason or "").strip():
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Informe a justificativa para conceder o perfil Administrador.")
+
+    user = AppUser(
+        organization_id=context.user.organization_id,
+        auth_user_id=f"pending:{uuid.uuid4()}",
+        name=payload.name.strip(),
+        email=email,
+        is_active=True,
+    )
+    user.roles = list(roles)
+    db.add(user)
+    db.flush()
+
+    raw_token = secrets.token_urlsafe(32)
+    expires_at = datetime.now(timezone.utc) + timedelta(hours=72)
+    invitation = UserInvitation(
+        organization_id=context.user.organization_id,
+        user_id=user.id,
+        token_digest=hashlib.sha256(raw_token.encode("utf-8")).hexdigest(),
+        expires_at=expires_at,
+        created_by_user_id=context.user.id,
+    )
+    db.add(invitation)
+    ip_address, user_agent = _request_metadata(request)
+    write_audit(
+        db,
+        context=context,
+        action="security.user.invited",
+        module="settings",
+        entity_type="app_user",
+        entity_id=str(user.id),
+        after_data={"name": user.name, "email": email, "role_keys": sorted(requested_keys), "expires_at": expires_at.isoformat()},
+        reason=(payload.reason or "").strip() or None,
+        ip_address=ip_address,
+        user_agent=user_agent,
+    )
+    db.commit()
+    db.refresh(user)
+    user.roles = list(roles)
+    return UserInvitationResponse(user=_user_response(user), token=raw_token, expires_at=expires_at)
 
 
 @router.patch("/settings/users/{user_id}/status", response_model=UserResponse)

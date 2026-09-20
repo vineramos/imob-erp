@@ -8,7 +8,7 @@ type LoginPageProps = {
   onAuthenticated: () => void
 }
 
-type AccessMode = 'login' | 'bootstrap' | 'forgot' | 'reset'
+type AccessMode = 'login' | 'bootstrap' | 'forgot' | 'reset' | 'invite'
 
 type BootstrapStatus = {
   bootstrap_open: boolean
@@ -23,6 +23,7 @@ export function LoginPage({ onAuthenticated }: LoginPageProps) {
   const [password, setPassword] = useState('')
   const [passwordConfirmation, setPasswordConfirmation] = useState('')
   const [resetToken, setResetToken] = useState('')
+  const [inviteToken, setInviteToken] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -35,9 +36,22 @@ export function LoginPage({ onAuthenticated }: LoginPageProps) {
 
     const params = new URLSearchParams(window.location.search)
     const token = params.get('token') || ''
+    const invitation = params.get('invite') || ''
     const resetError = params.get('error')
 
-    if (token) {
+    if (invitation) {
+      setInviteToken(invitation)
+      setMode('invite')
+      setLoading(true)
+      authClient?.invitation(invitation)
+        .then((result) => {
+          if (result.error || !result.data) { setError(result.error?.message || 'Este convite é inválido ou expirou.'); return }
+          setName(result.data.name)
+          setEmail(result.data.email)
+        })
+        .catch(() => setError('Não foi possível validar este convite agora.'))
+        .finally(() => setLoading(false))
+    } else if (token) {
       setResetToken(token)
       setMode('reset')
     } else if (resetError) {
@@ -122,6 +136,22 @@ export function LoginPage({ onAuthenticated }: LoginPageProps) {
       return
     }
 
+    if (mode === 'invite') {
+      if (!inviteToken) { setError('Este convite é inválido ou expirou.'); return }
+      if (password.length < 12) { setError('Use uma senha com pelo menos 12 caracteres.'); return }
+      if (password !== passwordConfirmation) { setError('As senhas não conferem.'); return }
+      setLoading(true)
+      try {
+        const result = await authClient.acceptInvitation({ token: inviteToken, password })
+        if (result.error) { setError(result.error.message || 'Não foi possível ativar o convite.'); return }
+        window.history.replaceState({}, '', window.location.pathname)
+        onAuthenticated()
+      } catch {
+        setError('Não foi possível ativar o convite agora. Tente novamente em alguns instantes.')
+      } finally { setLoading(false) }
+      return
+    }
+
     if (mode === 'bootstrap') {
       if (!bootstrapOpen) {
         setError('O primeiro acesso já foi concluído neste ambiente.')
@@ -176,6 +206,7 @@ export function LoginPage({ onAuthenticated }: LoginPageProps) {
   const isBootstrap = mode === 'bootstrap'
   const isForgot = mode === 'forgot'
   const isReset = mode === 'reset'
+  const isInvite = mode === 'invite'
   const brandName = theme.companyShortName || theme.companyName || 'Imob'
   const brandInitials = brandName.trim().slice(0, 2).toUpperCase() || 'IM'
 
@@ -185,6 +216,8 @@ export function LoginPage({ onAuthenticated }: LoginPageProps) {
       ? 'Recuperar acesso'
       : isReset
         ? 'Definir nova senha'
+        : isInvite
+          ? 'Ativar seu acesso'
         : `Entrar no ${brandName}`
 
   const description = isBootstrap
@@ -193,6 +226,8 @@ export function LoginPage({ onAuthenticated }: LoginPageProps) {
       ? 'Informe o e-mail utilizado no Imob. Se houver uma conta vinculada, você receberá um link de recuperação.'
       : isReset
         ? 'Crie uma nova senha para voltar a acessar o ERP.'
+        : isInvite
+          ? `Olá, ${name || 'bem-vindo(a)'}. Crie sua senha para concluir o convite.`
         : 'Use suas credenciais para acessar o ambiente da imobiliária.'
 
   return (
@@ -224,7 +259,7 @@ export function LoginPage({ onAuthenticated }: LoginPageProps) {
 
           <form className="login-card" onSubmit={handleSubmit}>
             <div className="login-card-heading">
-              <span className="eyebrow">{isBootstrap ? 'Configuração inicial' : isForgot || isReset ? 'Recuperação de acesso' : 'Acesso restrito'}</span>
+              <span className="eyebrow">{isInvite ? 'Convite de acesso' : isBootstrap ? 'Configuração inicial' : isForgot || isReset ? 'Recuperação de acesso' : 'Acesso restrito'}</span>
               <h2>{heading}</h2>
               <p>{description}</p>
             </div>
@@ -258,6 +293,7 @@ export function LoginPage({ onAuthenticated }: LoginPageProps) {
                     required
                     type="email"
                     value={email}
+                    readOnly={isInvite}
                     onChange={(event) => setEmail(event.target.value)}
                   />
                 </div>
@@ -270,9 +306,9 @@ export function LoginPage({ onAuthenticated }: LoginPageProps) {
                 <div className="input-with-icon">
                   <LockKeyhole size={17} />
                   <input
-                    autoComplete={isBootstrap || isReset ? 'new-password' : 'current-password'}
-                    minLength={isBootstrap || isReset ? 12 : undefined}
-                    placeholder={isReset ? 'Crie a nova senha' : isBootstrap ? 'Crie uma senha segura' : 'Sua senha'}
+                    autoComplete={isBootstrap || isReset || isInvite ? 'new-password' : 'current-password'}
+                    minLength={isBootstrap || isReset || isInvite ? 12 : undefined}
+                    placeholder={isReset || isInvite ? 'Crie uma senha segura' : isBootstrap ? 'Crie uma senha segura' : 'Sua senha'}
                     required
                     type={showPassword ? 'text' : 'password'}
                     value={password}
@@ -285,7 +321,7 @@ export function LoginPage({ onAuthenticated }: LoginPageProps) {
               </label>
             )}
 
-            {(isBootstrap || isReset) && (
+            {(isBootstrap || isReset || isInvite) && (
               <label className="field login-field">
                 <span>Confirmar senha</span>
                 <div className="input-with-icon">
@@ -312,6 +348,8 @@ export function LoginPage({ onAuthenticated }: LoginPageProps) {
                   ? 'Enviando...'
                   : isReset
                     ? 'Redefinindo...'
+                    : isInvite
+                      ? 'Ativando acesso...'
                     : isBootstrap
                       ? 'Criando acesso...'
                       : 'Entrando...'
@@ -319,6 +357,8 @@ export function LoginPage({ onAuthenticated }: LoginPageProps) {
                   ? 'Enviar link de recuperação'
                   : isReset
                     ? 'Salvar nova senha'
+                    : isInvite
+                      ? 'Ativar meu acesso'
                     : isBootstrap
                       ? 'Criar Administrador'
                       : 'Entrar'}
@@ -340,7 +380,7 @@ export function LoginPage({ onAuthenticated }: LoginPageProps) {
               </button>
             )}
 
-            {bootstrapOpen && !isForgot && !isReset && (
+            {bootstrapOpen && !isForgot && !isReset && !isInvite && (
               <button className="text-button" type="button" onClick={() => switchMode(isBootstrap ? 'login' : 'bootstrap')}>
                 {isBootstrap ? 'Já tenho acesso' : 'Configurar primeiro acesso'}
               </button>
@@ -349,7 +389,7 @@ export function LoginPage({ onAuthenticated }: LoginPageProps) {
             <small className="login-security-note">
               {isForgot
                 ? 'Por segurança, a tela não informa se o e-mail está ou não cadastrado.'
-                : isReset
+                : isReset || isInvite
                   ? 'A nova senha deve ter pelo menos 12 caracteres.'
                   : bootstrapOpen
                     ? 'Após a criação do primeiro Administrador, esta opção é encerrada automaticamente.'

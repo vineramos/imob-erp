@@ -6,6 +6,7 @@ type SignInPayload = { email: string; password: string }
 type SignUpPayload = SignInPayload & { name: string }
 type PasswordResetRequest = { email: string; redirectTo: string }
 type ResetPasswordRequest = { newPassword: string; token: string }
+export type InvitationDetails = { name: string; email: string; expires_at: string }
 
 const API_URL = runtimeConfig.apiUrl
 const authEndpoint = (path: string) => `${API_URL}/auth${path.startsWith('/') ? path : `/${path}`}`
@@ -109,6 +110,15 @@ export const authClient = authConfigured ? {
     method: 'POST',
     body: JSON.stringify(payload),
   }),
+  invitation: (inviteToken: string) => authRequest<InvitationDetails>(`/invitations/${encodeURIComponent(inviteToken)}`, { method: 'GET' }),
+  acceptInvitation: async (payload: { token: string; password: string }) => {
+    const result = await authRequest<{ ok: boolean; token?: string }>('/accept-invitation', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    })
+    if (result.data?.token) cacheToken(result.data.token)
+    return result
+  },
   token,
   signOut: async () => {
     try {
