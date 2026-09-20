@@ -73,7 +73,7 @@ type Cycle = {
   steps:CycleStep[]
 }
 
-type ClosureEvent={id:string;action:'closed'|'reopened';reason:string|null;actor_user_id:string|null;created_at:string}
+type ClosureEvent={id:string;action:'closed'|'reopened';reason:string|null;actor_user_id:string|null;actor_name:string|null;created_at:string}
 type MonthlyClosure={id:string|null;competence:string;status:'open'|'closed';closed_at:string|null;reopened_at:string|null;closing_note:string|null;reopen_reason:string|null;readiness:ClosingReadiness;events:ClosureEvent[]}
 type FinanceTarget = 'overview'|'billing'|'rent'|'banking'|'bank-control'|'treasury'
 type Props = { onNavigateArea:(target:FinanceTarget)=>void; permissions:string[] }
@@ -200,7 +200,7 @@ export function FinanceMonthlyCyclePanel({onNavigateArea,permissions}:Props){
         {!readiness.can_close&&<div className="finance-closing-blockers">{readiness.blockers.map((item,index)=><span key={index}><AlertTriangle size={13}/>{item}</span>)}</div>}
         <div className="finance-closing-actions">{!readiness.can_close&&<><button className="button secondary compact" type="button" onClick={()=>navigate('banking')}>Abrir conciliação</button><button className="button secondary compact" type="button" onClick={()=>navigate('treasury')}>Abrir tesouraria</button><button className="button secondary compact" type="button" onClick={()=>navigate('bank-control')}>Controle bancário</button></>}{permissions.includes('finance.period.close')&&closure?.status==='open'&&readiness.can_close&&<button className="button primary compact" type="button" disabled={saving} onClick={()=>void closeCompetence()}>Fechar competência</button>}{permissions.includes('finance.period.reopen')&&closure?.status==='closed'&&<button className="button secondary compact" type="button" disabled={saving} onClick={()=>void reopenCompetence()}>Reabrir competência</button>}</div>
         {closure?.status==='closed'&&<div className="finance-closure-seal"><ShieldCheck size={14}/><span>Fechada em {closure.closed_at?new Date(closure.closed_at).toLocaleString('pt-BR'):'—'}. Conciliações e execuções retroativas críticas estão bloqueadas até reabertura.</span></div>}
-        {closure&&closure.events.length>0&&<details className="finance-closure-history"><summary>Histórico de fechamento ({closure.events.length})</summary>{closure.events.map(item=><div key={item.id}><strong>{item.action==='closed'?'Fechada':'Reaberta'}</strong><span>{new Date(item.created_at).toLocaleString('pt-BR')}</span>{item.reason&&<small>{item.reason}</small>}</div>)}</details>}
+        {closure&&closure.events.length>0&&<details className="finance-closure-history"><summary>Histórico de fechamento ({closure.events.length})</summary>{closure.events.map(item=><div key={item.id}><strong>{item.action==='closed'?'Fechada':'Reaberta'}</strong><span>{item.actor_name||'Usuário'} · {new Date(item.created_at).toLocaleString('pt-BR')}</span>{item.reason&&<small>{item.reason}</small>}</div>)}</details>}
       </article>}
 
       <div className="finance-cycle-metrics">
