@@ -123,3 +123,7 @@
 .treasury-repasses-footer{display:flex;justify-content:space-between;gap:16px;align-items:center;padding-top:4px}
 .treasury-repasses-footer>span{color:var(--muted,#6b7280);font-size:13px}
 @media(max-width:900px){.treasury-repasse-row{grid-template-columns:1fr}.treasury-repasse-row>div:nth-child(2){text-align:left;align-items:flex-start}.treasury-repasses-footer{align-items:flex-start;flex-direction:column}}
+
+.treasury-governance-trail{display:flex;gap:7px;flex-wrap:wrap;padding:9px 11px;border-top:1px dashed var(--border);border-bottom:1px dashed var(--border)}
+.treasury-governance-trail span{font-size:8.5px;color:var(--text-muted)}
+.treasury-governance-trail b{color:var(--text);font-weight:700}
