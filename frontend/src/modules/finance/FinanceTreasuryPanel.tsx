@@ -20,7 +20,8 @@ type BankAccount = {id:string;code:string;name:string;bank_name:string;fund_scop
 type PaymentCandidate = {target_type:'owner_repasse'|'maintenance'|'manual';target_id:string;target_code:string;description:string;counterparty_name:string;due_date:string|null;fund_scope:Scope;remaining_amount:number;overdue:boolean}
 type PaymentBatchItem = {id:string;target_type:string;target_id:string;target_code:string;description:string;counterparty_name:string;due_date:string|null;fund_scope:Scope;amount:number;status:string;bank_transaction_id:string|null}
 type OwnerRepasse = {id:string;charge_id:string;charge_code:string;lease_contract_id:string;lease_code:string;property_id:string;property_code:string;competence:string;owner_person_id:string;owner_name:string;ownership_percent:number;amount:number;due_date:string;status:string;paid_at:string|null;payment_reference:string|null}
-type PaymentBatch = {id:string;code:string;bank_account_id:string;bank_account_name:string;name:string;scheduled_date:string;fund_scope:Scope;payment_method:string;status:string;total_amount:number;item_count:number;notes:string|null;provider_batch_id:string|null;provider_status:string|null;execution_reference:string|null;prepared_at:string|null;approved_at:string|null;executed_at:string|null;cancelled_at:string|null;created_at:string;items:PaymentBatchItem[]}
+type PaymentBatch = {id:string;code:string;bank_account_id:string;bank_account_name:string;name:string;scheduled_date:string;fund_scope:Scope;payment_method:string;status:string;total_amount:number;item_count:number;notes:string|null;provider_batch_id:string|null;provider_status:string|null;execution_reference:string|null;created_by_user_id:string|null;created_by_name:string|null;prepared_by_user_id:string|null;prepared_by_name:string|null;approved_by_user_id:string|null;approved_by_name:string|null;executed_by_user_id:string|null;executed_by_name:string|null;cancelled_by_user_id:string|null;cancelled_by_name:string|null;prepared_at:string|null;approved_at:string|null;executed_at:string|null;cancelled_at:string|null;created_at:string;items:PaymentBatchItem[]}
+type Me={id:string;name:string}
 
 const batchStatus:Record<string,string> = {draft:'Rascunho',ready:'Preparado',approved:'Aprovado',executed:'Executado',cancelled:'Cancelado'}
 const sourceLabels:Record<string,string> = {owner_repasse:'Repasse',maintenance:'Manutenção',manual:'Manual'}
@@ -33,8 +34,11 @@ function candidateKey(item:Pick<PaymentCandidate,'target_type'|'target_id'>){ret
 export function FinanceTreasuryPanel({permissions}:{permissions:string[]}){
   const canPrepare=permissions.includes('finance.payment.prepare')
   const canApprove=permissions.includes('finance.payment.approve')
+  const canExecute=permissions.includes('finance.payment.execute')
+  const canOverrideSod=permissions.includes('finance.sod.override')
   const [area,setArea]=useState<TreasuryArea>('cashflow')
   const [accounts,setAccounts]=useState<BankAccount[]>([])
+  const [me,setMe]=useState<Me|null>(null)
   const [accountId,setAccountId]=useState('')
   const [scheduledDate,setScheduledDate]=useState(todayInput())
   const [batchName,setBatchName]=useState('Pagamentos programados')
@@ -57,7 +61,7 @@ export function FinanceTreasuryPanel({permissions}:{permissions:string[]}){
   const selectedCandidates=useMemo(()=>candidates.filter(item=>selected.has(candidateKey(item))),[candidates,selected])
   const selectedAmount=useMemo(()=>selectedCandidates.reduce((sum,item)=>sum+Number(item.remaining_amount||0),0),[selectedCandidates])
 
-  const loadAccounts=useCallback(async()=>{try{const result=await apiRequest<BankAccount[]>('/finance/banking/accounts');setAccounts(result.filter(item=>item.is_active));setAccountId(current=>{if(current&&result.some(item=>item.id===current&&item.is_active))return current;return result.find(item=>item.is_active)?.id||''})}catch(cause){setError(cause instanceof ApiError?cause.detail:'Não foi possível carregar as contas bancárias.')}},[])
+  const loadAccounts=useCallback(async()=>{try{const [result,currentUser]=await Promise.all([apiRequest<BankAccount[]>('/finance/banking/accounts'),apiRequest<Me>('/me')]);setMe(currentUser);setAccounts(result.filter(item=>item.is_active));setAccountId(current=>{if(current&&result.some(item=>item.id===current&&item.is_active))return current;return result.find(item=>item.is_active)?.id||''})}catch(cause){setError(cause instanceof ApiError?cause.detail:'Não foi possível carregar as contas bancárias.')}},[])
   const loadPaymentData=useCallback(async()=>{if(!accountId){setCandidates([]);setBatches([]);return}setLoading(true);setError('');try{const [candidateResult,batchResult]=await Promise.all([apiRequest<PaymentCandidate[]>(`/finance/treasury/payment-candidates?account_id=${accountId}&until=${scheduledDate}`),apiRequest<PaymentBatch[]>(`/finance/treasury/payment-batches?account_id=${accountId}`)]);setCandidates(candidateResult);setBatches(batchResult);setSelected(current=>new Set([...current].filter(key=>candidateResult.some(item=>candidateKey(item)===key))))}catch(cause){setError(cause instanceof ApiError?cause.detail:'Não foi possível carregar os lotes de pagamento.')}finally{setLoading(false)}},[accountId,scheduledDate])
   useEffect(()=>{void loadAccounts()},[loadAccounts])
   useEffect(()=>{if(area==='payments')void loadPaymentData()},[area,loadPaymentData])
@@ -69,8 +73,28 @@ export function FinanceTreasuryPanel({permissions}:{permissions:string[]}){
   function selectAll(){setSelected(current=>current.size===candidates.length?new Set():new Set(candidates.map(candidateKey)))}
 
   async function createBatch(event:FormEvent){event.preventDefault();if(!accountId||selectedCandidates.length===0)return;setSaving(true);setError('');setSuccess('');try{const result=await apiRequest<PaymentBatch>('/finance/treasury/payment-batches',{method:'POST',body:JSON.stringify({name:batchName,bank_account_id:accountId,scheduled_date:scheduledDate,payment_method:paymentMethod,notes:notes||null,items:selectedCandidates.map(item=>({target_type:item.target_type,target_id:item.target_id}))})});setSelected(new Set());setNotes('');setSuccess(`${result.code} criado com ${result.item_count} pagamento(s).`);await loadPaymentData()}catch(cause){setError(cause instanceof ApiError?cause.detail:'Não foi possível criar o lote de pagamentos.')}finally{setSaving(false)}}
-  async function actionBatch(batch:PaymentBatch,action:'prepare'|'approve'|'cancel'){setSaving(true);setError('');setSuccess('');try{const result=await apiRequest<PaymentBatch>(`/finance/treasury/payment-batches/${batch.id}/${action}`,{method:'POST'});const verbs={prepare:'preparado',approve:'aprovado',cancel:'cancelado'};setSuccess(`${result.code} ${verbs[action]} com sucesso.`);await loadPaymentData()}catch(cause){setError(cause instanceof ApiError?cause.detail:'Não foi possível atualizar o lote.')}finally{setSaving(false)}}
-  async function executeBatch(event:FormEvent){event.preventDefault();if(!executeTarget)return;setSaving(true);setError('');setSuccess('');try{const result=await apiRequest<PaymentBatch>(`/finance/treasury/payment-batches/${executeTarget.id}/execute`,{method:'POST',body:JSON.stringify({execution_date:executionDate,reference:executionReference||null})});setExecuteTarget(null);setExecutionReference('');setSuccess(`${result.code} executado e conciliado com o extrato bancário.`);await loadPaymentData()}catch(cause){setError(cause instanceof ApiError?cause.detail:'Não foi possível registrar a execução do lote.')}finally{setSaving(false)}}
+  async function actionBatch(batch:PaymentBatch,action:'prepare'|'approve'|'cancel'){
+    setSaving(true);setError('');setSuccess('')
+    try{
+      let body:string|undefined
+      if(action==='approve'&&batch.prepared_by_user_id===me?.id){
+        if(!canOverrideSod)throw new Error('Segregação de funções: outro usuário deve aprovar este lote.')
+        const reason=window.prompt('Você está aprovando um lote preparado por você. Informe a justificativa da exceção de segregação:')
+        if(!reason)return
+        body=JSON.stringify({override_sod:true,reason})
+      }else if(action==='cancel'&&batch.status!=='draft'){
+        const reason=window.prompt('Informe o motivo do cancelamento:')
+        if(!reason)return
+        body=JSON.stringify({reason})
+      }else if(action==='approve'){
+        body=JSON.stringify({})
+      }
+      const result=await apiRequest<PaymentBatch>(`/finance/treasury/payment-batches/${batch.id}/${action}`,{method:'POST',body})
+      const verbs={prepare:'preparado',approve:'aprovado',cancel:'cancelado'}
+      setSuccess(`${result.code} ${verbs[action]} com sucesso.`);await loadPaymentData()
+    }catch(cause){setError(cause instanceof ApiError?cause.detail:cause instanceof Error?cause.message:'Não foi possível atualizar o lote.')}finally{setSaving(false)}
+  }
+  async function executeBatch(event:FormEvent){event.preventDefault();if(!executeTarget)return;setSaving(true);setError('');setSuccess('');try{let override_sod=false;let reason:string|null=null;if(executeTarget.approved_by_user_id===me?.id){if(!canOverrideSod)throw new Error('Segregação de funções: outro usuário deve executar este lote.');reason=window.prompt('Você está executando um lote aprovado por você. Informe a justificativa da exceção de segregação:');if(!reason)return;override_sod=true}const result=await apiRequest<PaymentBatch>(`/finance/treasury/payment-batches/${executeTarget.id}/execute`,{method:'POST',body:JSON.stringify({execution_date:executionDate,reference:executionReference||null,override_sod,reason})});setExecuteTarget(null);setExecutionReference('');setSuccess(`${result.code} executado e conciliado com o extrato bancário.`);await loadPaymentData()}catch(cause){setError(cause instanceof ApiError?cause.detail:cause instanceof Error?cause.message:'Não foi possível registrar a execução do lote.')}finally{setSaving(false)}}
   const statusClass=(status:string)=>status==='executed'||status==='approved'?'success':status==='cancelled'?'neutral':status==='ready'?'warning':'neutral'
 
   return <section className="workspace treasury-workspace">
