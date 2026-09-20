@@ -669,12 +669,21 @@ def prepare_payment_batch(
 def approve_payment_batch(
     batch_id: UUID,
     request: Request,
+    payload: PaymentBatchActionRequest | None = None,
     context: UserContext = Depends(require_permission("finance.payment.approve")),
     db: Session = Depends(get_db),
 ) -> PaymentBatchResponse:
     batch = _load_batch(db, context.user.organization_id, batch_id)
     if batch.status != "ready":
         raise HTTPException(status_code=409, detail="Somente lotes preparados podem ser aprovados.")
+    action = payload or PaymentBatchActionRequest()
+    audit_reason = _sod_override(
+        context=context,
+        conflicting_user_id=batch.prepared_by_user_id,
+        action_label="preparar e aprovar o mesmo lote",
+        override_sod=action.override_sod,
+        reason=action.reason,
+    )
     _validate_batch_targets(db, batch)
     batch.status = "approved"
     batch.approved_by_user_id = context.user.id
@@ -682,7 +691,14 @@ def approve_payment_batch(
     _audit(
         db, request, context, action="finance.payment_batch.approved",
         entity_type="payment_batch", entity_id=str(batch.id),
-        after={"status": batch.status, "total_amount": str(batch.total_amount)},
+        after={
+            "status": batch.status,
+            "total_amount": str(batch.total_amount),
+            "prepared_by_user_id": str(batch.prepared_by_user_id) if batch.prepared_by_user_id else None,
+            "approved_by_user_id": str(context.user.id),
+            "sod_override": bool(audit_reason and audit_reason.startswith("[OVERRIDE SOD]")),
+        },
+        reason=audit_reason,
     )
     db.commit()
     return _batch_response(db, _load_batch(db, context.user.organization_id, batch.id))
@@ -693,7 +709,7 @@ def execute_payment_batch(
     batch_id: UUID,
     payload: PaymentBatchExecutionRequest,
     request: Request,
-    context: UserContext = Depends(require_permission("finance.payment.approve")),
+    context: UserContext = Depends(require_permission("finance.payment.execute")),
     db: Session = Depends(get_db),
 ) -> PaymentBatchResponse:
     batch = db.scalar(
@@ -709,6 +725,13 @@ def execute_payment_batch(
         raise HTTPException(status_code=404, detail="Lote de pagamentos não encontrado.")
     if batch.status != "approved":
         raise HTTPException(status_code=409, detail="Somente lotes aprovados podem ter a execução registrada.")
+    audit_reason = _sod_override(
+        context=context,
+        conflicting_user_id=batch.approved_by_user_id,
+        action_label="aprovar e executar o mesmo lote",
+        override_sod=payload.override_sod,
+        reason=payload.reason,
+    )
     if payload.execution_date > date.today():
         raise HTTPException(status_code=422, detail="A execução só pode ser registrada na data atual ou em data passada.")
     if is_competence_closed(
@@ -815,7 +838,11 @@ def execute_payment_batch(
             "reference": batch_reference,
             "item_count": batch.item_count,
             "total_amount": str(batch.total_amount),
+            "approved_by_user_id": str(batch.approved_by_user_id) if batch.approved_by_user_id else None,
+            "executed_by_user_id": str(context.user.id),
+            "sod_override": bool(audit_reason and audit_reason.startswith("[OVERRIDE SOD]")),
         },
+        reason=audit_reason,
     )
     db.commit()
     return _batch_response(db, _load_batch(db, context.user.organization_id, batch.id))
@@ -825,6 +852,7 @@ def execute_payment_batch(
 def cancel_payment_batch(
     batch_id: UUID,
     request: Request,
+    payload: PaymentBatchActionRequest | None = None,
     context: UserContext = Depends(require_permission("finance.view")),
     db: Session = Depends(get_db),
 ) -> PaymentBatchResponse:
@@ -834,6 +862,10 @@ def cancel_payment_batch(
     required = "finance.payment.approve" if batch.status == "approved" else "finance.payment.prepare"
     if not context.has(required):
         raise HTTPException(status_code=403, detail=f"Permissão necessária: {required}")
+    action = payload or PaymentBatchActionRequest()
+    reason = (action.reason or "").strip() or None
+    if batch.status in {"ready", "approved"} and (not reason or len(reason) < 5):
+        raise HTTPException(status_code=422, detail="Informe o motivo do cancelamento com pelo menos 5 caracteres.")
     batch.status = "cancelled"
     batch.cancelled_by_user_id = context.user.id
     batch.cancelled_at = datetime.now(timezone.utc)
@@ -842,7 +874,9 @@ def cancel_payment_batch(
             entry.status = "cancelled"
     _audit(
         db, request, context, action="finance.payment_batch.cancelled",
-        entity_type="payment_batch", entity_id=str(batch.id), after={"status": batch.status},
+        entity_type="payment_batch", entity_id=str(batch.id),
+        after={"status": batch.status, "cancelled_by_user_id": str(context.user.id)},
+        reason=reason,
     )
     db.commit()
     return _batch_response(db, _load_batch(db, context.user.organization_id, batch.id))
