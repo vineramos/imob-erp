@@ -91,6 +91,7 @@ class MonthlyClosureEventResponse(BaseModel):
     action: Literal["closed", "reopened"]
     reason: str | None
     actor_user_id: UUID | None
+    actor_name: str | None = None
     created_at: datetime
 
 
