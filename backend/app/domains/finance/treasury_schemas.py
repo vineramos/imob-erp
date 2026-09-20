@@ -65,6 +65,16 @@ class PaymentBatchResponse(BaseModel):
     provider_batch_id: str | None
     provider_status: str | None
     execution_reference: str | None
+    created_by_user_id: UUID | None
+    created_by_name: str | None = None
+    prepared_by_user_id: UUID | None
+    prepared_by_name: str | None = None
+    approved_by_user_id: UUID | None
+    approved_by_name: str | None = None
+    executed_by_user_id: UUID | None
+    executed_by_name: str | None = None
+    cancelled_by_user_id: UUID | None
+    cancelled_by_name: str | None = None
     prepared_at: datetime | None
     approved_at: datetime | None
     executed_at: datetime | None
@@ -73,9 +83,16 @@ class PaymentBatchResponse(BaseModel):
     items: list[PaymentBatchItemResponse]
 
 
+class PaymentBatchActionRequest(BaseModel):
+    reason: str | None = Field(default=None, max_length=1000)
+    override_sod: bool = False
+
+
 class PaymentBatchExecutionRequest(BaseModel):
     execution_date: date
     reference: str | None = Field(default=None, max_length=180)
+    reason: str | None = Field(default=None, max_length=1000)
+    override_sod: bool = False
 
 
 class OwnerRepasseResponse(BaseModel):
