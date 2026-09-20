@@ -17,6 +17,7 @@ from app.domains.finance.monthly_cycle_schemas import (
 )
 from app.domains.foundation.access import UserContext, require_permission
 from app.domains.foundation.audit import write_audit
+from app.domains.foundation.models import AppUser
 
 
 router = APIRouter(prefix="/finance/monthly-cycle", tags=["finance-monthly-cycle"])
@@ -61,8 +62,9 @@ def _closure_response(db: Session, *, organization_id, competence: date) -> Mont
     )
     events: list[MonthlyClosureEventResponse] = []
     if closure is not None:
-        event_rows = db.scalars(
-            select(FinanceMonthlyClosureEvent)
+        event_rows = db.execute(
+            select(FinanceMonthlyClosureEvent, AppUser.name)
+            .outerjoin(AppUser, FinanceMonthlyClosureEvent.actor_user_id == AppUser.id)
             .where(FinanceMonthlyClosureEvent.closure_id == closure.id)
             .order_by(FinanceMonthlyClosureEvent.created_at.desc())
             .limit(50)
@@ -73,9 +75,10 @@ def _closure_response(db: Session, *, organization_id, competence: date) -> Mont
                 action=item.action,
                 reason=item.reason,
                 actor_user_id=item.actor_user_id,
+                actor_name=actor_name,
                 created_at=item.created_at,
             )
-            for item in event_rows
+            for item, actor_name in event_rows
         ]
     return MonthlyClosureResponse(
         id=closure.id if closure else None,
@@ -90,7 +93,7 @@ def _closure_response(db: Session, *, organization_id, competence: date) -> Mont
     )
 
 
-def _audit(request: Request, db: Session, context: UserContext, *, action: str, entity_id: str, after: dict) -> None:
+def _audit(request: Request, db: Session, context: UserContext, *, action: str, entity_id: str, after: dict, reason: str | None = None) -> None:
     forwarded = request.headers.get("x-forwarded-for", "").split(",", 1)[0].strip()
     write_audit(
         db,
@@ -100,6 +103,7 @@ def _audit(request: Request, db: Session, context: UserContext, *, action: str, 
         entity_type="finance_monthly_closure",
         entity_id=entity_id,
         after_data=after,
+        reason=reason,
         ip_address=forwarded or (request.client.host if request.client else None),
         user_agent=request.headers.get("user-agent"),
     )
@@ -182,6 +186,7 @@ def close_monthly_competence(
         action="finance.monthly_closure.closed",
         entity_id=str(closure.id),
         after={"competence": target.isoformat(), "blocker_count": readiness.blocker_count},
+        reason=(payload.note or "").strip() or None,
     )
     db.commit()
     return _closure_response(db, organization_id=context.user.organization_id, competence=target)
@@ -235,6 +240,7 @@ def reopen_monthly_competence(
         action="finance.monthly_closure.reopened",
         entity_id=str(closure.id),
         after={"competence": target.isoformat(), "reason": reason},
+        reason=reason,
     )
     db.commit()
     return _closure_response(db, organization_id=context.user.organization_id, competence=target)
