@@ -1,7 +1,7 @@
 import { Banknote, CheckCircle2, CircleAlert, FileSignature, Mail, RefreshCw, Save, ShieldCheck, Webhook } from 'lucide-react'
 import { FormEvent, useEffect, useState } from 'react'
 import { ApiError, apiRequest } from '../../api/client'
-import type { IntegrationReadiness, IntegrationsConfig, SignatureIntegrationStatus } from '../../api/types'
+import type { BankIntegrationStatus, IntegrationReadiness, IntegrationsConfig, SignatureIntegrationStatus } from '../../api/types'
 import { authConfigured } from '../../auth/client'
 
 const defaults: IntegrationsConfig = {
@@ -19,7 +19,7 @@ const providerStatus = (enabled: boolean) => (
   <i className={`status-badge ${enabled ? 'success' : 'neutral'}`}>{enabled ? 'Provider selecionado' : 'Desativado'}</i>
 )
 
-function signatureBadge(statusValue: SignatureIntegrationStatus | null) {
+function connectionBadge(statusValue: SignatureIntegrationStatus | BankIntegrationStatus | null) {
   if (!statusValue) return <i className="status-badge neutral">Status não consultado</i>
   if (!statusValue.configured) return <i className="status-badge warning">Credencial pendente</i>
   if (statusValue.reachable === true) return <i className="status-badge success">Conectado</i>
@@ -29,10 +29,12 @@ function signatureBadge(statusValue: SignatureIntegrationStatus | null) {
 
 export function IntegrationsSettingsPage({ canEdit }: Props) {
   const [form, setForm] = useState<IntegrationsConfig>(defaults)
+  const [bankStatus, setBankStatus] = useState<BankIntegrationStatus | null>(null)
   const [signatureStatus, setSignatureStatus] = useState<SignatureIntegrationStatus | null>(null)
   const [readiness, setReadiness] = useState<IntegrationReadiness | null>(null)
   const [loading, setLoading] = useState(authConfigured)
   const [saving, setSaving] = useState(false)
+  const [testingBank, setTestingBank] = useState(false)
   const [testingSignature, setTestingSignature] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
@@ -42,12 +44,14 @@ export function IntegrationsSettingsPage({ canEdit }: Props) {
     let active = true
     void Promise.all([
       apiRequest<IntegrationsConfig>('/settings/integrations'),
+      apiRequest<BankIntegrationStatus>('/integrations/bank/status').catch(() => null),
       apiRequest<SignatureIntegrationStatus>('/integrations/signature/status').catch(() => null),
       apiRequest<IntegrationReadiness>('/integrations/readiness').catch(() => null),
     ])
-      .then(([data, statusData, readinessData]) => {
+      .then(([data, bankStatusData, statusData, readinessData]) => {
         if (!active) return
         setForm(data)
+        setBankStatus(bankStatusData)
         setSignatureStatus(statusData)
         setReadiness(readinessData)
       })
@@ -68,6 +72,7 @@ export function IntegrationsSettingsPage({ canEdit }: Props) {
         : form
       setForm(updated)
       if (authConfigured) {
+        setBankStatus(await apiRequest<BankIntegrationStatus>('/integrations/bank/status').catch(() => null))
         setSignatureStatus(await apiRequest<SignatureIntegrationStatus>('/integrations/signature/status').catch(() => null))
         setReadiness(await apiRequest<IntegrationReadiness>('/integrations/readiness').catch(() => null))
       }
@@ -76,6 +81,23 @@ export function IntegrationsSettingsPage({ canEdit }: Props) {
       setError(cause instanceof ApiError ? cause.detail : 'Não foi possível salvar as integrações.')
     } finally {
       setSaving(false)
+    }
+  }
+
+  async function testBankConnection() {
+    if (!canEdit || !authConfigured) return
+    setTestingBank(true)
+    setError('')
+    setSuccess('')
+    try {
+      const result = await apiRequest<BankIntegrationStatus>('/integrations/bank/test', { method: 'POST' })
+      setBankStatus(result)
+      if (result.reachable) setSuccess('Conexão com o Banco Inter validada com sucesso.')
+      else setError(result.message)
+    } catch (cause) {
+      setError(cause instanceof ApiError ? cause.detail : 'Não foi possível testar o Banco Inter.')
+    } finally {
+      setTestingBank(false)
     }
   }
 
@@ -113,18 +135,27 @@ export function IntegrationsSettingsPage({ canEdit }: Props) {
 
       <form onSubmit={save} className="settings-layout integrations-layout">
         <div className="settings-column">
-          <article className="panel integration-card">
+          <article className="panel integration-card integration-card-expanded">
             <div className="integration-icon"><Banknote size={19} /></div>
             <div className="integration-content"><strong>Banco / Cobrança</strong><span>Provider financeiro principal</span></div>
             <select disabled={!canEdit} value={form.bank_provider} onChange={(e) => setForm((current) => ({ ...current, bank_provider: e.target.value as IntegrationsConfig['bank_provider'] }))}><option value="inter">Banco Inter Empresas</option><option value="none">Nenhum</option></select>
-            {providerStatus(form.bank_provider !== 'none')}
+            {form.bank_provider === 'inter' ? connectionBadge(bankStatus) : providerStatus(false)}
+            {form.bank_provider === 'inter' && (
+              <div className="integration-health">
+                <div className="integration-health-copy">
+                  {bankStatus?.reachable ? <CheckCircle2 size={16}/> : <CircleAlert size={16}/>}
+                  <div><strong>{bankStatus ? `Ambiente ${bankStatus.environment}` : 'Banco Inter'}</strong><span>{bankStatus?.message ?? 'Consulte o status para saber se as credenciais e o certificado estão disponíveis.'}</span></div>
+                </div>
+                <button className="button secondary compact-button" disabled={!canEdit || testingBank} type="button" onClick={() => void testBankConnection()}><RefreshCw size={14}/>{testingBank ? 'Testando...' : 'Testar conexão'}</button>
+              </div>
+            )}
           </article>
 
           <article className="panel integration-card integration-card-expanded">
             <div className="integration-icon"><FileSignature size={19} /></div>
             <div className="integration-content"><strong>Assinatura eletrônica</strong><span>Contratos e documentos assináveis</span></div>
             <select disabled={!canEdit} value={form.signature_provider} onChange={(e) => setForm((current) => ({ ...current, signature_provider: e.target.value as IntegrationsConfig['signature_provider'] }))}><option value="clicksign">Clicksign</option><option value="none">Nenhum</option></select>
-            {form.signature_provider === 'clicksign' ? signatureBadge(signatureStatus) : providerStatus(false)}
+            {form.signature_provider === 'clicksign' ? connectionBadge(signatureStatus) : providerStatus(false)}
             {form.signature_provider === 'clicksign' && (
               <div className="integration-health">
                 <div className="integration-health-copy">
