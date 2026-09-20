@@ -92,7 +92,13 @@ def test_homologation_treasury_prepare_approve_execute_and_daily_close(client, i
     assert prepared["prepared_at"]
 
     approved = assert_response(
-        client.post(f"/api/finance/treasury/payment-batches/{batch['id']}/approve")
+        client.post(
+            f"/api/finance/treasury/payment-batches/{batch['id']}/approve",
+            json={
+                "override_sod": True,
+                "reason": "Homologação automatizada usa um único usuário de teste.",
+            },
+        )
     ).json()
     assert approved["status"] == "approved"
     assert approved["approved_at"]
@@ -103,6 +109,8 @@ def test_homologation_treasury_prepare_approve_execute_and_daily_close(client, i
             json={
                 "execution_date": date.today().isoformat(),
                 "reference": "HOMOLOG-E2E-750",
+                "override_sod": True,
+                "reason": "Homologação automatizada usa um único usuário de teste.",
             },
         )
     ).json()
