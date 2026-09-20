@@ -1159,6 +1159,15 @@ def create_manual_transaction(
     db: Session = Depends(get_db),
 ) -> BankTransactionResponse:
     account = _load_account(db, context.user.organization_id, account_id)
+    if is_competence_closed(
+        db,
+        organization_id=context.user.organization_id,
+        value=payload.transaction_date,
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail="A competência deste movimento está fechada. Reabra a competência antes de incluir lançamentos bancários.",
+        )
     fingerprint = _fingerprint(
         account.id,
         transaction_date=payload.transaction_date,
@@ -1265,6 +1274,21 @@ async def import_statement(
         raise HTTPException(status_code=422, detail=f"Não foi possível ler o extrato: {exc}") from exc
     if not rows:
         raise HTTPException(status_code=422, detail="Nenhum movimento válido foi encontrado no extrato.")
+    closed_dates = sorted({
+        row["transaction_date"].replace(day=1)
+        for row in rows
+        if is_competence_closed(
+            db,
+            organization_id=context.user.organization_id,
+            value=row["transaction_date"],
+        )
+    })
+    if closed_dates:
+        labels = ", ".join(item.strftime("%m/%Y") for item in closed_dates)
+        raise HTTPException(
+            status_code=409,
+            detail=f"O extrato contém movimento(s) em competência(s) fechada(s): {labels}. Reabra antes de importar.",
+        )
 
     file_hash = hashlib.sha256(content).hexdigest()
     previous_import = db.scalar(
