@@ -45,6 +45,7 @@ from app.domains.finance.core_models import FinancialTitle
 from app.domains.finance.advanced_service import generate_commissions_for_charge
 from app.domains.finance.late_charges import amount_due, record_payment_with_late_charges
 from app.domains.finance.models import MaintenanceFinancialEntry, OwnerRepasse, RentCharge
+from app.domains.finance.monthly_cycle import is_competence_closed
 from app.domains.finance.providers import BANK_PROVIDER_REGISTRY, bank_provider_descriptors
 from app.domains.foundation.access import UserContext, require_permission
 from app.domains.foundation.audit import write_audit
@@ -1397,6 +1398,16 @@ def reconcile_transaction(
     if not context.has(required):
         raise HTTPException(status_code=403, detail=f"Permissão necessária: {required}")
 
+    if is_competence_closed(
+        db,
+        organization_id=context.user.organization_id,
+        value=transaction.transaction_date,
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail="A competência deste movimento está fechada. Reabra a competência antes de alterar a conciliação.",
+        )
+
     tx_response = _transaction_response(transaction)
     if tx_response.remaining_amount <= 0:
         raise HTTPException(status_code=409, detail="Este movimento bancário já está totalmente conciliado.")
@@ -1562,6 +1573,15 @@ def classify_bank_residual(
     if not context.has(required):
         raise HTTPException(status_code=403, detail=f"Permissão necessária: {required}")
 
+    if is_competence_closed(
+        db,
+        organization_id=context.user.organization_id,
+        value=transaction.transaction_date,
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail="A competência deste movimento está fechada. Reabra a competência antes de classificar o residual.",
+        )
     remaining = _transaction_response(transaction).remaining_amount
     if remaining <= 0:
         raise HTTPException(status_code=409, detail="Este movimento não possui saldo residual para classificar.")
