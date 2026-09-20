@@ -71,6 +71,8 @@ class MonthlyClosingReadiness(BaseModel):
     settlement_integrity_issues_count: int
     pending_third_party_count: int
     pending_owner_repasses_count: int
+    open_payment_batches_count: int = 0
+    failed_payment_batches_count: int = 0
     blocker_count: int
     blockers: list[str]
 
