@@ -1,5 +1,6 @@
 import { Camera, ChevronLeft, ChevronRight, ImagePlus, Star, Trash2, X } from 'lucide-react'
 import { ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type { ReactNode } from 'react'
 import { ApiError, apiBlobRequest, apiRequest } from '../../api/client'
 import { ConfirmDialog } from '../../components/ConfirmDialog'
 import './property-gallery.css'
@@ -18,9 +19,9 @@ type PropertyPhoto = {
 }
 
 type PhotoView = PropertyPhoto & { objectUrl: string }
-type Props = { propertyId: string; canManage: boolean; onChanged?: () => void }
+type Props = { propertyId: string; canManage: boolean; onChanged?: () => void; variant?: 'panel' | 'hero'; heroContent?: ReactNode; heroActions?: ReactNode }
 
-export function PropertyGallery({ propertyId, canManage, onChanged }: Props) {
+export function PropertyGallery({ propertyId, canManage, onChanged, variant = 'panel', heroContent, heroActions }: Props) {
   const [photos, setPhotos] = useState<PhotoView[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [caption, setCaption] = useState('')
@@ -139,14 +140,15 @@ export function PropertyGallery({ propertyId, canManage, onChanged }: Props) {
   }
 
   return <>
-    <article className="panel property-media-panel property-gallery">
-      <div className="property-panel-heading property-gallery-heading">
+    <article className={`panel property-media-panel property-gallery ${variant === 'hero' ? 'property-gallery--hero' : ''}`}>
+      {variant !== 'hero' && <div className="property-panel-heading property-gallery-heading">
         <div><h2>Fotos</h2><span>{photos.length ? `${photos.length} foto(s) · ${photos.findIndex((photo) => photo.id === selected?.id) + 1} de ${photos.length}` : 'Galeria comercial do imóvel'}</span></div>
         {canManage && <label className={`button secondary compact-button property-gallery-upload ${busy ? 'disabled' : ''}`}><ImagePlus size={14}/> Adicionar fotos<input type="file" multiple accept="image/jpeg,image/png,image/webp" disabled={busy} onChange={upload}/></label>}
-      </div>
+      </div>}
       {error && <div className="property-gallery-error">{error}</div>}
-      {!selected ? <div className="property-gallery-empty"><Camera size={31}/><strong>Nenhuma foto cadastrada</strong><span>Adicione fotos comerciais do imóvel. Elas ficam separadas das imagens das vistorias.</span>{canManage && <label className="button primary property-gallery-empty-action"><ImagePlus size={14}/> Selecionar fotos<input type="file" multiple accept="image/jpeg,image/png,image/webp" disabled={busy} onChange={upload}/></label>}</div> : <>
-        <button className="property-gallery-main" type="button" onClick={() => setViewerOpen(true)} aria-label="Ampliar foto selecionada"><img src={selected.objectUrl} alt={selected.caption || selected.filename}/>{selected.is_cover && <span className="property-gallery-cover"><Star size={12} fill="currentColor"/> Capa do anúncio</span>}</button>
+      {!selected ? <div className="property-gallery-empty"><Camera size={31}/><strong>Nenhuma foto cadastrada</strong><span>Adicione fotos comerciais do imóvel. Elas ficam separadas das imagens das vistorias.</span>{heroContent}{heroActions}{canManage && <label className="button primary property-gallery-empty-action"><ImagePlus size={14}/> Selecionar fotos<input type="file" multiple accept="image/jpeg,image/png,image/webp" disabled={busy} onChange={upload}/></label>}</div> : <>
+        <div className="property-gallery-main"><img src={selected.objectUrl} alt={selected.caption || selected.filename}/><button className="property-gallery-expand" type="button" onClick={() => setViewerOpen(true)} aria-label="Ampliar foto selecionada"><Camera size={15}/> Ampliar</button>{selected.is_cover && <span className="property-gallery-cover"><Star size={12} fill="currentColor"/> Capa do anúncio</span>}{heroContent}{heroActions}</div>
+        {variant === 'hero' && <div className="property-gallery-hero-toolbar"><span><Camera size={14}/>{photos.findIndex((photo) => photo.id === selected.id) + 1} de {photos.length} fotos</span>{canManage && <label className={`property-gallery-add ${busy ? 'disabled' : ''}`}><ImagePlus size={14}/> Adicionar fotos<input type="file" multiple accept="image/jpeg,image/png,image/webp" disabled={busy} onChange={upload}/></label>}</div>}
         <div className="property-gallery-thumbs" aria-label="Fotos do imóvel">{photos.map((photo) => <button type="button" className={photo.id === selected.id ? 'active' : ''} key={photo.id} onClick={() => setSelectedId(photo.id)}><img src={photo.objectUrl} alt={photo.caption || photo.filename}/>{photo.is_cover && <Star size={11} fill="currentColor"/>}</button>)}</div>
         {canManage && <div className="property-gallery-editor"><div className="property-gallery-actions"><button className="button secondary compact-button" type="button" disabled={busy || photos[0]?.id === selected.id} onClick={() => void move(-1)}><ChevronLeft size={14}/> Anterior</button><button className="button secondary compact-button" type="button" disabled={busy || photos[photos.length - 1]?.id === selected.id} onClick={() => void move(1)}>Próxima <ChevronRight size={14}/></button><button className="button secondary compact-button" type="button" disabled={busy || selected.is_cover} onClick={() => void setCover(selected)}><Star size={14}/> Definir capa</button><button className="button secondary compact-button property-gallery-delete" type="button" disabled={busy} onClick={() => setDeleteTarget(selected)}><Trash2 size={14}/> Excluir</button></div><label className="property-gallery-caption"><span>Legenda</span><div><input maxLength={300} value={caption} onChange={(event) => setCaption(event.target.value)} placeholder="Ex.: Sala integrada com ampla iluminação natural"/><button className="button secondary compact-button" type="button" disabled={busy || caption.trim() === (selected.caption ?? '')} onClick={() => void saveCaption()}>Salvar</button></div></label></div>}
       </>}
