@@ -1,13 +1,12 @@
-import { ChevronDown, CircleHelp, Mail, Menu } from 'lucide-react'
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react'
 import { ApiError, apiRequest } from './api/client'
 import type { CurrentUser } from './api/types'
 import { authConfigured } from './auth/client'
 import { LoginPage } from './auth/LoginPage'
+import { AppSidebar } from './components/AppSidebar'
 import { EntityDeepLink } from './components/EntityDeepLink'
-import { GlobalSearch } from './components/GlobalSearch'
-import { NotificationCenter } from './components/NotificationCenter'
-import { navigation } from './config/navigation'
+import { TopHeader } from './components/TopHeader'
+import { navigation, type ModuleKey } from './config/navigation'
 import { AgendaNotifier } from './modules/agenda/AgendaNotifier'
 import { useTheme } from './theme/ThemeProvider'
 import type { ThemeConfig } from './theme/theme'
@@ -30,7 +29,6 @@ const ExternalPortalPage = lazy(() => import('./public/ExternalPortalPage').then
 const PublicSitePage = lazy(() => import('./public/PublicSitePage').then(module => ({ default: module.PublicSitePage })))
 const TenantPortalEntry = lazy(() => import('./public/TenantPortalEntry').then(module => ({ default: module.TenantPortalEntry })))
 
-type ModuleKey = (typeof navigation)[number]['module']
 type AuthState = 'loading' | 'authenticated' | 'unauthenticated' | 'error'
 
 const moduleKeys = new Set<string>(navigation.map(item => item.module))
@@ -50,7 +48,8 @@ const devUser: CurrentUser = {
     'properties.create', 'properties.edit', 'properties.publish', 'captures.manage', 'crm.manage',
     'contracts.create', 'contracts.edit', 'contracts.approve', 'contracts.send_signature',
     'inspections.manage', 'maintenance.manage', 'agenda.manage', 'reports.export', 'documents.manage',
-    'finance.charge.create', 'finance.reconcile', 'finance.payment.prepare', 'finance.payment.approve', 'finance.payment.execute',
+    'finance.charge.create', 'finance.reconcile', 'finance.payment.prepare', 'finance.payment.approve', 'finance.repasse.execute',
+/'finance.period.close'/d
     'finance.period.close', 'finance.period.reopen', 'finance.adjustment.create', 'finance.sod.override', 'finance.repasse.execute',
     'communications.manage', 'communications.send',
     'settings.company.manage', 'settings.appearance.manage', 'users.manage', 'permissions.manage', 'approval_rules.manage', 'audit.view',
@@ -68,6 +67,7 @@ function ErpApp() {
   const [activeModule, setActiveModule] = useState<ModuleKey>(() => moduleFromPath(window.location.pathname))
   const [currentRoute, setCurrentRoute] = useState(() => browserRoute())
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
   const [authState, setAuthState] = useState<AuthState>(devBypass ? 'authenticated' : 'loading')
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(devBypass ? devUser : null)
   const [authError, setAuthError] = useState('')
@@ -120,9 +120,38 @@ function ErpApp() {
   const brandInitials = theme.companyShortName.trim().slice(0, 2).toUpperCase() || 'IM'
   const implemented = ['dashboard', 'people', 'properties', 'brokers', 'captures', 'crm', 'contracts', 'inspections', 'maintenance', 'finance', 'agenda', 'communications', 'reports', 'documents', 'settings']
 
+  const toggleSidebar = () => {
+    if (window.matchMedia('(max-width: 760px)').matches) {
+      setMobileSidebarOpen(value => !value)
+      return
+    }
+    setSidebarCollapsed(value => !value)
+  }
+
   return <div className={`app-shell ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
-    <aside className="sidebar"><div className="brand"><BrandMark logoUrl={theme.logoUrl} initials={brandInitials}/><div className="brand-copy"><strong>{theme.companyShortName || theme.companyName}</strong><span>ERP Imobiliário</span></div></div><nav className="nav-list" aria-label="Menu principal">{visibleNavigation.map(({ label, icon: Icon, module }) => <button className={`nav-item ${activeModule === module ? 'active' : ''}`} type="button" key={label} title={sidebarCollapsed ? label : undefined} onClick={() => navigateModule(module)}><Icon size={18} strokeWidth={1.75}/><span>{label}</span></button>)}</nav><div className="sidebar-footer"><span className="sidebar-label">Empresa</span><button type="button" className="company-switcher"><div className="avatar">{currentUser.organization_name.trim().slice(0, 2).toUpperCase() || brandInitials}</div><div className="company-copy"><strong>{currentUser.organization_name}</strong><span>Ambiente principal</span></div><ChevronDown className="company-chevron" size={15}/></button></div></aside>
-    <main className="main-area"><header className="topbar"><div className="topbar-left"><button className="sidebar-toggle" type="button" aria-label={sidebarCollapsed ? 'Expandir menu lateral' : 'Recolher menu lateral'} onClick={() => setSidebarCollapsed((value) => !value)}><Menu size={20}/></button><GlobalSearch onNavigate={navigateModule}/></div><div className="topbar-actions">{!authConfigured && <span className="dev-badge">DEV · Auth pendente</span>}<NotificationCenter onNavigate={navigateModule}/><button className="topbar-icon topbar-secondary-action" type="button" aria-label="Mensagens" onClick={() => navigateModule('communications')}><Mail size={18}/></button><button className="topbar-icon topbar-secondary-action" type="button" aria-label="Ajuda"><CircleHelp size={18}/></button><span className="topbar-divider"/><div className="user-summary"><div className="avatar avatar-user">{initials}</div><div><strong>{currentUser.name}</strong><span>{primaryRole}</span></div><ChevronDown size={15}/></div></div></header>
+    <AppSidebar
+      activeModule={activeModule}
+      currentRoute={currentRoute}
+      permissions={currentUser.permissions}
+      collapsed={sidebarCollapsed}
+      mobileOpen={mobileSidebarOpen}
+      brandName={theme.companyShortName || theme.companyName}
+      brandSubtitle="Gestão imobiliária"
+      brandInitials={brandInitials}
+      logoUrl={theme.logoUrl}
+      organizationName={currentUser.organization_name}
+      onNavigate={navigateModule}
+      onToggleCollapsed={() => setSidebarCollapsed(value => !value)}
+      onCloseMobile={() => setMobileSidebarOpen(false)}
+    />
+    <main className="main-area"><TopHeader
+      userName={currentUser.name}
+      userRole={primaryRole}
+      userInitials={initials}
+      authConfigured={authConfigured}
+      onNavigate={navigateModule}
+      onToggleSidebar={toggleSidebar}
+    />
       {currentUser.permissions.includes('agenda.view') && <AgendaNotifier onOpenAgenda={() => navigateModule('agenda')}/>} 
       <Suspense fallback={<ModuleLoading/>}>
         {activeModule === 'dashboard' && <DashboardPage onNavigate={module => navigateModule(module)}/>}{activeModule === 'people' && <PropertiesPage permissions={currentUser.permissions} initialTab="people"/>}{activeModule === 'properties' && <PropertiesPage permissions={currentUser.permissions} initialTab="properties"/>}{activeModule === 'brokers' && <BrokersPage permissions={currentUser.permissions}/>}{activeModule === 'captures' && <CapturesPage permissions={currentUser.permissions}/>}{activeModule === 'crm' && <CommercialSiteHub permissions={currentUser.permissions} organizationId={currentUser.organization_id}/>}{activeModule === 'contracts' && <ContractsHub permissions={currentUser.permissions}/>}{activeModule === 'inspections' && <InspectionsPage permissions={currentUser.permissions}/>}{activeModule === 'maintenance' && <MaintenancePage permissions={currentUser.permissions}/>}{activeModule === 'finance' && <FinancePage permissions={currentUser.permissions}/>}{activeModule === 'agenda' && <AgendaPage permissions={currentUser.permissions} onNavigate={module => navigateModule(module)}/>}{activeModule === 'communications' && <CommunicationsPage permissions={currentUser.permissions}/>}{activeModule === 'reports' && <ReportsPage permissions={currentUser.permissions}/>}{activeModule === 'documents' && <DocumentsPage permissions={currentUser.permissions}/>}{activeModule === 'settings' && <SettingsPage permissions={currentUser.permissions}/>} {!implemented.includes(activeModule) && <ModulePlaceholder module={activeModule}/>} 
