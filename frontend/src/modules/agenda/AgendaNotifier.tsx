@@ -72,7 +72,7 @@ export function AgendaNotifier({ onOpenAgenda }: Props) {
   useEffect(() => {
     let cancelled = false
     async function poll() {
-      if (Date.now() < snoozeUntil) return
+      if (document.visibilityState !== 'visible' || Date.now() < snoozeUntil) return
       try {
         const rows = await apiRequest<ReminderRow[]>('/agenda/reminders')
         if (cancelled || reminder) return
@@ -87,7 +87,7 @@ export function AgendaNotifier({ onOpenAgenda }: Props) {
       } catch { /* silencioso fora de sessão */ }
     }
     void poll()
-    const id = window.setInterval(() => void poll(), 30_000)
+    const id = window.setInterval(() => void poll(), 60_000)
     return () => { cancelled = true; window.clearInterval(id) }
   }, [reminder, snoozeUntil])
 

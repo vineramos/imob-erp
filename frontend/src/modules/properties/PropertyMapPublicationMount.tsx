@@ -19,9 +19,18 @@ const channels = [
   { key: 'meta', mark: 'META', label: 'Facebook / Instagram' },
 ] as const
 
-function propertyCodeFromDetail(): string | null {
-  const label = document.querySelector<HTMLElement>('.property-detail-topline > span')?.textContent ?? ''
-  return label.match(/#(\d{6})/)?.[1] ?? null
+function propertyFromDetail(): Property | null {
+  const detail = document.querySelector<HTMLElement>('.property-detail-workspace')
+  if (!detail?.dataset.propertyId || !detail.dataset.propertyCode) return null
+  try {
+    return {
+      id: detail.dataset.propertyId,
+      code: detail.dataset.propertyCode,
+      address: JSON.parse(detail.dataset.propertyAddress || '{}'),
+      status: detail.dataset.propertyStatus || 'draft',
+      publication_enabled: detail.dataset.propertyPublicationEnabled === 'true',
+    } as Property
+  } catch { return null }
 }
 
 function addressQuery(property: Property) {
@@ -72,14 +81,13 @@ export function PropertyMapPublicationMount({ permissions }: Props) {
       if (resolving) return
       const locationPanel = document.querySelector<HTMLElement>('.property-detail-workspace .property-location-panel')
       const publicationPanel = document.querySelector<HTMLElement>('.property-detail-workspace .property-publication-panel')
-      const code = propertyCodeFromDetail()
+      const property = propertyFromDetail()
+      const code = property?.code ?? null
       if (!locationPanel || !publicationPanel || !code) { if (locationHost || publicationHost) cleanup(); return }
       if (hiddenLocation === locationPanel && hiddenPublication === publicationPanel && locationHost?.isConnected && publicationHost?.isConnected && mountedCode === code) return
 
       resolving = true
       try {
-        const properties = await apiRequest<Property[]>('/properties')
-        const property = properties.find((item) => item.code === code)
         if (!active || !property) return
         const readinessResult = await Promise.allSettled([apiRequest<PublicationReadiness>(`/properties/${property.id}/publication-readiness`)])
         cleanup()
@@ -121,11 +129,10 @@ export function PropertyMapPublicationMount({ permissions }: Props) {
   async function refreshState() {
     if (!mount) return
     try {
-      const [properties, nextReadiness] = await Promise.all([
-        apiRequest<Property[]>('/properties'),
+      const [property, nextReadiness] = await Promise.all([
+        Promise.resolve(propertyFromDetail()),
         apiRequest<PublicationReadiness>(`/properties/${mount.property.id}/publication-readiness`),
       ])
-      const property = properties.find((item) => item.id === mount.property.id)
       if (property) setMount((current) => current ? { ...current, property } : current)
       setReadiness(nextReadiness)
     } catch { /* o card principal já trata erros operacionais */ }

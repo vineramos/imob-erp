@@ -5,7 +5,7 @@ from decimal import Decimal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.database import get_db
@@ -68,7 +68,7 @@ from app.domains.foundation.audit import write_audit
 from app.domains.foundation.models import AppUser
 from app.domains.leases.models import LeaseContract
 from app.domains.maintenance.models import MaintenanceRequest
-from app.domains.portfolio.models import Property
+from app.domains.portfolio.models import Capture, Person, Property
 
 router = APIRouter(tags=["agenda"])
 
@@ -1089,18 +1089,29 @@ def dashboard_overview(
 ) -> DashboardOverviewResponse:
     org = context.user.organization_id
     today = datetime.now(timezone.utc).date(); limit = today + timedelta(days=120)
-    admin_contracts = db.scalars(select(AdministrationContract).where(AdministrationContract.organization_id == org, AdministrationContract.status == "signed")).all()
-    administered_properties = len({item.property_id for item in admin_contracts})
-    available_properties = len(db.scalars(select(Property.id).where(Property.organization_id == org, Property.status == "available")).all())
-    active_leases = len(db.scalars(select(LeaseContract.id).where(LeaseContract.organization_id == org, LeaseContract.status == "signed")).all())
-    expiring_leases = db.scalars(select(LeaseContract.id).where(LeaseContract.organization_id == org, LeaseContract.status == "signed", LeaseContract.end_date.between(today, limit))).all()
-    expiring_admin = db.scalars(select(AdministrationContract.id).where(AdministrationContract.organization_id == org, AdministrationContract.status == "signed", AdministrationContract.end_date.is_not(None), AdministrationContract.end_date.between(today, limit))).all()
-    contracts_expiring_120 = len(expiring_leases) + len(expiring_admin)
-    open_maintenance = len(db.scalars(select(MaintenanceRequest.id).where(MaintenanceRequest.organization_id == org, MaintenanceRequest.status.not_in(("completed", "cancelled")))).all())
-    overdue_charges = db.scalars(select(RentCharge).where(RentCharge.organization_id == org, RentCharge.due_date < today, RentCharge.status.not_in(("paid", "cancelled")))).all()
-    overdue_amount = sum((item.gross_amount for item in overdue_charges), Decimal("0"))
-    pending_repasses = db.scalars(select(OwnerRepasse).where(OwnerRepasse.organization_id == org, OwnerRepasse.status == "pending")).all()
-    pending_repasses_amount = sum((item.amount for item in pending_repasses), Decimal("0"))
+    administered_properties = db.scalar(select(func.count(func.distinct(AdministrationContract.property_id))).where(AdministrationContract.organization_id == org, AdministrationContract.status == "signed")) or 0
+    available_properties = db.scalar(select(func.count(Property.id)).where(Property.organization_id == org, Property.status == "available")) or 0
+    active_leases = db.scalar(select(func.count(LeaseContract.id)).where(LeaseContract.organization_id == org, LeaseContract.status == "signed")) or 0
+    expiring_leases = db.scalar(select(func.count(LeaseContract.id)).where(LeaseContract.organization_id == org, LeaseContract.status == "signed", LeaseContract.end_date.between(today, limit))) or 0
+    expiring_admin = db.scalar(select(func.count(AdministrationContract.id)).where(AdministrationContract.organization_id == org, AdministrationContract.status == "signed", AdministrationContract.end_date.is_not(None), AdministrationContract.end_date.between(today, limit))) or 0
+    contracts_expiring_120 = int(expiring_leases) + int(expiring_admin)
+    open_maintenance = db.scalar(select(func.count(MaintenanceRequest.id)).where(MaintenanceRequest.organization_id == org, MaintenanceRequest.status.not_in(("completed", "cancelled")))) or 0
+    overdue_amount = db.scalar(select(func.coalesce(func.sum(RentCharge.gross_amount), Decimal("0"))).where(RentCharge.organization_id == org, RentCharge.due_date < today, RentCharge.status.not_in(("paid", "cancelled")))) or Decimal("0")
+    pending_repasses_amount = db.scalar(select(func.coalesce(func.sum(OwnerRepasse.amount), Decimal("0"))).where(OwnerRepasse.organization_id == org, OwnerRepasse.status == "pending")) or Decimal("0")
+    open_captures = db.scalar(select(func.count(Capture.id)).where(Capture.organization_id == org, Capture.status.not_in(("lost", "available")))) or 0
+    approved_captures = db.scalar(select(func.count(Capture.id)).where(Capture.organization_id == org, Capture.status == "approved")) or 0
+    properties_with_administration = db.scalar(select(func.count(func.distinct(AdministrationContract.property_id))).where(AdministrationContract.organization_id == org, AdministrationContract.status != "cancelled")) or 0
+    total_properties = db.scalar(select(func.count(Property.id)).where(Property.organization_id == org)) or 0
+    managed_properties = db.scalar(select(func.count(func.distinct(AdministrationContract.property_id))).where(AdministrationContract.organization_id == org, AdministrationContract.status == "signed")) or 0
+    contracts_awaiting_signature = db.scalar(select(func.count(AdministrationContract.id)).where(AdministrationContract.organization_id == org, AdministrationContract.status == "pending_signature")) or 0
+    contracts_in_review = db.scalar(select(func.count(AdministrationContract.id)).where(AdministrationContract.organization_id == org, AdministrationContract.status == "review")) or 0
+    recent_capture_rows = db.execute(
+        select(Capture.id, Capture.status, Capture.property_address, Capture.estimated_rent, Capture.created_at, Person.name)
+        .outerjoin(Person, Person.id == Capture.contact_person_id)
+        .where(Capture.organization_id == org, Capture.status != "lost")
+        .order_by(Capture.created_at.desc())
+        .limit(5)
+    ).all()
     events = _collect_events(db, context, today, today, mine=True)
     overdue_tasks = len([item for item in events if item.needs_justification])
     tasks_today = len([item for item in events if item.status not in {"completed", "cancelled", "missed"}])
@@ -1116,4 +1127,16 @@ def dashboard_overview(
         tasks_today=tasks_today,
         overdue_tasks=overdue_tasks,
         events_today=[DashboardEventResponse(id=item.id, title=item.title, start_at=item.start_at, event_type=item.event_type, module=item.module, priority=item.priority) for item in events[:8]],
+        open_captures=int(open_captures),
+        approved_captures=int(approved_captures),
+        properties_without_administration=max(0, int(total_properties) - int(properties_with_administration)),
+        properties_with_administration=int(properties_with_administration),
+        managed_properties=int(managed_properties),
+        contracts_awaiting_signature=int(contracts_awaiting_signature),
+        contracts_in_review=int(contracts_in_review),
+        recent_captures=[{
+            "id": str(row.id), "status": row.status, "property_address": row.property_address,
+            "estimated_rent": float(row.estimated_rent) if row.estimated_rent is not None else None,
+            "created_at": row.created_at, "contact_person_name": row.name,
+        } for row in recent_capture_rows],
     )

@@ -1,16 +1,13 @@
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { apiRequest } from '../../api/client'
-import type { Property } from '../../api/types'
 import { PropertyGallery } from './PropertyGallery'
 
 type Props = { permissions: string[] }
 type MountState = { host: HTMLElement; propertyId: string } | null
 
-function propertyCodeFromDetail(): string | null {
-  const label = document.querySelector<HTMLElement>('.property-detail-topline > span')?.textContent ?? ''
-  const match = label.match(/#(\d{6})/)
-  return match?.[1] ?? null
+function propertyFromDetail() {
+  const detail = document.querySelector<HTMLElement>('.property-detail-workspace')
+  return { id: detail?.dataset.propertyId ?? null, code: detail?.dataset.propertyCode ?? null }
 }
 
 export function PropertyGalleryMount({ permissions }: Props) {
@@ -19,7 +16,6 @@ export function PropertyGalleryMount({ permissions }: Props) {
 
   useEffect(() => {
     let active = true
-    let properties: Property[] | null = null
     let hiddenPanel: HTMLElement | null = null
     let summaryLayout: HTMLElement | null = null
     let host: HTMLElement | null = null
@@ -43,16 +39,15 @@ export function PropertyGalleryMount({ permissions }: Props) {
       if (resolving) return
       const summaryGrid = document.querySelector<HTMLElement>('.property-detail-workspace .property-summary-grid')
       const commercialPanel = document.querySelector<HTMLElement>('.property-detail-workspace .property-media-panel')
-      const code = propertyCodeFromDetail()
+      const property = propertyFromDetail()
+      const code = property.code
       const mode: 'summary' | 'commercial' | null = summaryGrid ? 'summary' : commercialPanel ? 'commercial' : null
       if (!mode || !code) { if (host) cleanupMount(); return }
       if (host?.isConnected && mountedCode === code && mountedMode === mode) return
 
       resolving = true
       try {
-        properties ??= await apiRequest<Property[]>('/properties')
-        const property = properties.find((item) => item.code === code)
-        if (!active || !property) return
+        if (!active || !property.id) return
         cleanupMount()
         mountedCode = code
         mountedMode = mode

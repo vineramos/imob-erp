@@ -282,3 +282,11 @@ class DashboardOverviewResponse(BaseModel):
     tasks_today: int
     overdue_tasks: int
     events_today: list[DashboardEventResponse]
+    open_captures: int = 0
+    approved_captures: int = 0
+    properties_without_administration: int = 0
+    properties_with_administration: int = 0
+    managed_properties: int = 0
+    contracts_awaiting_signature: int = 0
+    contracts_in_review: int = 0
+    recent_captures: list[dict] = Field(default_factory=list)

@@ -1,9 +1,9 @@
-from datetime import date
+from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -156,9 +156,15 @@ def overview(
 ) -> FinanceReportOverview:
     if end_date < start_date:
         raise HTTPException(status_code=422, detail="Período inválido.")
-    charges = db.scalars(
-        select(RentCharge).where(RentCharge.organization_id == context.user.organization_id)
-    ).all()
+    paid_start = datetime.combine(start_date, time.min, tzinfo=timezone.utc)
+    paid_end = datetime.combine(end_date + timedelta(days=1), time.min, tzinfo=timezone.utc)
+    charges = db.scalars(select(RentCharge).where(
+        RentCharge.organization_id == context.user.organization_id,
+        or_(
+            and_(RentCharge.status == "paid", RentCharge.paid_at >= paid_start, RentCharge.paid_at < paid_end),
+            and_(RentCharge.status.in_(("generated", "sent", "overdue")), RentCharge.due_date <= end_date),
+        ),
+    )).all()
     paid = [
         item for item in charges
         if item.status == "paid" and item.paid_at and start_date <= item.paid_at.date() <= end_date
@@ -172,7 +178,8 @@ def overview(
         item.charge_id: item
         for item in db.scalars(
             select(FinancialSettlement).where(
-                FinancialSettlement.organization_id == context.user.organization_id
+                FinancialSettlement.organization_id == context.user.organization_id,
+                FinancialSettlement.charge_id.in_([item.id for item in paid] or [UUID(int=0)]),
             )
         ).all()
     }
@@ -180,12 +187,15 @@ def overview(
         select(OwnerRepasse).where(
             OwnerRepasse.organization_id == context.user.organization_id,
             OwnerRepasse.status == "paid",
+            OwnerRepasse.paid_at >= paid_start,
+            OwnerRepasse.paid_at < paid_end,
         )
     ).all()
     maintenance = db.scalars(
         select(MaintenanceFinancialEntry).where(
             MaintenanceFinancialEntry.organization_id == context.user.organization_id,
-            MaintenanceFinancialEntry.settled_at.is_not(None),
+            MaintenanceFinancialEntry.settled_at >= paid_start,
+            MaintenanceFinancialEntry.settled_at < paid_end,
         )
     ).all()
     commissions = db.scalars(
@@ -259,4 +269,3 @@ def legacy_annual_income_pdf(
         media_type="application/pdf",
         headers={"Content-Disposition": f'inline; filename="{filename}"'},
     )
-

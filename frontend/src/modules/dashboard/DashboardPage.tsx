@@ -28,14 +28,18 @@ type Overview = {
   tasks_today:number
   overdue_tasks:number
   events_today:DashboardEvent[]
+  open_captures:number
+  approved_captures:number
+  properties_without_administration:number
+  properties_with_administration:number
+  managed_properties:number
+  contracts_awaiting_signature:number
+  contracts_in_review:number
+  recent_captures:Capture[]
 }
 type Capture = { id:string; status:string; contact_person_name:string|null; property_address:{city?:string;state?:string;street?:string}; estimated_rent:number|null; created_at:string }
-type AdministrationContract = { id:string; status:string; property_code:string; code:string }
-type Property = { id:string; code:string; status:string; owners:Array<{person_id:string;name:string;ownership_percent:number}> }
 type ModuleTarget = 'properties'|'contracts'|'maintenance'|'finance'|'agenda'|'captures'
 type Props = { onNavigate:(module:ModuleTarget)=>void }
-
-type PipelineData = { captures:Capture[]; contracts:AdministrationContract[]; properties:Property[] }
 
 const money=(value:number)=>Number(value||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'})
 const timeLabel=(value:string)=>new Date(value).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})
@@ -47,11 +51,8 @@ const contractStageLabel:Record<string,string>={draft:'Rascunho',review:'Em revi
 
 export function DashboardPage({onNavigate}:Props) {
   const [data,setData]=useState<Overview|null>(null)
-  const [pipeline,setPipeline]=useState<PipelineData|null>(null)
   const [loading,setLoading]=useState(true)
-  const [pipelineLoading,setPipelineLoading]=useState(true)
   const [error,setError]=useState('')
-  const [pipelineError,setPipelineError]=useState('')
 
   const load=useCallback(async()=>{
     setLoading(true);setError('')
@@ -60,29 +61,7 @@ export function DashboardPage({onNavigate}:Props) {
     finally{setLoading(false)}
   },[])
 
-  const loadPipeline=useCallback(async()=>{
-    setPipelineLoading(true);setPipelineError('')
-    try{
-      const [capturesResult,contractsResult,propertiesResult]=await Promise.allSettled([
-        apiRequest<Capture[]>('/captures'),
-        apiRequest<AdministrationContract[]>('/administration-contracts'),
-        apiRequest<Property[]>('/properties'),
-      ])
-      const captures=capturesResult.status==='fulfilled'?capturesResult.value:[]
-      const contracts=contractsResult.status==='fulfilled'?contractsResult.value:[]
-      const properties=propertiesResult.status==='fulfilled'?propertiesResult.value:[]
-      if(capturesResult.status==='rejected'&&contractsResult.status==='rejected'&&propertiesResult.status==='rejected'){
-        throw capturesResult.reason
-      }
-      setPipeline({captures,contracts,properties})
-      if(capturesResult.status==='rejected'||contractsResult.status==='rejected'||propertiesResult.status==='rejected'){
-        setPipelineError('Alguns indicadores de entrada de carteira não estão disponíveis para o seu perfil de acesso.')
-      }
-    }catch(cause){setPipelineError(cause instanceof ApiError?cause.detail:'Não foi possível carregar o pipeline de entrada de carteira.')}
-    finally{setPipelineLoading(false)}
-  },[])
-
-  const reload=useCallback(()=>{void load();void loadPipeline()},[load,loadPipeline])
+  const reload=useCallback(()=>{void load()},[load])
   useEffect(()=>{reload()},[reload])
 
   const cards=useMemo(()=>[
@@ -95,39 +74,34 @@ export function DashboardPage({onNavigate}:Props) {
   ],[data])
 
   const pipelineSummary=useMemo(()=>{
-    const captures=pipeline?.captures??[]
-    const contracts=pipeline?.contracts??[]
-    const properties=pipeline?.properties??[]
     return {
-      openCaptures:captures.filter(item=>!['lost','available'].includes(item.status)).length,
-      approvedCaptures:captures.filter(item=>item.status==='approved').length,
-      convertedCaptures:captures.filter(item=>item.status==='available').length,
-      propertiesWithoutAdministration:properties.filter(item=>!contracts.some(contract=>contract.property_code===item.code&&contract.status!=='cancelled')).length,
-      propertiesWithAdministration:properties.filter(item=>contracts.some(contract=>contract.property_code===item.code&&contract.status!=='cancelled')).length,
-      managedProperties:properties.filter(item=>contracts.some(contract=>contract.property_code===item.code&&contract.status==='signed')).length,
-      contractsAwaitingSignature:contracts.filter(item=>item.status==='pending_signature').length,
-      contractsInReview:contracts.filter(item=>item.status==='review').length,
+      openCaptures:data?.open_captures??0,
+      approvedCaptures:data?.approved_captures??0,
+      propertiesWithoutAdministration:data?.properties_without_administration??0,
+      propertiesWithAdministration:data?.properties_with_administration??0,
+      managedProperties:data?.managed_properties??0,
+      contractsAwaitingSignature:data?.contracts_awaiting_signature??0,
+      contractsInReview:data?.contracts_in_review??0,
     }
-  },[pipeline])
+  },[data])
 
-  const recentCaptures=useMemo(()=>[...(pipeline?.captures??[])].filter(item=>item.status!=='lost').sort((a,b)=>new Date(b.created_at).getTime()-new Date(a.created_at).getTime()).slice(0,5),[pipeline])
+  const recentCaptures=data?.recent_captures??[]
 
   return <section className="workspace dashboard-workspace dashboard-live">
-    <div className="page-heading dashboard-heading"><div><span className="eyebrow">Visão geral</span><h1>Dashboard</h1><p>Operação da imobiliária em tempo real, conectando entrada de carteira, imóveis, contratos, agenda, manutenção e financeiro.</p></div><button className="button secondary" type="button" onClick={reload} disabled={loading||pipelineLoading}><RefreshCw size={14}/> Atualizar</button></div>
+    <div className="page-heading dashboard-heading"><div><span className="eyebrow">Visão geral</span><h1>Dashboard</h1><p>Operação da imobiliária em tempo real, conectando entrada de carteira, imóveis, contratos, agenda, manutenção e financeiro.</p></div><button className="button secondary" type="button" onClick={reload} disabled={loading}><RefreshCw size={14}/> Atualizar</button></div>
     {error&&<div className="form-alert danger-alert">{error}</div>}
 
     <div className="dashboard-live-metrics">{cards.map(({icon:Icon,...card})=><button type="button" className={`panel dashboard-live-card tone-${card.tone}`} key={card.label} onClick={()=>onNavigate(card.module)}><div className="dashboard-live-icon"><Icon size={19}/></div><div><span>{card.label}</span><strong>{loading?'—':card.value}</strong><small>{card.hint}</small></div></button>)}</div>
 
     <article className="panel dashboard-pipeline">
       <div className="dashboard-section-heading"><div><span className="eyebrow">Entrada de carteira</span><h2>Pipeline operacional</h2><p>Acompanhe o caminho da oportunidade até o imóvel entrar efetivamente na operação.</p></div><button className="button secondary compact" type="button" onClick={()=>onNavigate('captures')}>Abrir captações <ArrowRight size={13}/></button></div>
-      {pipelineError&&<div className="dashboard-pipeline-warning">{pipelineError}</div>}
       <div className="dashboard-pipeline-grid">
-        <button type="button" className="dashboard-pipeline-card" onClick={()=>onNavigate('captures')}><span className="dashboard-pipeline-index">01</span><div><small>Captações em andamento</small><strong>{pipelineLoading?'—':pipelineSummary.openCaptures}</strong><span>Novas oportunidades em negociação</span></div><ArrowRight size={15}/></button>
-        <button type="button" className="dashboard-pipeline-card" onClick={()=>onNavigate('captures')}><span className="dashboard-pipeline-index">02</span><div><small>Aguardando conversão</small><strong>{pipelineLoading?'—':pipelineSummary.approvedCaptures}</strong><span>Captações aprovadas para virar imóvel</span></div><ArrowRight size={15}/></button>
-        <button type="button" className="dashboard-pipeline-card" onClick={()=>onNavigate('properties')}><span className="dashboard-pipeline-index">03</span><div><small>Imóveis sem administração</small><strong>{pipelineLoading?'—':pipelineSummary.propertiesWithoutAdministration}</strong><span>Cadastros definitivos ainda sem contrato</span></div><ArrowRight size={15}/></button>
-        <button type="button" className="dashboard-pipeline-card" onClick={()=>onNavigate('properties')}><span className="dashboard-pipeline-index">04</span><div><small>Imóveis com administração</small><strong>{pipelineLoading?'—':pipelineSummary.propertiesWithAdministration}</strong><span>Cadastro com contrato ADM ativo</span></div><ArrowRight size={15}/></button>
-        <button type="button" className="dashboard-pipeline-card" onClick={()=>onNavigate('properties')}><span className="dashboard-pipeline-index">05</span><div><small>Carteira administrada</small><strong>{pipelineLoading?'—':pipelineSummary.managedProperties}</strong><span>Contrato ADM assinado e arquivado</span></div><ArrowRight size={15}/></button>
-        <button type="button" className="dashboard-pipeline-card" onClick={()=>onNavigate('contracts')}><span className="dashboard-pipeline-index">06</span><div><small>Contratos em assinatura</small><strong>{pipelineLoading?'—':pipelineSummary.contractsAwaitingSignature}</strong><span>{pipelineLoading?'—':`${pipelineSummary.contractsInReview} em revisão`}</span></div><ArrowRight size={15}/></button>
+        <button type="button" className="dashboard-pipeline-card" onClick={()=>onNavigate('captures')}><span className="dashboard-pipeline-index">01</span><div><small>Captações em andamento</small><strong>{loading?'—':pipelineSummary.openCaptures}</strong><span>Novas oportunidades em negociação</span></div><ArrowRight size={15}/></button>
+        <button type="button" className="dashboard-pipeline-card" onClick={()=>onNavigate('captures')}><span className="dashboard-pipeline-index">02</span><div><small>Aguardando conversão</small><strong>{loading?'—':pipelineSummary.approvedCaptures}</strong><span>Captações aprovadas para virar imóvel</span></div><ArrowRight size={15}/></button>
+        <button type="button" className="dashboard-pipeline-card" onClick={()=>onNavigate('properties')}><span className="dashboard-pipeline-index">03</span><div><small>Imóveis sem administração</small><strong>{loading?'—':pipelineSummary.propertiesWithoutAdministration}</strong><span>Cadastros definitivos ainda sem contrato</span></div><ArrowRight size={15}/></button>
+        <button type="button" className="dashboard-pipeline-card" onClick={()=>onNavigate('properties')}><span className="dashboard-pipeline-index">04</span><div><small>Imóveis com administração</small><strong>{loading?'—':pipelineSummary.propertiesWithAdministration}</strong><span>Cadastro com contrato ADM ativo</span></div><ArrowRight size={15}/></button>
+        <button type="button" className="dashboard-pipeline-card" onClick={()=>onNavigate('properties')}><span className="dashboard-pipeline-index">05</span><div><small>Carteira administrada</small><strong>{loading?'—':pipelineSummary.managedProperties}</strong><span>Contrato ADM assinado e arquivado</span></div><ArrowRight size={15}/></button>
+        <button type="button" className="dashboard-pipeline-card" onClick={()=>onNavigate('contracts')}><span className="dashboard-pipeline-index">06</span><div><small>Contratos em assinatura</small><strong>{loading?'—':pipelineSummary.contractsAwaitingSignature}</strong><span>{loading?'—':`${pipelineSummary.contractsInReview} em revisão`}</span></div><ArrowRight size={15}/></button>
       </div>
     </article>
 
@@ -137,7 +111,7 @@ export function DashboardPage({onNavigate}:Props) {
       <article className="panel dashboard-financial"><div className="dashboard-section-heading"><div><span className="eyebrow">Financeiro</span><h2>Pontos de atenção</h2><p>Valores que exigem acompanhamento operacional.</p></div><button className="button secondary compact" type="button" onClick={()=>onNavigate('finance')}>Abrir financeiro</button></div><div className="dashboard-financial-list"><button type="button" onClick={()=>onNavigate('finance')}><span className="dashboard-financial-icon danger"><TrendingDown size={17}/></span><div><span>Inadimplência em aberto</span><strong>{loading?'—':money(data?.overdue_amount||0)}</strong><small>Cobranças vencidas e ainda não liquidadas</small></div></button><button type="button" onClick={()=>onNavigate('finance')}><span className="dashboard-financial-icon"><WalletCards size={17}/></span><div><span>Repasses pendentes</span><strong>{loading?'—':money(data?.pending_repasses_amount||0)}</strong><small>Valores de proprietários aguardando repasse</small></div></button><button type="button" onClick={()=>onNavigate('agenda')}><span className={`dashboard-financial-icon ${data?.overdue_tasks?'danger':''}`}><AlertTriangle size={17}/></span><div><span>Tarefas atrasadas</span><strong>{loading?'—':data?.overdue_tasks||0}</strong><small>Prazos internos vencidos e ainda pendentes</small></div></button></div></article>
     </div>
 
-    <article className="panel dashboard-recent-captures"><div className="dashboard-section-heading"><div><span className="eyebrow">Movimentação</span><h2>Captações recentes</h2><p>As últimas oportunidades recebidas, com etapa atual e origem geográfica.</p></div><button className="button secondary compact" type="button" onClick={()=>onNavigate('captures')}>Ver todas</button></div>{pipelineLoading?<div className="settings-loading">Carregando captações...</div>:recentCaptures.length?<div className="dashboard-recent-captures-list">{recentCaptures.map(item=><button type="button" key={item.id} onClick={()=>onNavigate('captures')}><span className={`capture-dot ${item.status}`}/><div><strong>{item.contact_person_name||'Contato não vinculado'}</strong><small>{item.property_address.city||'Cidade não informada'}{item.property_address.state?`/${item.property_address.state}`:''} · {captureStageLabel[item.status]||item.status}</small></div><span>{dateLabel(item.created_at)}</span></button>)}</div>:<div className="dashboard-empty"><Handshake size={25}/><strong>Nenhuma captação disponível para exibição.</strong><span>As novas oportunidades aparecerão aqui conforme forem cadastradas.</span></div>}</article>
+    <article className="panel dashboard-recent-captures"><div className="dashboard-section-heading"><div><span className="eyebrow">Movimentação</span><h2>Captações recentes</h2><p>As últimas oportunidades recebidas, com etapa atual e origem geográfica.</p></div><button className="button secondary compact" type="button" onClick={()=>onNavigate('captures')}>Ver todas</button></div>{loading?<div className="settings-loading">Carregando captações...</div>:recentCaptures.length?<div className="dashboard-recent-captures-list">{recentCaptures.map(item=><button type="button" key={item.id} onClick={()=>onNavigate('captures')}><span className={`capture-dot ${item.status}`}/><div><strong>{item.contact_person_name||'Contato não vinculado'}</strong><small>{item.property_address.city||'Cidade não informada'}{item.property_address.state?`/${item.property_address.state}`:''} · {captureStageLabel[item.status]||item.status}</small></div><span>{dateLabel(item.created_at)}</span></button>)}</div>:<div className="dashboard-empty"><Handshake size={25}/><strong>Nenhuma captação disponível para exibição.</strong><span>As novas oportunidades aparecerão aqui conforme forem cadastradas.</span></div>}</article>
 
     <article className="panel dashboard-operation-note"><CalendarClock size={21}/><div><span className="eyebrow">Integração operacional</span><h2>A Agenda acompanha o ERP automaticamente</h2><p>Vistorias agendadas, manutenções, reajustes, vencimentos de contratos em 120/90/60/30 dias, cobranças e repasses entram na linha do tempo sem cadastro duplicado.</p></div></article>
   </section>

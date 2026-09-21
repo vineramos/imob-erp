@@ -51,6 +51,7 @@ function notificationTime(item: NotificationItem) {
 
 export function NotificationCenter({ onNavigate }: Props) {
   const wrapperRef = useRef<HTMLDivElement>(null)
+  const lastLoadedAt = useRef(0)
   const [data, setData] = useState<NotificationResponse | null>(null)
   const [open, setOpen] = useState(false)
   const [filter, setFilter] = useState<Filter>('all')
@@ -63,6 +64,7 @@ export function NotificationCenter({ onNavigate }: Props) {
     setError('')
     try {
       setData(await apiRequest<NotificationResponse>('/notifications?limit=80'))
+      lastLoadedAt.current = Date.now()
     } catch (cause) {
       if (!quiet) setError(cause instanceof ApiError ? cause.detail : 'Não foi possível carregar as notificações.')
     } finally {
@@ -72,8 +74,8 @@ export function NotificationCenter({ onNavigate }: Props) {
 
   useEffect(() => {
     void load()
-    const id = window.setInterval(() => void load(true), 60_000)
-    const refresh = () => { if (document.visibilityState === 'visible') void load(true) }
+    const id = window.setInterval(() => { if (document.visibilityState === 'visible') void load(true) }, 120_000)
+    const refresh = () => { if (document.visibilityState === 'visible' && Date.now() - lastLoadedAt.current >= 60_000) void load(true) }
     document.addEventListener('visibilitychange', refresh)
     window.addEventListener('focus', refresh)
     return () => {
