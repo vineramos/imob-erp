@@ -49,8 +49,6 @@ const devUser: CurrentUser = {
     'contracts.create', 'contracts.edit', 'contracts.approve', 'contracts.send_signature',
     'inspections.manage', 'maintenance.manage', 'agenda.manage', 'reports.export', 'documents.manage',
     'finance.charge.create', 'finance.reconcile', 'finance.payment.prepare', 'finance.payment.approve', 'finance.repasse.execute',
-/'finance.period.close'/d
-    'finance.period.close', 'finance.period.reopen', 'finance.adjustment.create', 'finance.sod.override', 'finance.repasse.execute',
     'communications.manage', 'communications.send',
     'settings.company.manage', 'settings.appearance.manage', 'users.manage', 'permissions.manage', 'approval_rules.manage', 'audit.view',
   ],
