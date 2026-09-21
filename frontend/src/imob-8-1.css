@@ -306,3 +306,96 @@
 @media (prefers-reduced-motion: reduce) {
   .sidebar, .sidebar-scrim, .nav-chevron { transition: none; }
 }
+
+
+/* Sidebar 8.1 — accordion leve e flyout do modo compacto */
+.nav-section { position: relative; }
+.nav-item.active { background: rgba(184,137,62,.075); }
+.nav-item.active::before { opacity: .7; }
+
+.nav-children-shell {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transition: grid-template-rows .18s ease, opacity .16s ease;
+}
+.nav-children-shell.is-open {
+  grid-template-rows: 1fr;
+  opacity: 1;
+}
+.nav-children-shell > .nav-children { overflow: hidden; }
+.nav-children {
+  margin: 0 0 4px 18px;
+  padding: 2px 0 3px 18px;
+  border-left: 1px solid rgba(255,255,255,.09);
+}
+.nav-child {
+  min-height: 29px;
+  padding: 3px 9px;
+  color: #8f9bad;
+  font-size: 10.5px;
+}
+.nav-child.active {
+  color: #ebc986;
+  background: rgba(184,137,62,.075);
+}
+.nav-child.active::before {
+  left: -19px;
+  width: 2px;
+  height: 17px;
+  border-radius: 2px;
+}
+
+.sidebar-collapsed .sidebar,
+.sidebar-collapsed .nav-list { overflow: visible; }
+.sidebar-collapsed .nav-section { width: 54px; }
+.nav-flyout {
+  position: absolute;
+  z-index: 80;
+  top: -5px;
+  left: calc(100% + 12px);
+  width: 214px;
+  padding: 8px;
+  border: 1px solid rgba(255,255,255,.085);
+  border-radius: 9px;
+  background: #111923;
+  box-shadow: 0 18px 44px rgba(0,0,0,.34);
+  animation: nav-flyout-in .14s ease-out;
+}
+.nav-flyout::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 100%;
+  width: 13px;
+  height: 100%;
+}
+.nav-flyout > strong {
+  display: block;
+  padding: 7px 9px 9px;
+  color: #f2f4f7;
+  font-size: 11px;
+  letter-spacing: .01em;
+}
+.nav-flyout > div { display: grid; gap: 1px; }
+.nav-flyout .nav-child { width: 100%; padding-left: 10px; }
+.nav-flyout .nav-child.active::before {
+  left: 0;
+  top: 6px;
+  bottom: 6px;
+  height: auto;
+  transform: none;
+}
+@keyframes nav-flyout-in {
+  from { opacity: 0; transform: translateX(-5px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+@media (max-width: 760px) {
+  .sidebar.is-mobile-open,
+  .sidebar.is-mobile-open .nav-list { overflow: hidden auto; }
+  .sidebar.is-mobile-open .nav-section { width: auto; }
+  .sidebar.is-mobile-open .nav-flyout { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .nav-children-shell, .nav-flyout { transition: none; animation: none; }
+}

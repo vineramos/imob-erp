@@ -38,6 +38,8 @@ export function AppSidebar({
     [granted],
   )
   const [expanded, setExpanded] = useState<Set<ModuleKey>>(() => new Set([activeModule]))
+  const [flyoutModule, setFlyoutModule] = useState<ModuleKey | null>(null)
+  const compact = collapsed && !mobileOpen
 
   useEffect(() => {
     setExpanded(current => current.has(activeModule) ? current : new Set(current).add(activeModule))
@@ -70,19 +72,45 @@ export function AppSidebar({
           const hasChildren = children.length > 0
           const isGroupActive = section.module === activeModule || children.some(child => child.module === activeModule)
           const isExpanded = expanded.has(section.module)
-          return <div className={`nav-section ${isGroupActive ? 'is-active' : ''}`} key={section.label}>
+          const childButtons = children.map(child => {
+            const childActive = currentRoute === child.route
+              || (!currentRoute.includes('?') && child.route === `/app/${activeModule}`)
+            return <button
+              className={`nav-child ${childActive ? 'active' : ''}`}
+              type="button"
+              role={compact ? 'menuitem' : undefined}
+              key={child.label}
+              onClick={() => navigate(child.module, child.route)}
+            >
+              <span>{child.label}</span>
+            </button>
+          })
+          return <div
+            className={`nav-section ${isGroupActive ? 'is-active' : ''}`}
+            key={section.label}
+            onMouseEnter={() => { if (compact && hasChildren) setFlyoutModule(section.module) }}
+            onMouseLeave={() => { if (compact) setFlyoutModule(null) }}
+            onFocus={() => { if (compact && hasChildren) setFlyoutModule(section.module) }}
+            onBlur={event => {
+              if (compact && !event.currentTarget.contains(event.relatedTarget as Node | null)) setFlyoutModule(null)
+            }}
+          >
             <button
               className={`nav-item nav-item-primary ${isGroupActive ? 'active' : ''}`}
               type="button"
-              title={collapsed ? section.label : undefined}
+              title={compact && !hasChildren ? section.label : undefined}
               aria-expanded={hasChildren ? isExpanded : undefined}
               onClick={() => {
-                if (hasChildren && !collapsed) {
-                  setExpanded(current => {
-                    const next = new Set(current)
-                    next.has(section.module) ? next.delete(section.module) : next.add(section.module)
-                    return next
-                  })
+                if (hasChildren) {
+                  if (compact) {
+                    setFlyoutModule(current => current === section.module ? null : section.module)
+                  } else {
+                    setExpanded(current => {
+                      const next = new Set(current)
+                      next.has(section.module) ? next.delete(section.module) : next.add(section.module)
+                      return next
+                    })
+                  }
                   return
                 }
                 navigate(section.module, section.route)
@@ -92,19 +120,12 @@ export function AppSidebar({
               <span>{section.label}</span>
               {hasChildren && <ChevronDown className={`nav-chevron ${isExpanded ? 'is-open' : ''}`} size={15} />}
             </button>
-            {hasChildren && isExpanded && !collapsed && <div className="nav-children">
-              {children.map(child => {
-                const childActive = currentRoute === child.route
-                  || (!currentRoute.includes('?') && child.route === `/app/${activeModule}`)
-                return <button
-                  className={`nav-child ${childActive ? 'active' : ''}`}
-                  type="button"
-                  key={child.label}
-                  onClick={() => navigate(child.module, child.route)}
-                >
-                  <span>{child.label}</span>
-                </button>
-              })}
+            {hasChildren && !compact && <div className={`nav-children-shell ${isExpanded ? 'is-open' : ''}`} aria-hidden={!isExpanded}>
+              <div className="nav-children">{childButtons}</div>
+            </div>}
+            {hasChildren && compact && flyoutModule === section.module && <div className="nav-flyout" role="menu" aria-label={section.label}>
+              <strong>{section.label}</strong>
+              <div>{childButtons}</div>
             </div>}
           </div>
         })}
