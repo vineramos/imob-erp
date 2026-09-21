@@ -257,9 +257,11 @@ def _collect_events(
     mine: bool = True,
     user_id: UUID | None = None,
     department_id: UUID | None = None,
+    reconcile: bool = True,
 ) -> list[AgendaEventResponse]:
     organization_id = context.user.organization_id
-    sync_system_tasks(db, organization_id)
+    if reconcile:
+        sync_system_tasks(db, organization_id)
     users, profiles, departments = ensure_agenda_structure(db, organization_id)
     user_names = {item.id: item.name for item in users}
     selected_user_ids, shared_department_ids, grants = _scope(db, context, mine=mine, user_id=user_id, department_id=department_id)
@@ -1037,7 +1039,9 @@ def today_summary(
 ) -> TodaySummaryResponse:
     today = datetime.now(timezone.utc).date()
     sync_system_tasks(db, context.user.organization_id)
-    events = _collect_events(db, context, today, today, mine=True)
+    # A reconciliação acima já atualizou todas as origens. Evita repetir o
+    # processo inteiro dentro de _collect_events na mesma requisição.
+    events = _collect_events(db, context, today, today, mine=True, reconcile=False)
     _, profiles, _ = ensure_agenda_structure(db, context.user.organization_id)
     profile = profiles[context.user.id]
     pending_scope = [AgendaTask.assigned_user_id == context.user.id]
@@ -1070,7 +1074,10 @@ def agenda_reminders(
     db: Session = Depends(get_db),
 ) -> list[ReminderResponse]:
     now = datetime.now(timezone.utc)
-    events = _collect_events(db, context, now.date(), now.date(), mine=True)
+    # Lembretes são leitura de eventos já reconciliados. A reconciliação é
+    # executada nas telas/fluxos da agenda e nos eventos de domínio; fazê-la em
+    # cada polling multiplicava consultas por cada origem operacional.
+    events = _collect_events(db, context, now.date(), now.date(), mine=True, reconcile=False)
     reminders = []
     for item in events:
         if item.all_day or item.status in {"completed", "cancelled", "missed"}:

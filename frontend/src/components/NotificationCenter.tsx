@@ -74,8 +74,8 @@ export function NotificationCenter({ onNavigate }: Props) {
 
   useEffect(() => {
     void load()
-    const id = window.setInterval(() => { if (document.visibilityState === 'visible') void load(true) }, 120_000)
-    const refresh = () => { if (document.visibilityState === 'visible' && Date.now() - lastLoadedAt.current >= 60_000) void load(true) }
+    const id = window.setInterval(() => { if (document.visibilityState === 'visible') void load(true) }, 10 * 60_000)
+    const refresh = () => { if (document.visibilityState === 'visible' && Date.now() - lastLoadedAt.current >= 5 * 60_000) void load(true) }
     document.addEventListener('visibilitychange', refresh)
     window.addEventListener('focus', refresh)
     return () => {

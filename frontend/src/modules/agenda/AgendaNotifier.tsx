@@ -87,7 +87,10 @@ export function AgendaNotifier({ onOpenAgenda }: Props) {
       } catch { /* silencioso fora de sessão */ }
     }
     void poll()
-    const id = window.setInterval(() => void poll(), 60_000)
+    // Um lembrete pode entrar na janela de 15 minutos sem exigir consulta por
+    // minuto. Cinco minutos preservam os avisos de 15/10/5 min e reduzem o
+    // trabalho automático quando o ERP está apenas aberto em segundo plano.
+    const id = window.setInterval(() => void poll(), 5 * 60_000)
     return () => { cancelled = true; window.clearInterval(id) }
   }, [reminder, snoozeUntil])
 

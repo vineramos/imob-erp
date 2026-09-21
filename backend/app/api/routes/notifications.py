@@ -7,7 +7,7 @@ from zoneinfo import ZoneInfo
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 from sqlalchemy import and_, or_, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, load_only
 
 from app.core.database import get_db
 from app.domains.agenda.logic import access_map, ensure_agenda_structure
@@ -118,7 +118,14 @@ def _agenda_notifications(db: Session, context: UserContext, now: datetime) -> t
         scope.append(and_(AgendaTask.assigned_user_id.is_(None), AgendaTask.department_id.in_(department_ids)))
     if scope:
         tasks = db.scalars(
-            select(AgendaTask).where(
+            select(AgendaTask).options(load_only(
+                AgendaTask.id, AgendaTask.internal_number, AgendaTask.title,
+                AgendaTask.starts_at, AgendaTask.priority, AgendaTask.privacy,
+                AgendaTask.assigned_user_id, AgendaTask.department_id,
+                AgendaTask.source_module, AgendaTask.source_id,
+                AgendaTask.automatic, AgendaTask.mandatory_action,
+                AgendaTask.reschedule_sequence,
+            )).where(
                 AgendaTask.organization_id == context.user.organization_id,
                 AgendaTask.status == "pending",
                 AgendaTask.starts_at <= now,
@@ -265,7 +272,12 @@ def _finance_notifications(db: Session, context: UserContext, today: date, block
 def _maintenance_notifications(db: Session, context: UserContext, now: datetime, blocked_sources: set[tuple[str, str]]) -> list[dict[str, Any]]:
     items: list[dict[str, Any]] = []
     rows = db.scalars(
-        select(MaintenanceRequest).where(
+        select(MaintenanceRequest).options(load_only(
+            MaintenanceRequest.id, MaintenanceRequest.internal_number,
+            MaintenanceRequest.title, MaintenanceRequest.priority,
+            MaintenanceRequest.status, MaintenanceRequest.scheduled_at,
+            MaintenanceRequest.reported_at, MaintenanceRequest.updated_at,
+        )).where(
             MaintenanceRequest.organization_id == context.user.organization_id,
             MaintenanceRequest.status.in_(("awaiting_approval", "scheduled", "in_progress")),
         ).order_by(MaintenanceRequest.reported_at.asc()).limit(30)
