@@ -3,6 +3,7 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react'
 import { ApiError, apiRequest } from '../../api/client'
 import type { AdministrationContract, Address, Person, Property, PropertyCreate, PublicationReadiness } from '../../api/types'
 import { PropertyMaintenancePanel } from './PropertyMaintenancePanel'
+import { PropertyLifecyclePanel } from './PropertyLifecyclePanel'
 import { EntityDocumentsPanel } from '../documents/EntityDocumentsPanel'
 import './property-workspace.css'
 import './property-workspace-enhancements.css'
@@ -13,7 +14,7 @@ const propertyTypes=[['apartment','Apartamento'],['house','Casa'],['commercial',
 const statusLabels:Record<string,string>={draft:'Rascunho',available:'Disponível',reserved:'Reservado',leased:'Locado',inactive:'Inativo'}
 const contractStatusLabels:Record<string,string>={draft:'Rascunho',review:'Em revisão',approved:'Aprovado',pending_signature:'Assinatura',signed:'Assinado',cancelled:'Cancelado'}
 const inspectionStatusLabels:Record<string,string>={draft:'Rascunho',ready:'Laudo concluído',contested:'Contestada',finalized:'Finalizada',cancelled:'Cancelada'}
-const detailTabs=[['summary','Resumo'],['owners','Proprietários'],['administration','Administração'],['commercial','Comercial'],['finance','Financeiro'],['documents','Documentos'],['inspections','Vistorias'],['maintenance','Manutenções'],['history','Histórico']] as const
+const detailTabs=[['summary','Resumo'],['owners','Proprietários'],['administration','Administração'],['commercial','Comercial'],['finance','Financeiro'],['documents','Documentos'],['inspections','Vistorias'],['maintenance','Manutenções'],['lifecycle','Rastreabilidade'],['history','Histórico']] as const
 type DetailTab=(typeof detailTabs)[number][0]
 type Lease={id:string;code:string;property_id:string;tenants:Array<{name:string}>;status:string;rent_amount:number;start_date:string;end_date:string;archive_status:string;final_document_hash:string|null;signed_at:string|null}
 type Inspection={id:string;code:string;property_id:string;lease_code:string;status:string;inspector_name:string|null;scheduled_at:string|null;performed_at:string|null;finalized_at:string|null;report_hash:string|null;key_handover:{handed_over_at:string;recipient_name:string}|null}
@@ -78,6 +79,7 @@ export function PropertyWorkspacePage({permissions}:Props){
       {detailTab==='documents'&&<EntityDocumentsPanel entityType="property" entityId={selected.id} entityLabel={`Imóvel ${selected.code}`} permissions={permissions}/>}
       {detailTab==='inspections'&&<article className="panel property-tab-panel"><div className="property-panel-heading"><div><span className="eyebrow">Vistorias</span><h2>Histórico de vistorias</h2></div></div>{inspections.length?<div className="property-record-list">{inspections.map(item=><div className="property-record" key={item.id}><ClipboardCheck size={18}/><div><strong>{item.code} · {item.lease_code}</strong><span>{item.inspector_name||'Vistoriador não informado'} · {dateLabel(item.scheduled_at||item.performed_at)}</span></div><i className={`status-badge ${statusClass(item.status)}`}>{inspectionStatusLabels[item.status]??item.status}</i></div>)}</div>:<div className="property-inline-empty">Nenhuma vistoria vinculada.</div>}</article>}
       {detailTab==='maintenance'&&<PropertyMaintenancePanel propertyId={selected.id} permissions={permissions}/>} 
+      {detailTab==='lifecycle'&&<PropertyLifecyclePanel propertyId={selected.id} permissions={permissions}/>} 
       {detailTab==='history'&&<article className="panel property-tab-panel"><div className="property-panel-heading"><div><span className="eyebrow">Histórico</span><h2>Linha do tempo do cadastro</h2></div></div><div className="property-record-list"><div className="property-record"><History size={18}/><div><strong>Cadastro criado</strong><span>{dateLabel(selected.created_at)}</span></div></div><div className="property-record"><RefreshCw size={18}/><div><strong>Última atualização</strong><span>{dateLabel(selected.updated_at)}</span></div></div>{activeInspection&&<div className="property-record"><ClipboardCheck size={18}/><div><strong>Última vistoria vinculada</strong><span>{activeInspection.code} · {inspectionStatusLabels[activeInspection.status]??activeInspection.status}</span></div></div>}</div></article>}
       {showForm&&renderModal()}
     </section>

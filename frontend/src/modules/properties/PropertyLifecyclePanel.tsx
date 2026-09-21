@@ -1,7 +1,6 @@
 import { CheckCircle2, Circle, CircleAlert, RefreshCw } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { ApiError, apiRequest } from '../../api/client'
-import type { Property } from '../../api/types'
 import './property-lifecycle-panel.css'
 
 type LifecyclePerson = { id: string; name: string; document_number?: string | null; role_keys?: string[] }
@@ -30,52 +29,32 @@ const statusLabel: Record<string, string> = {
 function label(value: string | null | undefined) { return !value ? '—' : statusLabel[value] ?? value.replaceAll('_', ' ') }
 function dateLabel(value: string | null | undefined) { return value ? new Date(value).toLocaleDateString('pt-BR') : '' }
 
-export function PropertyLifecyclePanel({ permissions }: { permissions: string[] }) {
+export function PropertyLifecyclePanel({ permissions, propertyId }: { permissions: string[]; propertyId: string }) {
   const canView = permissions.includes('properties.view')
-  const [properties, setProperties] = useState<Property[]>([])
-  const [selectedId, setSelectedId] = useState('')
   const [data, setData] = useState<LifecycleResponse | null>(null)
-  const [loading, setLoading] = useState(true)
   const [detailLoading, setDetailLoading] = useState(false)
   const [error, setError] = useState('')
   const [refreshKey, setRefreshKey] = useState(0)
 
-  const loadProperties = useCallback(async () => {
-    setLoading(true)
-    setError('')
-    try {
-      const items = await apiRequest<Property[]>('/properties')
-      setProperties(items)
-      setSelectedId(current => current && items.some(item => item.id === current) ? current : (items[0]?.id ?? ''))
-    } catch (cause) {
-      setError(cause instanceof ApiError ? cause.detail : 'Não foi possível carregar os imóveis.')
-    } finally { setLoading(false) }
-  }, [])
-
-  useEffect(() => { if (canView) void loadProperties() }, [canView, loadProperties, refreshKey])
-
   useEffect(() => {
-    if (!selectedId) { setData(null); return }
+    if (!canView || !propertyId) { setData(null); return }
     void (async () => {
       setDetailLoading(true); setError('')
-      try { setData(await apiRequest<LifecycleResponse>(`/properties/${selectedId}/lifecycle`)) }
+      try { setData(await apiRequest<LifecycleResponse>(`/properties/${propertyId}/lifecycle`)) }
       catch (cause) { setData(null); setError(cause instanceof ApiError ? cause.detail : 'Não foi possível carregar a rastreabilidade.') }
       finally { setDetailLoading(false) }
     })()
-  }, [selectedId, refreshKey])
+  }, [canView, propertyId, refreshKey])
 
   const progress = useMemo(() => data?.lifecycle.length ? Math.round((data.lifecycle.filter(step => step.linked).length / data.lifecycle.length) * 100) : 0, [data])
   if (!canView) return null
 
-  return <section className="property-lifecycle-panel">
+  return <article className="panel property-tab-panel property-lifecycle-panel">
     <div className="property-lifecycle-heading">
-      <div><span className="eyebrow">Fase 1 · Rastreabilidade</span><h2>Ciclo operacional do imóvel</h2><p>Da captação até a administração, publicação e locação.</p></div>
-      <button className="button secondary" type="button" onClick={() => setRefreshKey(value => value + 1)} disabled={loading || detailLoading}><RefreshCw size={14} /> Atualizar</button>
+      <div><span className="eyebrow">Rastreabilidade</span><h2>Ciclo operacional</h2><p>Vínculos deste imóvel desde a captação até a publicação e locação.</p></div>
+      <button className="button secondary compact" type="button" onClick={() => setRefreshKey(value => value + 1)} disabled={detailLoading}><RefreshCw size={14} /> Atualizar</button>
     </div>
-    <div className="property-lifecycle-toolbar">
-      <label><span>Imóvel</span><select value={selectedId} onChange={event => setSelectedId(event.target.value)} disabled={loading}><option value="">Selecione um imóvel</option>{properties.map(property => <option key={property.id} value={property.id}>{property.code} · {property.public_title || property.address.neighborhood || property.address.city}</option>)}</select></label>
-      {data && <div className="property-lifecycle-progress"><span>{progress}% do ciclo rastreado</span><div><i style={{ width: `${progress}%` }} /></div></div>}
-    </div>
+    {data && <div className="property-lifecycle-progress"><span>{progress}% do ciclo rastreado</span><div><i style={{ width: `${progress}%` }} /></div></div>}
     {error && <div className="property-lifecycle-error"><CircleAlert size={15} /> {error}</div>}
     {detailLoading && <div className="property-lifecycle-loading">Carregando ciclo...</div>}
     {data && !detailLoading && <>
@@ -91,5 +70,5 @@ export function PropertyLifecyclePanel({ permissions }: { permissions: string[] 
         <div><span>Locação</span><strong>{data.lease?.code || 'Ainda não criada'}</strong>{data.lease && <small>{label(data.lease.status)}{data.lease.signed_at ? ` · assinada em ${dateLabel(data.lease.signed_at)}` : ''}</small>}</div>
       </div>
     </>}
-  </section>
+  </article>
 }
