@@ -1,38 +1,92 @@
 from __future__ import annotations
 
 import smtplib
+from dataclasses import dataclass
 from email.message import EmailMessage
 from email.utils import formataddr
 from html import escape
 from typing import Any
+from uuid import UUID
+
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
+from app.domains.foundation.models import OrganizationIntegrationCredential
+from app.integrations.credential_crypto import CredentialCryptoError, decrypt_secret
 
 
 class EmailDeliveryError(RuntimeError):
     pass
 
 
-def smtp_configured() -> bool:
-    return get_settings().email_smtp_configured
+@dataclass(frozen=True)
+class SmtpConfig:
+    host: str
+    port: int
+    username: str
+    password: str
+    from_email: str
+    from_name: str
+    use_tls: bool
+    use_ssl: bool
+
+    @property
+    def configured(self) -> bool:
+        return bool(self.host.strip() and self.from_email.strip() and (not self.username.strip() or self.password))
 
 
-def _deliver(message: EmailMessage) -> None:
+def environment_smtp_config() -> SmtpConfig:
     settings = get_settings()
-    if not settings.email_smtp_configured:
+    return SmtpConfig(
+        host=settings.email_smtp_host, port=settings.email_smtp_port,
+        username=settings.email_smtp_username, password=settings.email_smtp_password,
+        from_email=settings.email_smtp_from_email, from_name=settings.email_smtp_from_name,
+        use_tls=settings.email_smtp_use_tls, use_ssl=settings.email_smtp_use_ssl,
+    )
+
+
+def smtp_config_for_organization(db: Session, organization_id: UUID) -> SmtpConfig:
+    row = db.scalar(select(OrganizationIntegrationCredential).where(
+        OrganizationIntegrationCredential.organization_id == organization_id,
+        OrganizationIntegrationCredential.provider == "smtp",
+    ))
+    if row is None:
+        return environment_smtp_config()
+    values = dict(row.non_secret_config or {})
+    password = ""
+    if row.encrypted_secret:
+        try:
+            password = decrypt_secret(row.encrypted_secret, scope=f"{organization_id}:smtp")
+        except CredentialCryptoError as exc:
+            raise EmailDeliveryError(str(exc)) from exc
+    return SmtpConfig(
+        host=str(values.get("host") or ""), port=int(values.get("port") or 587),
+        username=str(values.get("username") or ""), password=password,
+        from_email=str(values.get("from_email") or ""), from_name=str(values.get("from_name") or ""),
+        use_tls=bool(values.get("use_tls", True)), use_ssl=bool(values.get("use_ssl", False)),
+    )
+
+
+def smtp_configured(config: SmtpConfig | None = None) -> bool:
+    return (config or environment_smtp_config()).configured
+
+
+def _deliver(message: EmailMessage, config: SmtpConfig) -> None:
+    if not config.configured:
         raise EmailDeliveryError("O envio de e-mail transacional ainda não está configurado.")
     try:
-        if settings.email_smtp_use_ssl:
-            client: smtplib.SMTP = smtplib.SMTP_SSL(settings.email_smtp_host, settings.email_smtp_port, timeout=12)
+        if config.use_ssl:
+            client: smtplib.SMTP = smtplib.SMTP_SSL(config.host, config.port, timeout=12)
         else:
-            client = smtplib.SMTP(settings.email_smtp_host, settings.email_smtp_port, timeout=12)
+            client = smtplib.SMTP(config.host, config.port, timeout=12)
         with client:
             client.ehlo()
-            if settings.email_smtp_use_tls and not settings.email_smtp_use_ssl:
+            if config.use_tls and not config.use_ssl:
                 client.starttls()
                 client.ehlo()
-            if settings.email_smtp_username.strip():
-                client.login(settings.email_smtp_username, settings.email_smtp_password)
+            if config.username.strip():
+                client.login(config.username, config.password)
             client.send_message(message)
     except (OSError, smtplib.SMTPException) as exc:
         raise EmailDeliveryError("Não foi possível entregar o e-mail pelo servidor SMTP configurado.") from exc
@@ -45,13 +99,14 @@ def send_email_message(
     text_body: str,
     organization_name: str,
     attachments: list[dict[str, Any]] | None = None,
+    config: SmtpConfig | None = None,
 ) -> None:
-    settings = get_settings()
-    if not settings.email_smtp_configured:
+    config = config or environment_smtp_config()
+    if not config.configured:
         raise EmailDeliveryError("O envio de e-mail transacional ainda não está configurado.")
     message = EmailMessage()
     message["Subject"] = subject.strip() or organization_name
-    message["From"] = formataddr((settings.email_smtp_from_name.strip() or organization_name, settings.email_smtp_from_email.strip()))
+    message["From"] = formataddr((config.from_name.strip() or organization_name, config.from_email.strip()))
     message["To"] = recipient
     message.set_content(text_body)
     html_body = "<br>".join(escape(text_body).splitlines())
@@ -69,7 +124,7 @@ def send_email_message(
             continue
         maintype, _, subtype = content_type.partition("/")
         message.add_attachment(bytes(content), maintype=maintype or "application", subtype=subtype or "octet-stream", filename=filename)
-    _deliver(message)
+    _deliver(message, config)
 
 
 def send_portal_verification_email(
@@ -78,9 +133,10 @@ def send_portal_verification_email(
     code: str,
     organization_name: str,
     purpose: str,
+    config: SmtpConfig | None = None,
 ) -> None:
-    settings = get_settings()
-    if not settings.email_smtp_configured:
+    config = config or environment_smtp_config()
+    if not config.configured:
         raise EmailDeliveryError("O envio de e-mail do portal ainda não está configurado.")
 
     first_access = purpose == "first_access"
@@ -89,7 +145,7 @@ def send_portal_verification_email(
 
     message = EmailMessage()
     message["Subject"] = subject
-    message["From"] = formataddr((settings.email_smtp_from_name.strip() or organization_name, settings.email_smtp_from_email.strip()))
+    message["From"] = formataddr((config.from_name.strip() or organization_name, config.from_email.strip()))
     message["To"] = recipient
     message.set_content(
         f"Olá!\n\nUse o código abaixo para {action} no Portal do Inquilino:\n\n{code}\n\n"
@@ -105,4 +161,4 @@ def send_portal_verification_email(
         f"<p>{escape(organization_name)}</p></body></html>",
         subtype="html",
     )
-    _deliver(message)
+    _deliver(message, config)

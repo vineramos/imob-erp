@@ -116,6 +116,20 @@ class OrganizationSettings(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
 
+class OrganizationIntegrationCredential(Base):
+    __tablename__ = "organization_integration_credentials"
+    __table_args__ = (UniqueConstraint("organization_id", "provider", name="uq_org_integration_credential_provider"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organization_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
+    provider: Mapped[str] = mapped_column(String(80), nullable=False)
+    non_secret_config: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, nullable=False)
+    encrypted_secret: Mapped[str | None] = mapped_column(Text)
+    updated_by_user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("app_users.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+
 class ApprovalRule(Base):
     __tablename__ = "approval_rules"
 

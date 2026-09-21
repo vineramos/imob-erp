@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr, Field, model_validator
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -14,11 +14,14 @@ from app.domains.finance.providers import BankProviderError, bank_provider
 from app.core.database import get_db
 from app.domains.contracts.models import AdministrationContract, SignatureWebhookEvent
 from app.domains.foundation.access import UserContext, require_permission
-from app.domains.foundation.models import OrganizationSettings
+from app.domains.foundation.audit import write_audit
+from app.domains.foundation.models import Organization, OrganizationIntegrationCredential, OrganizationSettings
 from app.domains.leases.models import LeaseContract
 from app.domains.portfolio.models import Property
 from app.integrations.document_storage import DocumentStorageError, DocumentStorageStatus, get_document_storage
 from app.integrations.signature import SignatureProviderError, SignatureProviderStatus, get_signature_provider
+from app.integrations.credential_crypto import CredentialCryptoError, encrypt_secret
+from app.integrations.email import EmailDeliveryError, SmtpConfig, send_email_message, smtp_config_for_organization
 
 router = APIRouter(tags=["integrations"])
 
@@ -65,6 +68,76 @@ class IntegrationReadinessResponse(BaseModel):
     ready: bool
     pending_count: int
     items: list[IntegrationReadinessItem]
+
+
+class SmtpConfigurationResponse(BaseModel):
+    host: str = ""
+    port: int = 587
+    username: str = ""
+    from_email: str = ""
+    from_name: str = ""
+    use_tls: bool = True
+    use_ssl: bool = False
+    password_configured: bool = False
+    source: Literal["erp", "environment", "none"] = "none"
+
+
+class SmtpConfigurationUpdate(BaseModel):
+    host: str = Field(min_length=1, max_length=255)
+    port: int = Field(default=587, ge=1, le=65535)
+    username: str = Field(default="", max_length=255)
+    password: str | None = Field(default=None, max_length=500)
+    from_email: EmailStr
+    from_name: str = Field(default="", max_length=160)
+    use_tls: bool = True
+    use_ssl: bool = False
+
+    @model_validator(mode="after")
+    def validate_security_mode(self):
+        if self.use_tls and self.use_ssl:
+            raise ValueError("Escolha TLS ou SSL, não os dois ao mesmo tempo.")
+        return self
+
+
+class SmtpTestRequest(BaseModel):
+    recipient: EmailStr | None = None
+
+
+class SmtpTestResponse(BaseModel):
+    configured: bool
+    reachable: bool
+    message: str
+    recipient: str
+    checked_at: datetime
+
+
+def _smtp_row(db: Session, organization_id) -> OrganizationIntegrationCredential | None:
+    return db.scalar(select(OrganizationIntegrationCredential).where(
+        OrganizationIntegrationCredential.organization_id == organization_id,
+        OrganizationIntegrationCredential.provider == "smtp",
+    ))
+
+
+def _smtp_response(db: Session, organization_id) -> SmtpConfigurationResponse:
+    row = _smtp_row(db, organization_id)
+    if row is not None:
+        value = dict(row.non_secret_config or {})
+        return SmtpConfigurationResponse(
+            host=str(value.get("host") or ""), port=int(value.get("port") or 587),
+            username=str(value.get("username") or ""), from_email=str(value.get("from_email") or ""),
+            from_name=str(value.get("from_name") or ""), use_tls=bool(value.get("use_tls", True)),
+            use_ssl=bool(value.get("use_ssl", False)), password_configured=bool(row.encrypted_secret), source="erp",
+        )
+    environment = get_settings()
+    if environment.email_smtp_configured:
+        return SmtpConfigurationResponse(
+            host=environment.email_smtp_host, port=environment.email_smtp_port,
+            username=environment.email_smtp_username, from_email=environment.email_smtp_from_email,
+            from_name=environment.email_smtp_from_name, use_tls=environment.email_smtp_use_tls,
+            use_ssl=environment.email_smtp_use_ssl, password_configured=bool(environment.email_smtp_password),
+            source="environment",
+        )
+    return SmtpConfigurationResponse()
 
 
 def _response(value: SignatureProviderStatus) -> SignatureIntegrationStatusResponse:
@@ -281,7 +354,10 @@ def integrations_readiness(
             )
         )
     else:
-        email_configured = settings.email_smtp_configured
+        try:
+            email_configured = smtp_config_for_organization(db, context.user.organization_id).configured
+        except EmailDeliveryError:
+            email_configured = False
         items.append(
             IntegrationReadinessItem(
                 key="email",
@@ -301,6 +377,88 @@ def integrations_readiness(
 
     pending = [item for item in items if item.selected and not item.configured]
     return IntegrationReadinessResponse(ready=not pending, pending_count=len(pending), items=items)
+
+
+@router.get("/integrations/email/config", response_model=SmtpConfigurationResponse)
+def get_smtp_configuration(
+    context: UserContext = Depends(require_permission("settings.view")),
+    db: Session = Depends(get_db),
+) -> SmtpConfigurationResponse:
+    return _smtp_response(db, context.user.organization_id)
+
+
+@router.put("/integrations/email/config", response_model=SmtpConfigurationResponse)
+def update_smtp_configuration(
+    payload: SmtpConfigurationUpdate,
+    request: Request,
+    context: UserContext = Depends(require_permission("settings.company.manage")),
+    db: Session = Depends(get_db),
+) -> SmtpConfigurationResponse:
+    row = _smtp_row(db, context.user.organization_id)
+    before = _smtp_response(db, context.user.organization_id).model_dump(mode="json")
+    if row is None:
+        row = OrganizationIntegrationCredential(
+            organization_id=context.user.organization_id,
+            provider="smtp",
+            non_secret_config={},
+            updated_by_user_id=context.user.id,
+        )
+        db.add(row)
+        db.flush()
+    if payload.username.strip() and not ((payload.password or "").strip() or row.encrypted_secret):
+        raise HTTPException(status_code=422, detail="Informe a senha SMTP para o usuário configurado.")
+    if payload.password is not None and payload.password.strip():
+        try:
+            row.encrypted_secret = encrypt_secret(
+                payload.password,
+                scope=f"{context.user.organization_id}:smtp",
+            )
+        except CredentialCryptoError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+    row.non_secret_config = {
+        "host": payload.host.strip(), "port": payload.port, "username": payload.username.strip(),
+        "from_email": str(payload.from_email).strip().lower(), "from_name": payload.from_name.strip(),
+        "use_tls": payload.use_tls, "use_ssl": payload.use_ssl,
+    }
+    row.updated_by_user_id = context.user.id
+    after = {**row.non_secret_config, "password_configured": bool(row.encrypted_secret)}
+    safe_before = {**before, "password_configured": before["password_configured"]}
+    forwarded = request.headers.get("x-forwarded-for", "").split(",", 1)[0].strip()
+    write_audit(
+        db, context=context, action="settings.integrations.smtp.updated", module="settings",
+        entity_type="organization_integration_credential", entity_id=str(row.id),
+        before_data=safe_before, after_data=after,
+        ip_address=forwarded or (request.client.host if request.client else None),
+        user_agent=request.headers.get("user-agent"),
+    )
+    db.commit()
+    return _smtp_response(db, context.user.organization_id)
+
+
+@router.post("/integrations/email/test", response_model=SmtpTestResponse)
+def test_smtp_configuration(
+    payload: SmtpTestRequest,
+    context: UserContext = Depends(require_permission("settings.company.manage")),
+    db: Session = Depends(get_db),
+) -> SmtpTestResponse:
+    recipient = str(payload.recipient or context.user.email).strip().lower()
+    organization = db.get(Organization, context.user.organization_id)
+    organization_name = organization.display_name if organization else "Imob ERP"
+    try:
+        config = smtp_config_for_organization(db, context.user.organization_id)
+        send_email_message(
+            recipient=recipient,
+            subject=f"{organization_name} · Teste de e-mail",
+            text_body="Configuração SMTP validada com sucesso. O ERP já pode enviar comunicações operacionais.",
+            organization_name=organization_name,
+            config=config,
+        )
+    except EmailDeliveryError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    return SmtpTestResponse(
+        configured=True, reachable=True, message="E-mail de teste enviado com sucesso.",
+        recipient=recipient, checked_at=datetime.now(timezone.utc),
+    )
 
 
 @router.get("/integrations/signature/status", response_model=SignatureIntegrationStatusResponse)

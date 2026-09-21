@@ -1,7 +1,7 @@
 import { Banknote, CheckCircle2, CircleAlert, FileSignature, Mail, RefreshCw, Save, ShieldCheck, Webhook } from 'lucide-react'
 import { FormEvent, useEffect, useState } from 'react'
 import { ApiError, apiRequest } from '../../api/client'
-import type { BankIntegrationStatus, IntegrationReadiness, IntegrationsConfig, SignatureIntegrationStatus } from '../../api/types'
+import type { BankIntegrationStatus, IntegrationReadiness, IntegrationsConfig, SignatureIntegrationStatus, SmtpConfiguration } from '../../api/types'
 import { authConfigured } from '../../auth/client'
 
 const defaults: IntegrationsConfig = {
@@ -12,6 +12,8 @@ const defaults: IntegrationsConfig = {
   webhook_base_url: '',
   notes: '',
 }
+
+const smtpDefaults: SmtpConfiguration = { host: '', port: 587, username: '', from_email: '', from_name: '', use_tls: true, use_ssl: false, password_configured: false, source: 'none' }
 
 type Props = { canEdit: boolean }
 
@@ -32,10 +34,15 @@ export function IntegrationsSettingsPage({ canEdit }: Props) {
   const [bankStatus, setBankStatus] = useState<BankIntegrationStatus | null>(null)
   const [signatureStatus, setSignatureStatus] = useState<SignatureIntegrationStatus | null>(null)
   const [readiness, setReadiness] = useState<IntegrationReadiness | null>(null)
+  const [smtp, setSmtp] = useState<SmtpConfiguration>(smtpDefaults)
+  const [smtpPassword, setSmtpPassword] = useState('')
+  const [testRecipient, setTestRecipient] = useState('')
   const [loading, setLoading] = useState(authConfigured)
   const [saving, setSaving] = useState(false)
   const [testingBank, setTestingBank] = useState(false)
   const [testingSignature, setTestingSignature] = useState(false)
+  const [savingSmtp, setSavingSmtp] = useState(false)
+  const [testingSmtp, setTestingSmtp] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
 
@@ -47,13 +54,16 @@ export function IntegrationsSettingsPage({ canEdit }: Props) {
       apiRequest<BankIntegrationStatus>('/integrations/bank/status').catch(() => null),
       apiRequest<SignatureIntegrationStatus>('/integrations/signature/status').catch(() => null),
       apiRequest<IntegrationReadiness>('/integrations/readiness').catch(() => null),
+      apiRequest<SmtpConfiguration>('/integrations/email/config').catch(() => smtpDefaults),
     ])
-      .then(([data, bankStatusData, statusData, readinessData]) => {
+      .then(([data, bankStatusData, statusData, readinessData, smtpData]) => {
         if (!active) return
         setForm(data)
         setBankStatus(bankStatusData)
         setSignatureStatus(statusData)
         setReadiness(readinessData)
+        setSmtp(smtpData)
+        setTestRecipient(smtpData.from_email)
       })
       .catch((cause) => { if (active) setError(cause instanceof ApiError ? cause.detail : 'Não foi possível carregar as integrações.') })
       .finally(() => { if (active) setLoading(false) })
@@ -118,6 +128,34 @@ export function IntegrationsSettingsPage({ canEdit }: Props) {
     }
   }
 
+  async function saveSmtp() {
+    if (!canEdit || !authConfigured) return
+    setSavingSmtp(true); setError(''); setSuccess('')
+    try {
+      const updated = await apiRequest<SmtpConfiguration>('/integrations/email/config', {
+        method: 'PUT',
+        body: JSON.stringify({ ...smtp, password: smtpPassword || null, source: undefined, password_configured: undefined }),
+      })
+      setSmtp(updated); setSmtpPassword(''); setTestRecipient((current) => current || updated.from_email)
+      setReadiness(await apiRequest<IntegrationReadiness>('/integrations/readiness').catch(() => null))
+      setSuccess('Configuração SMTP salva com senha protegida e auditoria registrada.')
+    } catch (cause) {
+      setError(cause instanceof ApiError ? cause.detail : 'Não foi possível salvar a configuração SMTP.')
+    } finally { setSavingSmtp(false) }
+  }
+
+  async function testSmtpConnection() {
+    if (!canEdit || !authConfigured) return
+    setTestingSmtp(true); setError(''); setSuccess('')
+    try {
+      const result = await apiRequest<{message:string;recipient:string}>('/integrations/email/test', { method: 'POST', body: JSON.stringify({ recipient: testRecipient || null }) })
+      setSuccess(`${result.message} Destinatário: ${result.recipient}.`)
+      setReadiness(await apiRequest<IntegrationReadiness>('/integrations/readiness').catch(() => null))
+    } catch (cause) {
+      setError(cause instanceof ApiError ? cause.detail : 'Não foi possível enviar o e-mail de teste.')
+    } finally { setTestingSmtp(false) }
+  }
+
   if (loading) return <section className="workspace settings-workspace"><article className="panel settings-loading">Carregando integrações...</article></section>
 
   return (
@@ -126,7 +164,7 @@ export function IntegrationsSettingsPage({ canEdit }: Props) {
         <div>
           <span className="eyebrow">Configurações · Conectividade</span>
           <h1>Integrações</h1>
-          <p>Escolha os provedores e acompanhe o estado real de conexão. Credenciais e chaves sensíveis continuam fora desta tela.</p>
+          <p>Escolha os provedores, cadastre o SMTP com senha protegida e acompanhe o estado real das conexões.</p>
         </div>
       </div>
 
@@ -167,11 +205,31 @@ export function IntegrationsSettingsPage({ canEdit }: Props) {
             )}
           </article>
 
-          <article className="panel integration-card">
+          <article className="panel integration-card integration-card-expanded smtp-integration-card">
             <div className="integration-icon"><Mail size={19} /></div>
             <div className="integration-content"><strong>E-mail transacional</strong><span>Comunicações operacionais do ERP</span></div>
             <select disabled={!canEdit} value={form.email_provider} onChange={(e) => setForm((current) => ({ ...current, email_provider: e.target.value as IntegrationsConfig['email_provider'] }))}><option value="smtp">SMTP</option><option value="none">Nenhum</option></select>
-            {providerStatus(form.email_provider !== 'none')}
+            {form.email_provider === 'smtp' ? connectionBadge({ provider: 'smtp', environment: 'smtp', configured: smtp.host !== '' && smtp.from_email !== '' && (!smtp.username || smtp.password_configured), reachable: null, message: '', checked_at: '' }) : providerStatus(false)}
+            {form.email_provider === 'smtp' && <div className="smtp-config-panel">
+              <div className="form-grid smtp-config-grid">
+                <label className="field"><span>Servidor SMTP</span><input disabled={!canEdit} placeholder="smtp.exemplo.com" value={smtp.host} onChange={(e) => setSmtp((current) => ({...current, host:e.target.value}))}/></label>
+                <label className="field"><span>Porta</span><input disabled={!canEdit} type="number" min={1} max={65535} value={smtp.port} onChange={(e) => setSmtp((current) => ({...current, port:Number(e.target.value)}))}/></label>
+                <label className="field"><span>Usuário</span><input disabled={!canEdit} autoComplete="username" value={smtp.username} onChange={(e) => setSmtp((current) => ({...current, username:e.target.value}))}/></label>
+                <label className="field"><span>Senha {smtp.password_configured ? '· cadastrada' : ''}</span><input disabled={!canEdit} type="password" autoComplete="new-password" placeholder={smtp.password_configured ? 'Deixe vazio para manter' : 'Senha ou senha de aplicativo'} value={smtpPassword} onChange={(e) => setSmtpPassword(e.target.value)}/></label>
+                <label className="field"><span>E-mail remetente</span><input disabled={!canEdit} type="email" value={smtp.from_email} onChange={(e) => setSmtp((current) => ({...current, from_email:e.target.value}))}/></label>
+                <label className="field"><span>Nome do remetente</span><input disabled={!canEdit} placeholder="Imobiliária" value={smtp.from_name} onChange={(e) => setSmtp((current) => ({...current, from_name:e.target.value}))}/></label>
+              </div>
+              <div className="smtp-security-options">
+                <label className="field checkbox-field"><input disabled={!canEdit} type="checkbox" checked={smtp.use_tls} onChange={(e) => setSmtp((current) => ({...current, use_tls:e.target.checked, use_ssl:e.target.checked ? false : current.use_ssl}))}/><span>TLS / STARTTLS</span></label>
+                <label className="field checkbox-field"><input disabled={!canEdit} type="checkbox" checked={smtp.use_ssl} onChange={(e) => setSmtp((current) => ({...current, use_ssl:e.target.checked, use_tls:e.target.checked ? false : current.use_tls}))}/><span>SSL direto</span></label>
+              </div>
+              <div className="smtp-test-row">
+                <label className="field"><span>Destinatário do teste</span><input disabled={!canEdit} type="email" placeholder="voce@exemplo.com" value={testRecipient} onChange={(e) => setTestRecipient(e.target.value)}/></label>
+                <button className="button secondary compact-button" disabled={!canEdit || testingSmtp || !smtp.password_configured} type="button" onClick={() => void testSmtpConnection()}><RefreshCw size={14}/>{testingSmtp ? 'Enviando...' : 'Enviar teste'}</button>
+                <button className="button primary compact-button" disabled={!canEdit || savingSmtp || !smtp.host || !smtp.from_email} type="button" onClick={() => void saveSmtp()}><Save size={14}/>{savingSmtp ? 'Salvando...' : 'Salvar SMTP'}</button>
+              </div>
+              <small className="smtp-security-note">A senha é criptografada antes de ser armazenada e nunca é exibida novamente.</small>
+            </div>}
           </article>
 
           <article className="panel form-panel">

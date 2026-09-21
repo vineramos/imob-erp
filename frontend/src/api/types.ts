@@ -62,6 +62,18 @@ export type SignatureIntegrationStatus = {
 
 export type BankIntegrationStatus = SignatureIntegrationStatus
 
+export type SmtpConfiguration = {
+  host: string
+  port: number
+  username: string
+  from_email: string
+  from_name: string
+  use_tls: boolean
+  use_ssl: boolean
+  password_configured: boolean
+  source: 'erp' | 'environment' | 'none'
+}
+
 
 export type IntegrationReadinessItem = {
   key: string

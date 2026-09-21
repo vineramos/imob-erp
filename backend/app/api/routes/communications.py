@@ -37,7 +37,7 @@ from app.domains.foundation.models import Organization
 from app.domains.leases.models import LeaseContract
 from app.domains.portfolio.models import Person
 from app.integrations.document_storage import DocumentStorageError, get_document_storage
-from app.integrations.email import EmailDeliveryError, send_email_message, smtp_configured
+from app.integrations.email import EmailDeliveryError, send_email_message, smtp_config_for_organization, smtp_configured
 from app.integrations.whatsapp import (
     WhatsAppDeliveryError,
     extract_whatsapp_statuses,
@@ -132,7 +132,11 @@ def _whatsapp_block_reason(db: Session, item: CommunicationMessage) -> str | Non
 def _delivery_reason(db: Session, item: CommunicationMessage) -> str | None:
     if item.channel == "whatsapp":
         return _whatsapp_block_reason(db, item)
-    return delivery_block_reason(db, item, email_configured=smtp_configured())
+    try:
+        configured = smtp_configured(smtp_config_for_organization(db, item.organization_id))
+    except EmailDeliveryError:
+        configured = False
+    return delivery_block_reason(db, item, email_configured=configured)
 
 
 def _response(db: Session, item: CommunicationMessage, *, include_events: bool = False) -> CommunicationMessageResponse:
@@ -214,12 +218,16 @@ def _resolve_attachments(db: Session, item: CommunicationMessage) -> list[dict]:
 
 
 @router.get("/capabilities")
-def capabilities(context: UserContext = Depends(require_permission("communications.view"))) -> dict:
+def capabilities(
+    context: UserContext = Depends(require_permission("communications.view")),
+    db: Session = Depends(get_db),
+) -> dict:
     settings = get_settings()
+    email_configured = smtp_configured(smtp_config_for_organization(db, context.user.organization_id))
     return {
         "email": {
             "provider": "smtp",
-            "configured": smtp_configured(),
+            "configured": email_configured,
             "supports_attachments": True,
             "human_confirmation_required": True,
         },
@@ -249,7 +257,7 @@ def overview(
     return {
         "total": len(rows),
         "counts": counts,
-        "email_configured": smtp_configured(),
+        "email_configured": smtp_configured(smtp_config_for_organization(db, context.user.organization_id)),
         "whatsapp_configured": whatsapp_configured(),
         "human_confirmation_required": True,
     }
@@ -432,12 +440,14 @@ def _send_message(db: Session, item: CommunicationMessage, request: Request, con
     provider_message_id: str | None = None
     try:
         if item.channel == "email":
+            smtp_config = smtp_config_for_organization(db, context.user.organization_id)
             send_email_message(
                 recipient=item.recipient_email or "",
                 subject=item.subject,
                 text_body=item.body,
                 organization_name=organization_name,
                 attachments=attachments,
+                config=smtp_config,
             )
             provider_name = "smtp"
         elif item.channel == "whatsapp":

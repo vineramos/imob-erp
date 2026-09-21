@@ -12,6 +12,10 @@ class Settings(BaseSettings):
     neon_auth_jwks_url: str = ""
     bootstrap_admin_email: str = ""
     cors_origins: str = "http://localhost:5173"
+    # Chave opcional dedicada à criptografia de credenciais cadastradas pelo ERP.
+    # Quando vazia, a DATABASE_URL (segredo exclusivo do servidor) é usada como
+    # material de chave, mantendo dumps do banco incapazes de revelar as senhas.
+    credentials_encryption_key: str = ""
 
     # Segredos de integrações entram somente por ambiente/Secret Manager.
     # Nunca são persistidos nas configurações operacionais do ERP.
