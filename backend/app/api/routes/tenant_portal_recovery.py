@@ -16,7 +16,7 @@ from app.domains.leases.models import LeaseContract
 from app.domains.portal.models import PortalAccount, PortalPasswordChallenge, PortalSession
 from app.domains.portal.security import hash_password, normalize_email, token_digest, verify_password
 from app.domains.portfolio.models import Person
-from app.integrations.email import EmailDeliveryError, send_portal_verification_email, smtp_config_for_organization
+from app.integrations.email import EmailDeliveryError, send_portal_verification_email, smtp_config_for_organization, smtp_configured
 
 router = APIRouter(prefix="/tenant-portal/auth/access", tags=["tenant-portal"])
 CHALLENGE_MINUTES = 10
@@ -160,6 +160,8 @@ def request_access_code(
     organization = db.get(Organization, person.organization_id)
     try:
         smtp_config = smtp_config_for_organization(db, person.organization_id)
+        if not (smtp_configured() or smtp_config.configured):
+            raise EmailDeliveryError("O envio de e-mail do Portal do Inquilino ainda não está configurado.")
         send_portal_verification_email(
             recipient=email,
             code=code,

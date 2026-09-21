@@ -133,7 +133,7 @@ def _delivery_reason(db: Session, item: CommunicationMessage) -> str | None:
     if item.channel == "whatsapp":
         return _whatsapp_block_reason(db, item)
     try:
-        configured = smtp_configured(smtp_config_for_organization(db, item.organization_id))
+        configured = smtp_configured() or smtp_config_for_organization(db, item.organization_id).configured
     except EmailDeliveryError:
         configured = False
     return delivery_block_reason(db, item, email_configured=configured)
@@ -223,7 +223,7 @@ def capabilities(
     db: Session = Depends(get_db),
 ) -> dict:
     settings = get_settings()
-    email_configured = smtp_configured(smtp_config_for_organization(db, context.user.organization_id))
+    email_configured = smtp_configured() or smtp_config_for_organization(db, context.user.organization_id).configured
     return {
         "email": {
             "provider": "smtp",
@@ -257,7 +257,7 @@ def overview(
     return {
         "total": len(rows),
         "counts": counts,
-        "email_configured": smtp_configured(smtp_config_for_organization(db, context.user.organization_id)),
+        "email_configured": smtp_configured() or smtp_config_for_organization(db, context.user.organization_id).configured,
         "whatsapp_configured": whatsapp_configured(),
         "human_confirmation_required": True,
     }
