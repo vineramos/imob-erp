@@ -293,6 +293,14 @@ class HybridDocumentStorage:
 
     def download_bytes(self, reference: str) -> bytes:
         if reference.startswith(DatabaseDocumentStorage.reference_prefix):
+            if self.gcs.configured:
+                object_name = reference[len(DatabaseDocumentStorage.reference_prefix):]
+                try:
+                    return self.gcs.download_bytes(f"gs://{self.gcs.bucket_name}/{object_name}")
+                except DocumentStorageError:
+                    # Compatibilidade durante a migração: objetos ainda não
+                    # copiados continuam disponíveis no PostgreSQL.
+                    pass
             return self.database.download_bytes(reference)
         if reference.startswith("gs://"):
             return self.gcs.download_bytes(reference)
@@ -300,6 +308,9 @@ class HybridDocumentStorage:
 
     def delete_reference(self, reference: str) -> None:
         if reference.startswith(DatabaseDocumentStorage.reference_prefix):
+            if self.gcs.configured:
+                object_name = reference[len(DatabaseDocumentStorage.reference_prefix):]
+                self.gcs.delete_reference(f"gs://{self.gcs.bucket_name}/{object_name}")
             self.database.delete_reference(reference)
             return
         if reference.startswith("gs://"):

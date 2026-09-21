@@ -6,6 +6,11 @@ set -eu
 echo "==> Aplicando migrations do banco"
 cd /app/backend
 alembic upgrade head
+
+if [ "${DOCUMENT_STORAGE_MIGRATE_ON_START:-false}" = "true" ]; then
+  echo "==> Migrando documentos do PostgreSQL para o Cloud Storage"
+  python -m app.integrations.document_storage_migration || echo "Aviso: migração adiada; arquivos originais foram preservados no banco."
+fi
 cd /app
 
 python - <<'PY'

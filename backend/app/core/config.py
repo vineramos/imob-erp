@@ -60,6 +60,7 @@ class Settings(BaseSettings):
     # necessária nem permitida pela aplicação.
     document_storage_bucket: str = ""
     document_storage_prefix: str = "imob-erp"
+    document_storage_migrate_on_start: bool = False
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

@@ -7,6 +7,7 @@ PROJECT_ID="${PROJECT_ID:-}"
 REGION="${REGION:-us-east1}"
 SERVICE="${SERVICE:-imob-erp}"
 ARTIFACT_REPOSITORY="${ARTIFACT_REPOSITORY:-cloud-run-source-deploy}"
+DOCUMENT_BUCKET="${DOCUMENT_BUCKET:-${PROJECT_ID}-imob-documents}"
 RUNTIME_SA_NAME="${RUNTIME_SA_NAME:-imob-runtime}"
 DEPLOYER_NAME="${DEPLOYER_NAME:-imob-deployer}"
 POOL_ID="${POOL_ID:-github-actions}"
@@ -65,7 +66,19 @@ gcloud services enable \
   iamcredentials.googleapis.com \
   sts.googleapis.com \
   artifactregistry.googleapis.com \
+  storage.googleapis.com \
   run.googleapis.com >/dev/null
+
+if ! gcloud storage buckets describe "gs://${DOCUMENT_BUCKET}" >/dev/null 2>&1; then
+  gcloud storage buckets create "gs://${DOCUMENT_BUCKET}" \
+    --location="$REGION" \
+    --uniform-bucket-level-access >/dev/null
+fi
+
+gcloud storage buckets update "gs://${DOCUMENT_BUCKET}" --public-access-prevention >/dev/null
+gcloud storage buckets add-iam-policy-binding "gs://${DOCUMENT_BUCKET}" \
+  --member="serviceAccount:${RUNTIME_SERVICE_ACCOUNT}" \
+  --role="roles/storage.objectAdmin" >/dev/null
 
 if ! gcloud artifacts repositories describe "$ARTIFACT_REPOSITORY" --location="$REGION" >/dev/null 2>&1; then
   gcloud artifacts repositories create "$ARTIFACT_REPOSITORY" \
@@ -139,6 +152,7 @@ gh variable set GCP_REGION --body "$REGION" --repo "$GITHUB_REPOSITORY"
 gh variable set GCP_SERVICE --body "$SERVICE" --repo "$GITHUB_REPOSITORY"
 gh variable set GCP_ARTIFACT_REPOSITORY --body "$ARTIFACT_REPOSITORY" --repo "$GITHUB_REPOSITORY"
 gh variable set GCP_RUNTIME_SERVICE_ACCOUNT --body "$RUNTIME_SERVICE_ACCOUNT" --repo "$GITHUB_REPOSITORY"
+gh variable set GCP_DOCUMENT_BUCKET --body "$DOCUMENT_BUCKET" --repo "$GITHUB_REPOSITORY"
 gh variable set GCP_WIF_PROVIDER --body "$PROVIDER_RESOURCE" --repo "$GITHUB_REPOSITORY"
 gh variable set GCP_WIF_SERVICE_ACCOUNT --body "$DEPLOYER_SERVICE_ACCOUNT" --repo "$GITHUB_REPOSITORY"
 gh variable set GCP_WIF_READY --body "true" --repo "$GITHUB_REPOSITORY"

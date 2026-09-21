@@ -126,12 +126,18 @@ jobs:
           PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
           REGION: ${{ vars.GCP_REGION }}
           SERVICE: ${{ vars.GCP_SERVICE }}
+          DOCUMENT_BUCKET: ${{ vars.GCP_DOCUMENT_BUCKET }}
         run: |
+          STORAGE_ARGS=()
+          if [[ -n "$DOCUMENT_BUCKET" ]]; then
+            STORAGE_ARGS+=(--update-env-vars "DOCUMENT_STORAGE_BUCKET=${DOCUMENT_BUCKET},DOCUMENT_STORAGE_MIGRATE_ON_START=false")
+          fi
           gcloud run deploy "$SERVICE" \
             --project "$PROJECT_ID" \
             --region "$REGION" \
             --image "$IMAGE" \
             --update-env-vars "IMOB_RELEASE_SHA=${GITHUB_SHA}" \
+            "${STORAGE_ARGS[@]}" \
             --quiet
 
       - name: Smoke test application health
