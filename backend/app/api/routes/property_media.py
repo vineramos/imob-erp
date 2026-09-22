@@ -182,6 +182,25 @@ def list_property_photos(
     return [_photo_response(item) for item in _ordered_photos(db, property_id)]
 
 
+@router.get("/properties/{property_id}/photos/cover", response_model=PropertyPhotoResponse | None)
+def property_cover_photo(
+    property_id: UUID,
+    context: UserContext = Depends(require_permission("properties.view")),
+    db: Session = Depends(get_db),
+) -> PropertyPhotoResponse | None:
+    _property(db, context.user.organization_id, property_id)
+    item = db.scalar(
+        select(PropertyPhoto)
+        .where(
+            PropertyPhoto.property_id == property_id,
+            PropertyPhoto.organization_id == context.user.organization_id,
+        )
+        .order_by(PropertyPhoto.is_cover.desc(), PropertyPhoto.position.asc(), PropertyPhoto.created_at.asc())
+        .limit(1)
+    )
+    return _photo_response(item) if item else None
+
+
 @router.post("/properties/{property_id}/photos", response_model=PropertyPhotoResponse, status_code=status.HTTP_201_CREATED)
 async def upload_property_photo(
     property_id: UUID,
