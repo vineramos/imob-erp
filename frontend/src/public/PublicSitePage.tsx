@@ -113,13 +113,13 @@ function RentRangeControl({ minRent, maxRent, onMinRent, onMaxRent }: RentRangeP
   return <div className="public-rent-range public-rent-range-editor">
     <span className="public-rent-range-label">Valor do aluguel</span>
     <div className="public-rent-combined">
-      <label className="public-rent-inline-field"><em>De</em><b>R$</b><input aria-label="Valor mínimo" inputMode="numeric" type="number" min={0} step={100} value={minRent || ''} placeholder="0" onChange={(event) => {
+      <label className="public-rent-inline-field"><span className="public-rent-prefix">De R$</span><input aria-label="Valor mínimo" inputMode="numeric" type="number" min={0} step={100} value={minRent || ''} placeholder="0" onChange={(event) => {
         const value = Math.max(0, Number(event.target.value || 0))
         onMinRent(value)
         if (maxRent > 0 && value > maxRent) onMaxRent(0)
       }}/></label>
       <span className="public-rent-divider"/>
-      <label className="public-rent-inline-field"><em>Até</em><b>R$</b><input aria-label="Valor máximo" inputMode="numeric" type="number" min={minRent} step={100} value={maxRent || ''} placeholder="Sem limite" onChange={(event) => onMaxRent(Math.max(0, Number(event.target.value || 0)))}/></label>
+      <label className="public-rent-inline-field"><span className="public-rent-prefix">Até R$</span><input aria-label="Valor máximo" inputMode="numeric" type="number" min={minRent} step={100} value={maxRent || ''} placeholder="Sem limite" onChange={(event) => onMaxRent(Math.max(0, Number(event.target.value || 0)))}/></label>
     </div>
   </div>
 }
