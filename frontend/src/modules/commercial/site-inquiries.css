@@ -323,3 +323,100 @@
   .crm-workflow-grid{grid-template-columns:1fr}
   .crm-workflow-notes{grid-column:auto}
 }
+
+
+/* CRM modal v8.4 — reliable viewport scrolling and fully visible sections */
+.commercial-funnel-modal{
+  width:min(980px,calc(100vw - 38px))!important;
+  height:min(900px,calc(100dvh - 28px));
+  max-height:calc(100dvh - 28px)!important;
+  min-height:0!important;
+  display:flex!important;
+  flex-direction:column!important;
+  overflow:hidden!important;
+}
+.commercial-funnel-modal>.portfolio-modal-header{
+  flex:0 0 auto;
+  position:relative;
+  z-index:2;
+  background:var(--surface);
+}
+.commercial-funnel-modal>.commercial-funnel-body{
+  flex:1 1 auto!important;
+  min-height:0!important;
+  max-height:none!important;
+  overflow-y:auto!important;
+  overflow-x:hidden!important;
+  overscroll-behavior:contain;
+  scrollbar-gutter:stable;
+  padding:20px 20px 34px!important;
+}
+.commercial-funnel-body>*{
+  flex:0 0 auto;
+  min-width:0;
+}
+.commercial-funnel-body .canonical-modal-section{
+  min-width:0;
+  overflow:visible;
+}
+.funnel-summary-grid{
+  grid-template-columns:repeat(3,minmax(0,1fr))!important;
+}
+.funnel-summary-card{
+  min-width:0;
+}
+.crm-workflow-grid{
+  grid-template-columns:repeat(3,minmax(0,1fr))!important;
+  min-width:0;
+}
+.crm-workflow-grid>.field{
+  min-width:0;
+}
+.crm-workflow-grid input,
+.crm-workflow-grid select,
+.crm-workflow-grid textarea{
+  width:100%;
+  min-width:0;
+  max-width:100%;
+  box-sizing:border-box;
+}
+.crm-workflow-notes{
+  grid-column:1/-1!important;
+}
+.crm-timeline-section{
+  min-height:max-content;
+  overflow:visible!important;
+}
+.crm-timeline{
+  min-height:max-content;
+  padding-bottom:4px;
+}
+.commercial-funnel-modal .commercial-funnel-body::-webkit-scrollbar{
+  width:10px;
+}
+.commercial-funnel-modal .commercial-funnel-body::-webkit-scrollbar-track{
+  background:transparent;
+}
+.commercial-funnel-modal .commercial-funnel-body::-webkit-scrollbar-thumb{
+  border:3px solid transparent;
+  border-radius:999px;
+  background:color-mix(in srgb,var(--text-muted) 38%,transparent);
+  background-clip:padding-box;
+}
+
+@media(max-width:900px){
+  .crm-workflow-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+}
+@media(max-width:760px){
+  .commercial-funnel-modal{
+    width:calc(100vw - 20px)!important;
+    height:calc(100dvh - 20px);
+    max-height:calc(100dvh - 20px)!important;
+  }
+  .commercial-funnel-modal>.commercial-funnel-body{padding:14px 14px 28px!important}
+  .funnel-summary-grid{grid-template-columns:1fr!important}
+}
+@media(max-width:620px){
+  .crm-workflow-grid{grid-template-columns:1fr!important}
+  .crm-workflow-notes{grid-column:auto!important}
+}
