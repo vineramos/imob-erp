@@ -1074,3 +1074,54 @@
   min-height: 25px;
   line-height: 25px;
 }
+
+
+/* Public search v8.7 — hero uses the exact same rent control as the modal */
+.public-site-premium .public-search-premium > .public-rent-range-editor {
+  height: 68px !important;
+  min-height: 68px !important;
+  box-sizing: border-box !important;
+  padding: 7px 10px 6px !important;
+  display: grid !important;
+  grid-template-rows: auto 27px 13px !important;
+  align-content: center !important;
+  gap: 3px !important;
+  overflow: hidden !important;
+}
+
+.public-site-premium .public-search-premium > .public-rent-range-editor .public-rent-amount-row {
+  min-width: 0;
+  grid-template-columns: minmax(0,1fr) auto minmax(0,1fr);
+  align-items: center;
+  gap: 6px;
+}
+
+.public-site-premium .public-search-premium > .public-rent-range-editor .public-rent-amount-field > span {
+  height: 27px;
+  min-height: 27px;
+}
+
+.public-site-premium .public-search-premium > .public-rent-range-editor .public-rent-amount-field input {
+  height: 25px;
+  min-height: 25px;
+  line-height: 25px;
+}
+
+.public-site-premium .public-search-premium > .public-rent-range-editor .public-rent-separator {
+  padding-bottom: 0;
+  align-self: center;
+}
+
+.public-site-premium .public-search-premium > .public-rent-range-editor .public-rent-condo-toggle {
+  min-height: 13px !important;
+  height: 13px !important;
+  overflow: hidden !important;
+}
+
+@media (max-width: 720px) {
+  .public-site-premium .public-search-premium > .public-rent-range-editor {
+    height: auto !important;
+    min-height: 72px !important;
+    overflow: visible !important;
+  }
+}
