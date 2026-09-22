@@ -72,10 +72,19 @@ export function PropertyGallery({ propertyId, canManage, onChanged, variant = 'p
     if (!viewerOpen) return
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key === 'Escape') setViewerOpen(false)
+      if (event.key === 'ArrowLeft') selectRelative(-1)
+      if (event.key === 'ArrowRight') selectRelative(1)
     }
     window.addEventListener('keydown', closeOnEscape)
     return () => window.removeEventListener('keydown', closeOnEscape)
   }, [viewerOpen])
+
+  function selectRelative(direction: -1 | 1) {
+    if (!selected || photos.length < 2) return
+    const currentIndex = photos.findIndex((photo) => photo.id === selected.id)
+    const nextIndex = (currentIndex + direction + photos.length) % photos.length
+    setSelectedId(photos[nextIndex].id)
+  }
 
   async function refreshAfterMutation(message?: string) {
     await load()
@@ -180,7 +189,52 @@ export function PropertyGallery({ propertyId, canManage, onChanged, variant = 'p
         <span>{photos.findIndex((photo) => photo.id === selected.id) + 1} / {photos.length}</span>
         {selected.is_cover && <small><Star size={11} fill="currentColor"/> Capa</small>}
       </button>
-      <div className="property-overview-gallery-footer"><div className="property-overview-gallery-thumbs">{photos.slice(0, 5).map(photo => <button type="button" className={photo.id === selected.id ? 'active' : ''} key={photo.id} onClick={() => setSelectedId(photo.id)}><img src={photo.objectUrl} alt={photo.caption || photo.filename}/></button>)}</div><button type="button" onClick={() => setViewerOpen(true)}><Camera size={14}/> Visualizar todas</button></div>
+      <div className="property-overview-gallery-footer">
+        <div className={`property-overview-gallery-thumbs ${canManage && managerOpen ? 'is-reorderable' : ''}`}>
+          {photos.map((photo,index) => <button
+            type="button"
+            className={[
+              photo.id === selected.id ? 'active' : '',
+              photo.id === draggedId ? 'is-dragging' : '',
+              photo.id === dragOverId ? 'is-drag-over' : '',
+            ].filter(Boolean).join(' ')}
+            key={photo.id}
+            onClick={() => setSelectedId(photo.id)}
+            draggable={canManage && managerOpen && !busy}
+            onDragStart={(event) => {
+              if (!canManage || !managerOpen || busy) return
+              setDraggedId(photo.id)
+              event.dataTransfer.effectAllowed='move'
+              event.dataTransfer.setData('text/plain',photo.id)
+            }}
+            onDragEnter={(event) => {
+              if (!draggedId || photo.id===draggedId) return
+              event.preventDefault()
+              setDragOverId(photo.id)
+            }}
+            onDragOver={(event) => {
+              if (!draggedId) return
+              event.preventDefault()
+              event.dataTransfer.dropEffect='move'
+            }}
+            onDrop={(event) => {
+              event.preventDefault()
+              const sourceId=event.dataTransfer.getData('text/plain')||draggedId
+              if (sourceId) reorderByDrag(sourceId,photo.id)
+            }}
+            onDragEnd={() => { setDraggedId(null); setDragOverId(null) }}
+            title={canManage && managerOpen ? `Foto ${index+1}: arraste para mudar a ordem` : undefined}
+          >
+            <img src={photo.objectUrl} alt={photo.caption || photo.filename}/>
+            {canManage && managerOpen && <span className="property-gallery-order-index">{index+1}</span>}
+          </button>)}
+        </div>
+        <div className="property-overview-gallery-actions">
+          {canManage && <button type="button" className={managerOpen ? 'active' : ''} onClick={() => setManagerOpen(value => !value)}><Settings2 size={14}/>{managerOpen ? 'Concluir ordem' : 'Organizar fotos'}</button>}
+          <button type="button" onClick={() => setViewerOpen(true)}><Camera size={14}/> Visualizar todas</button>
+        </div>
+      </div>
+      {canManage && managerOpen && <div className="property-overview-reorder-bar"><span>Arraste as miniaturas para reordenar.</span><div><button type="button" disabled={busy || photos[0]?.id===selected.id} onClick={() => void move(-1)}><ChevronLeft size={13}/> Mover antes</button><button type="button" disabled={busy || photos[photos.length-1]?.id===selected.id} onClick={() => void move(1)}>Mover depois <ChevronRight size={13}/></button></div></div>}
     </> : <div className="property-overview-gallery-empty"><Camera size={27}/><strong>Nenhuma foto cadastrada</strong><span>A apresentação visual aparecerá aqui quando houver imagens.</span></div>}
   </section>, overviewMount)
 
@@ -204,9 +258,19 @@ export function PropertyGallery({ propertyId, canManage, onChanged, variant = 'p
       </>}
     </article>
     {viewerOpen && selected && <div className="property-gallery-viewer-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setViewerOpen(false) }}>
-      <section className="property-gallery-viewer" role="dialog" aria-modal="true" aria-label="Visualização ampliada da foto">
-        <header className="property-gallery-viewer-heading"><div><strong>{selected.caption || 'Foto do imóvel'}</strong><span>{selected.filename}</span></div><button type="button" onClick={() => setViewerOpen(false)} aria-label="Fechar visualização"><X size={18}/></button></header>
-        <div className="property-gallery-viewer-stage"><img src={selected.objectUrl} alt={selected.caption || selected.filename}/></div>
+      <section className="property-gallery-viewer" role="dialog" aria-modal="true" aria-label="Galeria ampliada do imóvel">
+        <header className="property-gallery-viewer-heading">
+          <div><strong>{selected.caption || 'Foto do imóvel'}</strong><span>{photos.findIndex((photo) => photo.id === selected.id) + 1} de {photos.length} · {selected.filename}</span></div>
+          <button type="button" onClick={() => setViewerOpen(false)} aria-label="Fechar visualização"><X size={18}/></button>
+        </header>
+        <div className="property-gallery-viewer-stage">
+          {photos.length > 1 && <button className="property-gallery-viewer-nav prev" type="button" onClick={() => selectRelative(-1)} aria-label="Foto anterior"><ChevronLeft size={24}/></button>}
+          <img src={selected.objectUrl} alt={selected.caption || selected.filename}/>
+          {photos.length > 1 && <button className="property-gallery-viewer-nav next" type="button" onClick={() => selectRelative(1)} aria-label="Próxima foto"><ChevronRight size={24}/></button>}
+        </div>
+        <div className="property-gallery-viewer-thumbs" aria-label="Todas as fotos">
+          {photos.map((photo,index) => <button type="button" className={photo.id === selected.id ? 'active' : ''} key={photo.id} onClick={() => setSelectedId(photo.id)} aria-label={`Abrir foto ${index+1} de ${photos.length}`}><img src={photo.objectUrl} alt={photo.caption || photo.filename}/><span>{index+1}</span></button>)}
+        </div>
       </section>
     </div>}
     <ConfirmDialog
