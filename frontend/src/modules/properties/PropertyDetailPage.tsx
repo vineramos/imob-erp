@@ -79,7 +79,6 @@ export function PropertyDetailPage(props:Props){
   const latestAdministration=administrationContracts.find(item=>item.status!=='cancelled')??administrationContracts[0]
   const requiredPending=readiness?.checklist.filter(item=>item.required&&!item.ok).length??0
   const ownerNames=property.owners.map(owner=>owner.name).join(' · ')
-  const title=property.public_title||`${propertyTypes[property.property_type]??property.property_type} em ${property.address.neighborhood||property.address.city}`
 
   async function share(){
     const url=property.publication_enabled&&property.public_slug?`${window.location.origin}/site/${props.organizationId}/imoveis/${property.public_slug}`:window.location.href
