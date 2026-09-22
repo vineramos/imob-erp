@@ -188,6 +188,16 @@ export type PersonCreate = {
 
 export type PropertyOwner = { person_id: string; name: string; ownership_percent: number }
 
+export type PropertyFeatures = {
+  property: string[]
+  condominium: string[]
+  floor: number | null
+  total_floors: number | null
+  elevators: number | null
+  solar_orientation: '' | 'north' | 'south' | 'east' | 'west' | 'northeast' | 'northwest' | 'southeast' | 'southwest'
+  year_built: number | null
+}
+
 export type Property = {
   id: string
   internal_number: number
@@ -206,6 +216,7 @@ export type Property = {
   parking_spaces: number
   furnished: boolean
   pets_allowed: boolean
+  features: PropertyFeatures
   public_title: string | null
   public_slug?: string | null
   publication_enabled: boolean
@@ -230,6 +241,7 @@ export type PropertyCreate = {
   parking_spaces: number
   furnished: boolean
   pets_allowed: boolean
+  features: PropertyFeatures
   public_title?: string | null
   public_description?: string | null
   publication_enabled: boolean
@@ -263,6 +275,7 @@ export type PublicProperty = {
   parking_spaces: number
   furnished: boolean
   pets_allowed: boolean
+  features: PropertyFeatures
   title: string
   description: string
   published_at: string | null
