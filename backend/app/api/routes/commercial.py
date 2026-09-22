@@ -61,6 +61,14 @@ class ProposalLeaseConversion(BaseModel):
     monthly_charges: list[LeaseMonthlyChargePayload] = Field(default_factory=list, max_length=30)
 
 
+class InquiryWorkflowUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    responsible_user_id: UUID | None = None
+    next_action_title: str | None = Field(default=None, max_length=180)
+    next_action_at: datetime | None = None
+    next_action_notes: str | None = Field(default=None, max_length=2000)
+
+
 def _metadata(request: Request) -> tuple[str | None, str | None]:
     forwarded = request.headers.get("x-forwarded-for", "").split(",", 1)[0].strip()
     return forwarded or (request.client.host if request.client else None), request.headers.get("user-agent")
@@ -177,18 +185,31 @@ def _proposal(db: Session, item: CommercialProposal) -> dict:
 def _funnel(db: Session, inquiry: PublicSiteInquiry) -> dict:
     person = db.get(Person, inquiry.person_id) if inquiry.person_id else None
     prop = db.get(Property, inquiry.property_id) if inquiry.property_id else None
+    responsible = db.get(AppUser, inquiry.responsible_user_id) if inquiry.responsible_user_id else None
     visits = db.scalars(select(CommercialVisit).where(CommercialVisit.organization_id == inquiry.organization_id, CommercialVisit.inquiry_id == inquiry.id).order_by(CommercialVisit.starts_at.desc())).all()
     proposals = db.scalars(select(CommercialProposal).where(CommercialProposal.organization_id == inquiry.organization_id, CommercialProposal.inquiry_id == inquiry.id).order_by(CommercialProposal.internal_number.desc())).all()
+    timeline = [
+        {"kind": "lead_created", "label": "Lead recebido", "detail": inquiry.source, "at": inquiry.created_at},
+        {"kind": "status", "label": "Etapa atual", "detail": inquiry.status, "at": inquiry.updated_at},
+    ]
+    if inquiry.next_action_title and inquiry.next_action_at:
+        timeline.append({"kind": "next_action", "label": inquiry.next_action_title, "detail": inquiry.next_action_notes, "at": inquiry.next_action_at})
+    for row in visits:
+        timeline.append({"kind": "visit", "label": f"VIS-{row.internal_number:06d} · visita", "detail": row.status, "at": row.starts_at})
+    for row in proposals:
+        timeline.append({"kind": "proposal", "label": f"PROP-{row.internal_number:06d} · proposta", "detail": row.status, "at": row.created_at})
+    timeline.sort(key=lambda event: event["at"] or inquiry.created_at, reverse=True)
     return {
-        "inquiry": {"id": inquiry.id, "property_id": inquiry.property_id, "property_code": inquiry.property_code, "property_title": inquiry.property_title, "name": inquiry.name, "email": inquiry.email, "phone": inquiry.phone, "preferred_contact": inquiry.preferred_contact, "message": inquiry.message, "status": inquiry.status, "source": inquiry.source, "created_at": inquiry.created_at, "updated_at": inquiry.updated_at},
+        "inquiry": {"id": inquiry.id, "property_id": inquiry.property_id, "property_code": inquiry.property_code, "property_title": inquiry.property_title, "name": inquiry.name, "email": inquiry.email, "phone": inquiry.phone, "preferred_contact": inquiry.preferred_contact, "message": inquiry.message, "status": inquiry.status, "source": inquiry.source, "responsible_user_id": inquiry.responsible_user_id, "next_action_title": inquiry.next_action_title, "next_action_at": inquiry.next_action_at, "next_action_notes": inquiry.next_action_notes, "created_at": inquiry.created_at, "updated_at": inquiry.updated_at},
+        "responsible": {"id": responsible.id, "name": responsible.name, "email": responsible.email} if responsible else None,
         "person": {"id": person.id, "name": person.name, "document_number": person.document_number, "email": person.email, "phone": person.phone} if person else None,
         "property_status": prop.status if prop else None,
         "property_publication_enabled": bool(prop.publication_enabled) if prop else False,
         "suggested_rent_amount": prop.rent_amount if prop else None,
         "visits": [_visit(db, row) for row in visits],
         "proposals": [_proposal(db, row) for row in proposals],
+        "timeline": timeline,
     }
-
 
 def _add_months(value: date, months: int) -> date:
     index = value.year * 12 + value.month - 1 + months
@@ -245,6 +266,42 @@ def _lease_from_proposal(db: Session, proposal: CommercialProposal, context: Use
     db.add(lease); db.flush()
     db.add(LeaseContractVersion(contract_id=lease.id, version_number=1, snapshot={"property": property_snapshot, "owners": owners, "tenants": tenants, "rules": rules, "signers": signers}, change_summary=f"Gerado da proposta PROP-{proposal.internal_number:06d}", created_by_user_id=context.user.id))
     return lease
+
+
+@router.get("/crm/responsibles")
+def list_crm_responsibles(context: UserContext = Depends(require_permission("crm.view")), db: Session = Depends(get_db)):
+    rows = db.scalars(select(AppUser).where(AppUser.organization_id == context.user.organization_id, AppUser.is_active.is_(True)).order_by(AppUser.name.asc())).all()
+    return [{"id": row.id, "name": row.name, "email": row.email} for row in rows]
+
+
+@router.patch("/crm/site-inquiries/{inquiry_id}/workflow")
+def update_inquiry_workflow(inquiry_id: UUID, payload: InquiryWorkflowUpdate, request: Request, context: UserContext = Depends(require_permission("crm.manage")), db: Session = Depends(get_db)):
+    inquiry = _inquiry(db, context.user.organization_id, inquiry_id)
+    before = {"responsible_user_id": str(inquiry.responsible_user_id) if inquiry.responsible_user_id else None, "next_action_title": inquiry.next_action_title, "next_action_at": inquiry.next_action_at.isoformat() if inquiry.next_action_at else None, "next_action_notes": inquiry.next_action_notes}
+    if "responsible_user_id" in payload.model_fields_set:
+        if payload.responsible_user_id is None:
+            inquiry.responsible_user_id = None
+        else:
+            user = db.scalar(select(AppUser).where(AppUser.id == payload.responsible_user_id, AppUser.organization_id == context.user.organization_id, AppUser.is_active.is_(True)))
+            if user is None:
+                raise HTTPException(422, "Responsável comercial não encontrado.")
+            inquiry.responsible_user_id = user.id
+    if "next_action_title" in payload.model_fields_set:
+        inquiry.next_action_title = (payload.next_action_title or "").strip() or None
+    if "next_action_at" in payload.model_fields_set:
+        if payload.next_action_at is not None and payload.next_action_at.tzinfo is None:
+            raise HTTPException(422, "Informe data e hora da próxima ação com fuso horário.")
+        inquiry.next_action_at = payload.next_action_at
+    if "next_action_notes" in payload.model_fields_set:
+        inquiry.next_action_notes = (payload.next_action_notes or "").strip() or None
+    if inquiry.next_action_at and not inquiry.next_action_title:
+        raise HTTPException(422, "Informe o título da próxima ação.")
+    after = {"responsible_user_id": str(inquiry.responsible_user_id) if inquiry.responsible_user_id else None, "next_action_title": inquiry.next_action_title, "next_action_at": inquiry.next_action_at.isoformat() if inquiry.next_action_at else None, "next_action_notes": inquiry.next_action_notes}
+    _audit(db, request, context, "crm.inquiry.workflow.updated", "public_site_inquiry", inquiry.id, before=before, after=after)
+    db.commit()
+    db.refresh(inquiry)
+    responsible = db.get(AppUser, inquiry.responsible_user_id) if inquiry.responsible_user_id else None
+    return {"id": inquiry.id, "responsible_user_id": inquiry.responsible_user_id, "responsible_name": responsible.name if responsible else None, "next_action_title": inquiry.next_action_title, "next_action_at": inquiry.next_action_at, "next_action_notes": inquiry.next_action_notes}
 
 
 @router.get("/crm/site-inquiries/{inquiry_id}/funnel")
