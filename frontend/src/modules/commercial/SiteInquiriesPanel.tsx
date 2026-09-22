@@ -18,6 +18,7 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react'
 import { ApiError, apiRequest } from '../../api/client'
 
 type InquiryStatus = 'new' | 'contacted' | 'visit_scheduled' | 'qualified' | 'proposal' | 'converted' | 'won' | 'lost'
+type FunnelStageStatus = 'new' | 'contacted' | 'visit_scheduled' | 'qualified' | 'proposal' | 'won' | 'lost'
 type SiteInquiry = {
   id: string
   property_id: string | null
@@ -91,7 +92,7 @@ type LeaseCharge = {
 }
 type LeaseComposition = { proposal_id:string; rent_amount:number; start_date:string; end_date:string; monthly_charges:LeaseCharge[]; tenant_monthly_total:number }
 type CrmResponsible = { id:string; name:string; email:string|null }
-type CommercialTimelineEvent = { kind:string; label:string; detail:string|null; at:string }
+type CommercialTimelineEvent = { kind:string; label:string; detail:string|null; at:string; author_name?:string|null }
 type CommercialFunnel = {
   inquiry: SiteInquiry
   responsible: CrmResponsible | null
@@ -119,6 +120,15 @@ const statusLabels: Record<InquiryStatus, string> = {
 const funnelStageLabels: Record<InquiryStatus, string> = {
   new: 'Novos', contacted: 'Contato', visit_scheduled: 'Visita', qualified: 'Qualificados', proposal: 'Propostas', converted: 'Propostas', won: 'Fechados', lost: 'Perdidos',
 }
+const funnelStageOptions: Array<{value:FunnelStageStatus;label:string}> = [
+  {value:'new',label:'Novos'},
+  {value:'contacted',label:'Contato'},
+  {value:'visit_scheduled',label:'Visita'},
+  {value:'qualified',label:'Qualificados'},
+  {value:'proposal',label:'Propostas'},
+  {value:'won',label:'Fechados'},
+  {value:'lost',label:'Perdidos'},
+]
 const manualStatusOptions: InquiryStatus[] = ['new', 'contacted', 'qualified', 'lost']
 const visitStatusLabels: Record<CommercialVisit['status'], string> = { scheduled: 'Agendada', completed: 'Realizada', cancelled: 'Cancelada', no_show: 'Não compareceu' }
 const proposalStatusLabels: Record<CommercialProposal['status'], string> = { submitted: 'Enviada', accepted: 'Aceita', rejected: 'Recusada', withdrawn: 'Retirada', converted: 'Contrato gerado', won: 'Locado' }
@@ -171,10 +181,13 @@ export function SiteInquiriesPanel({ permissions }: Props) {
   const [compositionProposal, setCompositionProposal] = useState<CommercialProposal|null>(null)
   const [composition, setComposition] = useState<LeaseComposition|null>(null)
   const [compositionLoading,setCompositionLoading]=useState(false)
+  const [workflowStage,setWorkflowStage]=useState<FunnelStageStatus>('new')
   const [workflowResponsible,setWorkflowResponsible]=useState('')
   const [workflowAction,setWorkflowAction]=useState('')
   const [workflowAt,setWorkflowAt]=useState('')
   const [workflowNotes,setWorkflowNotes]=useState('')
+  const [manualHistoryTitle,setManualHistoryTitle]=useState('')
+  const [manualHistoryNotes,setManualHistoryNotes]=useState('')
   const [busy, setBusy] = useState(false)
 
   const load = useCallback(async () => {
@@ -215,7 +228,7 @@ export function SiteInquiriesPanel({ permissions }: Props) {
   async function loadFunnel(inquiryId: string, resetMessage = true) {
     if (resetMessage) { setModalError(''); setModalSuccess('') }
     setModalLoading(true)
-    try { const next = await apiRequest<CommercialFunnel>(`/crm/site-inquiries/${inquiryId}/funnel`); setFunnel(next); setItems((current) => current.map((row) => row.id === inquiryId ? { ...row, ...next.inquiry } : row)); setWorkflowResponsible(next.inquiry.responsible_user_id||'');setWorkflowAction(next.inquiry.next_action_title||'');setWorkflowAt(toLocalInput(next.inquiry.next_action_at));setWorkflowNotes(next.inquiry.next_action_notes||''); if (resetMessage) setProposalRent(next.suggested_rent_amount == null ? null : Number(next.suggested_rent_amount)) }
+    try { const next = await apiRequest<CommercialFunnel>(`/crm/site-inquiries/${inquiryId}/funnel`); setFunnel(next); setItems((current) => current.map((row) => row.id === inquiryId ? { ...row, ...next.inquiry } : row)); setWorkflowStage(next.inquiry.status==='converted'?'proposal':next.inquiry.status as FunnelStageStatus);setWorkflowResponsible(next.inquiry.responsible_user_id||'');setWorkflowAction(next.inquiry.next_action_title||'');setWorkflowAt(toLocalInput(next.inquiry.next_action_at));setWorkflowNotes(next.inquiry.next_action_notes||''); if (resetMessage) setProposalRent(next.suggested_rent_amount == null ? null : Number(next.suggested_rent_amount)) }
     catch (cause) { setModalError(cause instanceof ApiError ? cause.detail : 'Não foi possível abrir o atendimento comercial.') }
     finally { setModalLoading(false) }
   }
@@ -228,10 +241,23 @@ export function SiteInquiriesPanel({ permissions }: Props) {
     try{
       const nextAt=workflowAt?new Date(workflowAt):null
       if(nextAt&&Number.isNaN(nextAt.getTime()))throw new Error('Data inválida')
-      await apiRequest(`/crm/site-inquiries/${selectedId}/workflow`,{method:'PATCH',body:JSON.stringify({responsible_user_id:workflowResponsible||null,next_action_title:workflowAction||null,next_action_at:nextAt?nextAt.toISOString():null,next_action_notes:workflowNotes||null})})
+      await apiRequest(`/crm/site-inquiries/${selectedId}/workflow`,{method:'PATCH',body:JSON.stringify({stage_status:workflowStage,responsible_user_id:workflowResponsible||null,next_action_title:workflowAction||null,next_action_at:nextAt?nextAt.toISOString():null,next_action_notes:workflowNotes||null})})
       setModalSuccess('Responsável e próxima ação atualizados.')
       await loadFunnel(selectedId,false)
     }catch(cause){setModalError(cause instanceof ApiError?cause.detail:'Não foi possível atualizar o fluxo comercial.')}
+    finally{setBusy(false)}
+  }
+
+  async function addManualHistory(event: FormEvent) {
+    event.preventDefault()
+    if(!selectedId||!canManage||manualHistoryTitle.trim().length<2)return
+    setBusy(true);setModalError('');setModalSuccess('')
+    try{
+      await apiRequest(`/crm/site-inquiries/${selectedId}/activities`,{method:'POST',body:JSON.stringify({title:manualHistoryTitle.trim(),notes:manualHistoryNotes.trim()||null,activity_type:'note'})})
+      setManualHistoryTitle('');setManualHistoryNotes('')
+      setModalSuccess('Andamento adicionado ao histórico.')
+      await loadFunnel(selectedId,false)
+    }catch(cause){setModalError(cause instanceof ApiError?cause.detail:'Não foi possível adicionar o andamento ao histórico.')}
     finally{setBusy(false)}
   }
 
@@ -301,7 +327,7 @@ export function SiteInquiriesPanel({ permissions }: Props) {
           {modalLoading && !funnel ? <div className="settings-loading">Carregando atendimento...</div> : funnel && <>
             <section className="funnel-summary-grid"><article className="funnel-summary-card"><span>Interessado</span><strong>{funnel.person?.name || funnel.inquiry.name}</strong><small>{funnel.person ? 'Cadastro vinculado automaticamente' : 'Será cadastrado no próximo passo'}</small></article><article className="funnel-summary-card"><span>Imóvel</span><strong>#{funnel.inquiry.property_code}</strong><small>{funnel.property_status || 'indisponível'} · {funnel.property_publication_enabled ? 'publicado' : 'fora do site'}</small></article><article className="funnel-summary-card"><span>Aluguel de referência</span><strong>{money(funnel.suggested_rent_amount)}</strong><small>valor atual do estoque</small></article></section>
 
-            <section className="canonical-modal-section funnel-section crm-workflow-section"><div className="funnel-section-heading"><div><span className="eyebrow">Gestão do atendimento</span><h3>Etapa, responsável e próxima atividade</h3></div>{funnel.responsible&&<span title={funnel.responsible.email||''}>{funnel.responsible.name.slice(0,1).toUpperCase()}</span>}</div><div className="crm-workflow-grid crm-workflow-grid-v86"><label className="field"><span>Etapa do funil</span><input readOnly value={funnelStageLabels[funnel.inquiry.status]} title="Esta etapa corresponde à coluna atual do Kanban e avança conforme as ações do atendimento."/></label><label className="field"><span>Responsável</span><select disabled={!canManage||busy} value={workflowResponsible} onChange={event=>setWorkflowResponsible(event.target.value)}><option value="">Não atribuído</option>{responsibles.map(row=><option key={row.id} value={row.id}>{row.name}</option>)}</select></label><label className="field"><span>Próxima atividade</span><input disabled={!canManage||busy} maxLength={180} value={workflowAction} onChange={event=>setWorkflowAction(event.target.value)} placeholder="Ex.: ligar, enviar WhatsApp, confirmar visita"/></label><label className="field"><span>Quando</span><input disabled={!canManage||busy} type="datetime-local" value={workflowAt} onChange={event=>setWorkflowAt(event.target.value)}/></label><label className="field crm-workflow-notes"><span>Observações</span><input disabled={!canManage||busy} maxLength={2000} value={workflowNotes} onChange={event=>setWorkflowNotes(event.target.value)} placeholder="Contexto para o próximo contato"/></label></div>{canManage&&<div className="funnel-inline-actions"><button className="button secondary" type="button" disabled={busy} onClick={()=>void saveWorkflow()}><UserRoundCheck size={14}/> Salvar gestão</button></div>}</section>
+            <section className="canonical-modal-section funnel-section crm-workflow-section"><div className="funnel-section-heading"><div><span className="eyebrow">Gestão do atendimento</span><h3>Etapa, responsável e próxima atividade</h3></div>{funnel.responsible&&<span title={funnel.responsible.email||''}>{funnel.responsible.name.slice(0,1).toUpperCase()}</span>}</div><div className="crm-workflow-grid crm-workflow-grid-v86"><label className="field"><span>Etapa do funil</span><select disabled={!canManage||busy} value={workflowStage} onChange={event=>setWorkflowStage(event.target.value as FunnelStageStatus)}>{funnelStageOptions.map(stage=><option key={stage.value} value={stage.value}>{stage.label}</option>)}</select></label><label className="field"><span>Responsável</span><select disabled={!canManage||busy} value={workflowResponsible} onChange={event=>setWorkflowResponsible(event.target.value)}><option value="">Não atribuído</option>{responsibles.map(row=><option key={row.id} value={row.id}>{row.name}</option>)}</select></label><label className="field"><span>Próxima atividade</span><input disabled={!canManage||busy} maxLength={180} value={workflowAction} onChange={event=>setWorkflowAction(event.target.value)} placeholder="Ex.: ligar, enviar WhatsApp, confirmar visita"/></label><label className="field"><span>Quando</span><input disabled={!canManage||busy} type="datetime-local" value={workflowAt} onChange={event=>setWorkflowAt(event.target.value)}/></label><label className="field crm-workflow-notes"><span>Observações</span><input disabled={!canManage||busy} maxLength={2000} value={workflowNotes} onChange={event=>setWorkflowNotes(event.target.value)} placeholder="Contexto para o próximo contato"/></label></div>{canManage&&<div className="funnel-inline-actions"><button className="button secondary" type="button" disabled={busy} onClick={()=>void saveWorkflow()}><UserRoundCheck size={14}/> Salvar gestão</button></div>}</section>
 
             {canManage && funnel.inquiry.status !== 'won' && funnel.inquiry.status !== 'lost' && <div className="funnel-actions"><button className="button secondary" type="button" onClick={() => { setVisitOpen((value) => !value); setProposalOpen(false) }}><CalendarPlus2 size={15}/> Agendar visita</button><button className="button secondary" type="button" onClick={() => { setProposalOpen((value) => !value); setVisitOpen(false); if (proposalRent == null && funnel.suggested_rent_amount != null) setProposalRent(Number(funnel.suggested_rent_amount)) }}><FilePlus2 size={15}/> Criar proposta</button></div>}
 
@@ -313,7 +339,7 @@ export function SiteInquiriesPanel({ permissions }: Props) {
 
             <section className="canonical-modal-section funnel-section"><div className="funnel-section-heading"><div><span className="eyebrow">Propostas</span><h3>Negociação e conversão</h3></div><span>{funnel.proposals.length}</span></div>{funnel.proposals.length === 0 ? <p className="funnel-empty-copy">Nenhuma proposta criada.</p> : <div className="funnel-proposals">{funnel.proposals.map((proposal) => <article key={proposal.id}><div className="funnel-proposal-main"><div><strong>{proposal.code}</strong><span>{money(proposal.rent_amount)} · {proposal.term_months} meses · {guaranteeLabels[proposal.guarantee_type]}</span><small>Início {new Date(`${proposal.start_date}T12:00:00`).toLocaleDateString('pt-BR')}</small></div><span className={`status-badge ${proposal.status === 'accepted' || proposal.status === 'won' ? 'success' : proposal.status === 'rejected' || proposal.status === 'withdrawn' ? 'danger' : 'neutral'}`}>{proposalStatusLabels[proposal.status]}</span></div>{proposal.closed_reason && <p>{proposal.closed_reason}</p>}{proposal.lease_code && <div className="funnel-contract-link"><FileCheck2 size={14}/><strong>{proposal.lease_code}</strong><button type="button" onClick={() => window.location.assign('/app/contracts')}>Abrir contratos</button></div>}{canManage && proposal.status === 'submitted' && <div className="funnel-row-actions"><button type="button" className="mini-action success" disabled={busy} onClick={() => void proposalAction(proposal, 'accepted')}><Check size={13}/> Aceitar</button><button type="button" className="mini-action danger" disabled={busy} onClick={() => void proposalAction(proposal, 'rejected')}>Recusar</button><button type="button" className="mini-action" disabled={busy} onClick={() => void proposalAction(proposal, 'withdrawn')}>Retirada</button></div>}{canManage && canCreateContract && proposal.status === 'accepted' && <div className="funnel-row-actions"><button type="button" className="button primary compact-button" disabled={busy||compositionLoading} onClick={() => void openComposition(proposal)}><FilePlus2 size={14}/> Gerar contrato</button><small>Primeiro revise aluguel + condomínio + IPTU + seguros. O anúncio só sai do ar após a assinatura final.</small></div>}</article>)}</div>}</section>
 
-            <section className="canonical-modal-section funnel-section crm-timeline-section"><div className="funnel-section-heading"><div><span className="eyebrow">Histórico</span><h3>Linha do tempo comercial</h3></div><span>{funnel.timeline.length}</span></div><div className="crm-timeline">{funnel.timeline.map((event,index)=><article key={event.kind+'-'+event.at+'-'+index} className={'timeline-'+event.kind}><i></i><div><strong>{event.label}</strong><span>{event.detail||'Atualização comercial'}</span><small>{dateTime(event.at)}</small></div></article>)}</div></section>
+            <section className="canonical-modal-section funnel-section crm-timeline-section"><div className="funnel-section-heading"><div><span className="eyebrow">Histórico</span><h3>Linha do tempo comercial</h3></div><span>{funnel.timeline.length}</span></div>{canManage&&<form className="crm-manual-history-form" onSubmit={(event)=>void addManualHistory(event)}><label className="field"><span>Novo andamento</span><input required minLength={2} maxLength={180} value={manualHistoryTitle} onChange={event=>setManualHistoryTitle(event.target.value)} placeholder="Ex.: Cliente pediu retorno após falar com a família"/></label><label className="field"><span>Detalhes</span><textarea rows={2} maxLength={4000} value={manualHistoryNotes} onChange={event=>setManualHistoryNotes(event.target.value)} placeholder="Registre aqui o contexto, conversa, pendência ou informação relevante."/></label><div className="funnel-inline-actions"><button className="button secondary" type="submit" disabled={busy||manualHistoryTitle.trim().length<2}><Plus size={14}/> Adicionar andamento</button></div></form>}<div className="crm-timeline">{funnel.timeline.map((event,index)=><article key={event.kind+'-'+event.at+'-'+index} className={'timeline-'+event.kind}><i></i><div><strong>{event.label}</strong><span>{event.detail||'Atualização comercial'}</span><small>{event.author_name?event.author_name+' · ':''}{dateTime(event.at)}</small></div></article>)}</div></section>
           </>}
         </div>
       </div>
