@@ -1284,3 +1284,34 @@
 .public-site-premium .public-search-premium > .public-rent-range-editor .public-rent-combined {
   height: 30px !important;
 }
+
+
+/* Public search v8.11 — single-line rent prefixes */
+.public-site-premium .public-rent-inline-field {
+  display: flex !important;
+  grid-template-columns: none !important;
+  grid-template-rows: none !important;
+  align-items: center !important;
+  gap: 6px !important;
+  padding: 0 10px !important;
+}
+
+.public-site-premium .public-rent-prefix {
+  flex: 0 0 auto;
+  width: auto !important;
+  min-width: auto !important;
+  display: inline-block !important;
+  color: #8f959e !important;
+  font-size: 8px !important;
+  font-weight: 750 !important;
+  line-height: 1 !important;
+  white-space: nowrap !important;
+  overflow: visible !important;
+  text-overflow: clip !important;
+}
+
+.public-site-premium .public-rent-inline-field input {
+  min-width: 0 !important;
+  width: 100% !important;
+  display: block !important;
+}
