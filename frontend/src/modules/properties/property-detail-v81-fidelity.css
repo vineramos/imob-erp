@@ -1,0 +1,687 @@
+/* Imob 8.1 — fidelity pass against approved property-detail reference */
+
+.property-detail-v81 {
+  gap: 14px;
+  padding-bottom: 36px;
+}
+
+.property-detail-v81 .property-detail-topline {
+  margin: 0 2px 2px;
+}
+
+.property-detail-v81 .property-essential-strip {
+  display: none;
+}
+
+/* Hero: one structural surface, never a floating modal. */
+.property-detail-v81 .property-gallery--hero {
+  position: relative;
+  overflow: hidden;
+  border: 0;
+  border-radius: 14px;
+  background: #0c1623;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, .10);
+}
+
+.property-detail-v81 .property-gallery--hero .property-gallery-main {
+  height: clamp(330px, 31vw, 410px);
+  min-height: 330px;
+  border-radius: 0;
+  background: #101b29;
+}
+
+.property-detail-v81 .property-gallery--hero .property-gallery-main img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+}
+
+.property-detail-v81 .property-gallery--hero .property-gallery-main::after {
+  background:
+    linear-gradient(90deg, rgba(5, 12, 22, .76) 0%, rgba(5, 12, 22, .48) 34%, rgba(5, 12, 22, .10) 66%, rgba(5, 12, 22, .22) 100%),
+    linear-gradient(0deg, rgba(5, 12, 22, .18) 0%, transparent 44%);
+}
+
+.property-detail-v81 .property-hero-copy {
+  inset: 0;
+  width: 100%;
+  padding: 32px 34px 30px;
+  display: block;
+  color: #fff;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+.property-detail-v81 .property-hero-top {
+  position: absolute;
+  top: 24px;
+  left: 34px;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.property-detail-v81 .property-hero-top > span {
+  color: rgba(255,255,255,.78);
+  font-size: 8.5px;
+  letter-spacing: .09em;
+}
+
+.property-detail-v81 .property-hero-copy > div:nth-child(2) {
+  position: absolute;
+  left: 34px;
+  bottom: 82px;
+  max-width: min(700px, 58%);
+}
+
+.property-detail-v81 .property-hero-copy p {
+  margin: 0 0 9px;
+  color: #d4ad65;
+  font-size: 9px;
+  font-weight: 760;
+  letter-spacing: .055em;
+}
+
+.property-detail-v81 .property-hero-copy h1 {
+  max-width: 700px;
+  margin: 0;
+  color: #fff;
+  font-size: clamp(32px, 3.15vw, 49px);
+  line-height: 1.02;
+  letter-spacing: -.045em;
+  text-shadow: 0 3px 20px rgba(0,0,0,.22);
+}
+
+.property-detail-v81 .property-hero-copy address {
+  margin-top: 10px;
+  color: rgba(255,255,255,.88);
+  font-size: 11.5px;
+}
+
+.property-detail-v81 .property-hero-specs {
+  position: absolute;
+  left: 34px;
+  bottom: 28px;
+  max-width: min(720px, 60%);
+  gap: 0;
+  padding: 0;
+  border: 0;
+}
+
+.property-detail-v81 .property-hero-specs span {
+  padding: 0 14px;
+  border-right: 1px solid rgba(255,255,255,.24);
+}
+
+.property-detail-v81 .property-hero-specs span:first-child {
+  padding-left: 0;
+}
+
+.property-detail-v81 .property-hero-specs span:last-child {
+  border-right: 0;
+}
+
+.property-detail-v81 .property-hero-specs strong {
+  color: rgba(255,255,255,.94);
+  font-size: 10px;
+}
+
+.property-detail-v81 .property-hero-price {
+  position: absolute;
+  right: 24px;
+  bottom: 74px;
+  width: min(248px, 24%);
+  padding: 18px 20px;
+  border: 1px solid rgba(255,255,255,.21);
+  border-radius: 10px;
+  background: rgba(7, 16, 27, .74);
+  box-shadow: 0 12px 28px rgba(0,0,0,.14);
+  backdrop-filter: blur(10px);
+}
+
+.property-detail-v81 .property-hero-price span {
+  color: rgba(255,255,255,.68);
+  font-size: 8px;
+  letter-spacing: .03em;
+  text-transform: none;
+}
+
+.property-detail-v81 .property-hero-price strong {
+  margin-top: 4px;
+  color: #fff;
+  font-size: clamp(22px, 2vw, 30px);
+  font-weight: 720;
+}
+
+.property-detail-v81 .property-hero-price small {
+  color: rgba(255,255,255,.76);
+  font-size: 8.5px;
+}
+
+/* Approved reference has actions on the hero, not as a separate admin toolbar. */
+.property-detail-v81 .property-gallery--hero > .property-hero-actions {
+  position: absolute;
+  z-index: 6;
+  right: 24px;
+  bottom: 20px;
+  width: auto;
+  min-height: 0;
+  max-width: 520px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  pointer-events: auto;
+}
+
+.property-detail-v81 .property-gallery--hero > .property-hero-actions button {
+  min-height: 40px;
+  padding: 0 15px;
+  border: 1px solid rgba(255,255,255,.32);
+  border-radius: 8px;
+  background: rgba(8,18,31,.58);
+  color: #fff;
+  font-size: 9.5px;
+  font-weight: 720;
+  box-shadow: none;
+  backdrop-filter: blur(9px);
+}
+
+.property-detail-v81 .property-gallery--hero > .property-hero-actions button:hover {
+  border-color: rgba(255,255,255,.55);
+  background: rgba(8,18,31,.76);
+}
+
+.property-detail-v81 .property-gallery--hero > .property-hero-actions button.primary {
+  order: -1;
+  border-color: rgba(255,255,255,.92);
+  background: #fff;
+  color: #142238;
+}
+
+.property-detail-v81 .property-gallery--hero > .property-hero-actions button.tertiary {
+  background: rgba(8,18,31,.38);
+}
+
+/* The hero is presentation-only. Management controls live in the overview gallery. */
+.property-detail-v81 .property-gallery--hero .property-gallery-hero-toolbar,
+.property-detail-v81 .property-gallery--hero > .property-gallery-thumbs,
+.property-detail-v81 .property-gallery--hero > .property-gallery-editor {
+  display: none;
+}
+
+.property-detail-v81 .property-gallery-expand {
+  top: 18px;
+  right: 18px;
+  min-height: 32px;
+  border-radius: 8px;
+  background: rgba(8,18,31,.48);
+}
+
+.property-detail-v81 .property-gallery--hero .property-gallery-cover {
+  top: 58px;
+  right: 18px;
+}
+
+/* Tabs directly under hero. */
+.property-detail-v81 .ui-context-tabs {
+  margin: 0;
+  padding: 0 10px;
+  border: 1px solid color-mix(in srgb, var(--border) 75%, transparent);
+  border-top: 0;
+  border-radius: 0 0 12px 12px;
+  background: var(--surface);
+  box-shadow: none;
+  overflow-x: auto;
+}
+
+.property-detail-v81 .ui-context-tabs button {
+  min-height: 46px;
+  padding-inline: 15px;
+  color: #5f6c7d;
+  font-size: 10px;
+}
+
+.property-detail-v81 .ui-context-tabs button.active {
+  color: var(--primary);
+  font-weight: 760;
+}
+
+.property-detail-v81 .ui-context-tabs button.active::after {
+  left: 14px;
+  right: 14px;
+  height: 2px;
+  background: #b88a35;
+}
+
+/* Two-row overview composition from approved reference. */
+.property-detail-v81 .property-overview-layout {
+  display: grid;
+  grid-template-columns: minmax(400px, 1.28fr) minmax(280px, .92fr) minmax(270px, .78fr);
+  grid-template-areas:
+    "gallery information summary"
+    "description progress activity"
+    "editor editor editor";
+  gap: 12px;
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  align-items: stretch;
+}
+
+.property-detail-v81 .property-overview-layout > .property-surface,
+.property-detail-v81 .property-overview-gallery-slot {
+  min-width: 0;
+  border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: 0 5px 18px rgba(15,23,42,.025);
+}
+
+.property-detail-v81 .property-overview-layout > .property-surface {
+  padding: 18px 20px;
+}
+
+.property-detail-v81 .property-overview-gallery-slot {
+  grid-area: gallery;
+  overflow: hidden;
+}
+
+.property-detail-v81 .property-main-information {
+  grid-area: information;
+}
+
+.property-detail-v81 .property-overview-summary {
+  grid-area: summary;
+}
+
+.property-detail-v81 .property-description {
+  grid-area: description;
+}
+
+.property-detail-v81 .property-progress-surface {
+  grid-area: progress;
+}
+
+.property-detail-v81 .property-overview-activity {
+  grid-area: activity;
+}
+
+.property-detail-v81 .property-overview-main {
+  grid-area: editor;
+  border: 0;
+}
+
+.property-detail-v81 .property-overview-main:empty {
+  display: none;
+}
+
+.property-detail-v81 .property-overview-layout .property-section-heading {
+  margin-bottom: 14px;
+}
+
+.property-detail-v81 .property-overview-layout .property-section-heading > div > span {
+  color: #a17632;
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: .02em;
+  text-transform: none;
+}
+
+.property-detail-v81 .property-overview-layout .property-section-heading h2 {
+  margin-top: 5px;
+  font-size: 15px;
+}
+
+/* Gallery in row one. */
+.property-detail-v81 .property-overview-gallery {
+  height: 100%;
+  min-height: 100%;
+  padding: 18px 18px 14px;
+  display: grid;
+  grid-template-rows: auto minmax(250px, 1fr) auto;
+  background: var(--surface);
+}
+
+.property-detail-v81 .property-overview-gallery-heading {
+  margin-bottom: 13px;
+}
+
+.property-detail-v81 .property-overview-gallery-heading h2 {
+  font-size: 15px;
+}
+
+.property-detail-v81 .property-overview-gallery-stage {
+  min-height: 250px;
+  border-radius: 9px;
+}
+
+.property-detail-v81 .property-overview-gallery-stage > img {
+  object-fit: cover;
+}
+
+.property-detail-v81 .property-overview-gallery-footer {
+  padding-top: 9px;
+}
+
+.property-detail-v81 .property-overview-gallery-thumbs button {
+  width: 56px;
+  height: 42px;
+  flex-basis: 56px;
+}
+
+.property-detail-v81 .property-overview-gallery-footer > button {
+  color: #46688e;
+  font-size: 8.5px;
+}
+
+/* Dense, elegant property facts. */
+.property-detail-v81 .property-overview-facts {
+  display: block;
+  margin: 0;
+  border: 0;
+}
+
+.property-detail-v81 .property-overview-facts > div {
+  min-height: 0;
+  padding: 7px 0;
+  display: grid;
+  grid-template-columns: minmax(100px, .9fr) 1.1fr;
+  gap: 12px;
+  align-items: baseline;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.property-detail-v81 .property-overview-facts > div:last-child {
+  border-bottom: 0;
+}
+
+.property-detail-v81 .property-overview-facts dt {
+  color: var(--text-muted);
+  font-size: 8.5px;
+}
+
+.property-detail-v81 .property-overview-facts dd {
+  margin: 0;
+  color: var(--text);
+  font-size: 9.5px;
+  font-weight: 700;
+}
+
+/* Right summary rail: responsible + finance in one continuous card. */
+.property-detail-v81 .property-overview-summary {
+  display: grid;
+  align-content: start;
+  gap: 0;
+}
+
+.property-detail-v81 .property-overview-summary > section {
+  padding: 0;
+}
+
+.property-detail-v81 .property-overview-summary > section + section {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.property-detail-v81 .property-people-summary {
+  padding: 9px 0;
+}
+
+.property-detail-v81 .property-people-summary strong {
+  font-size: 10px;
+}
+
+.property-detail-v81 .property-money-summary .primary strong {
+  font-size: 21px;
+  letter-spacing: -.03em;
+}
+
+.property-detail-v81 .property-money-summary > div {
+  padding: 8px 0;
+}
+
+/* Second row: editorial description, vertical pipeline, timeline. */
+.property-detail-v81 .property-description > p {
+  max-width: none;
+  margin: 0;
+  color: #3d4958;
+  font-size: 10.5px;
+  line-height: 1.65;
+}
+
+.property-detail-v81 .property-progress-surface {
+  min-height: 0;
+}
+
+.property-detail-v81 .property-commercial-flow {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0;
+  padding-left: 2px;
+}
+
+.property-detail-v81 .property-commercial-flow::before {
+  top: 15px;
+  bottom: 14px;
+  left: 16px;
+  right: auto;
+  width: 1px;
+  height: auto;
+}
+
+.property-detail-v81 .property-commercial-flow > div {
+  grid-template-columns: auto 1fr;
+  justify-items: stretch;
+  text-align: left;
+  gap: 10px;
+  padding: 0 0 13px;
+}
+
+.property-detail-v81 .property-commercial-flow > div:last-child {
+  padding-bottom: 0;
+}
+
+.property-detail-v81 .property-commercial-flow > div > svg {
+  width: 29px;
+  height: 29px;
+  padding: 6px;
+  box-shadow: 0 0 0 4px var(--surface);
+}
+
+.property-detail-v81 .property-overview-activity .ui-timeline li {
+  padding-block: 6px;
+}
+
+.property-detail-v81 .property-overview-activity .ui-timeline strong {
+  font-size: 9px;
+}
+
+.property-detail-v81 .property-publication-inline {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+/* Responsive fidelity. */
+@media (max-width: 1320px) {
+  .property-detail-v81 .property-overview-layout {
+    grid-template-columns: minmax(360px, 1.15fr) minmax(260px, .85fr);
+    grid-template-areas:
+      "gallery information"
+      "summary summary"
+      "description progress"
+      "activity activity"
+      "editor editor";
+  }
+
+  .property-detail-v81 .property-overview-summary {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+  }
+
+  .property-detail-v81 .property-overview-summary > section + section {
+    margin: 0;
+    padding: 0 0 0 18px;
+    border-top: 0;
+    border-left: 1px solid var(--border);
+  }
+}
+
+@media (max-width: 900px) {
+  .property-detail-v81 .property-hero-copy > div:nth-child(2) {
+    max-width: 66%;
+  }
+
+  .property-detail-v81 .property-hero-price {
+    right: 18px;
+    width: 29%;
+  }
+
+  .property-detail-v81 .property-gallery--hero > .property-hero-actions {
+    left: 24px;
+    right: 24px;
+    justify-content: flex-start;
+  }
+
+  .property-detail-v81 .property-overview-layout {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "gallery"
+      "information"
+      "summary"
+      "description"
+      "progress"
+      "activity"
+      "editor";
+  }
+
+  .property-detail-v81 .property-overview-summary {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 680px) {
+  .property-detail-v81 {
+    gap: 11px;
+  }
+
+  .property-detail-v81 .property-gallery--hero {
+    border-radius: 11px;
+  }
+
+  .property-detail-v81 .property-gallery--hero .property-gallery-main {
+    height: 470px;
+  }
+
+  .property-detail-v81 .property-gallery--hero .property-gallery-main::after {
+    background: linear-gradient(180deg, rgba(5,12,22,.18), rgba(5,12,22,.78));
+  }
+
+  .property-detail-v81 .property-hero-top {
+    top: 18px;
+    left: 18px;
+  }
+
+  .property-detail-v81 .property-hero-copy {
+    padding: 20px 18px;
+  }
+
+  .property-detail-v81 .property-hero-copy > div:nth-child(2) {
+    left: 18px;
+    right: 18px;
+    bottom: 152px;
+    max-width: none;
+  }
+
+  .property-detail-v81 .property-hero-copy h1 {
+    font-size: 29px;
+  }
+
+  .property-detail-v81 .property-hero-specs {
+    left: 18px;
+    right: 18px;
+    bottom: 100px;
+    max-width: none;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    row-gap: 8px;
+  }
+
+  .property-detail-v81 .property-hero-specs span {
+    padding: 0;
+    border: 0;
+  }
+
+  .property-detail-v81 .property-hero-price {
+    left: 18px;
+    right: 18px;
+    bottom: 48px;
+    width: auto;
+    padding: 9px 12px;
+  }
+
+  .property-detail-v81 .property-hero-price strong {
+    font-size: 20px;
+  }
+
+  .property-detail-v81 .property-hero-price small {
+    display: none;
+  }
+
+  .property-detail-v81 .property-gallery--hero > .property-hero-actions {
+    position: static;
+    padding: 10px;
+    background: var(--surface);
+    gap: 6px;
+  }
+
+  .property-detail-v81 .property-gallery--hero > .property-hero-actions button {
+    flex: 1 1 46%;
+    justify-content: center;
+    border-color: var(--border);
+    background: var(--surface);
+    color: var(--text);
+    backdrop-filter: none;
+  }
+
+  .property-detail-v81 .property-gallery--hero > .property-hero-actions button.primary {
+    background: #b18436;
+    border-color: #b18436;
+    color: #fff;
+  }
+
+  .property-detail-v81 .property-overview-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .property-detail-v81 .property-overview-summary > section + section {
+    margin-top: 14px;
+    padding: 14px 0 0;
+    border-top: 1px solid var(--border);
+    border-left: 0;
+  }
+
+  .property-detail-v81 .property-overview-layout > .property-surface {
+    padding: 16px;
+  }
+
+  .property-detail-v81 .property-overview-gallery {
+    padding: 16px;
+  }
+
+  .property-detail-v81 .property-overview-gallery-stage {
+    min-height: 210px;
+  }
+}
