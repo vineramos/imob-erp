@@ -1,6 +1,7 @@
 import { Camera, ChevronLeft, ChevronRight, ImagePlus, Settings2, Star, Trash2, X } from 'lucide-react'
 import { ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { ApiError, apiBlobRequest, apiRequest } from '../../api/client'
 import { ConfirmDialog } from '../../components/ConfirmDialog'
 import './property-gallery.css'
@@ -19,9 +20,9 @@ type PropertyPhoto = {
 }
 
 type PhotoView = PropertyPhoto & { objectUrl: string }
-type Props = { propertyId: string; canManage: boolean; onChanged?: () => void; variant?: 'panel' | 'hero'; heroContent?: ReactNode; heroActions?: ReactNode }
+type Props = { propertyId: string; canManage: boolean; onChanged?: () => void; variant?: 'panel' | 'hero'; heroContent?: ReactNode; heroActions?: ReactNode; overviewMountId?: string }
 
-export function PropertyGallery({ propertyId, canManage, onChanged, variant = 'panel', heroContent, heroActions }: Props) {
+export function PropertyGallery({ propertyId, canManage, onChanged, variant = 'panel', heroContent, heroActions, overviewMountId }: Props) {
   const [photos, setPhotos] = useState<PhotoView[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [caption, setCaption] = useState('')
@@ -30,6 +31,7 @@ export function PropertyGallery({ propertyId, canManage, onChanged, variant = 'p
   const [deleteTarget, setDeleteTarget] = useState<PropertyPhoto | null>(null)
   const [viewerOpen, setViewerOpen] = useState(false)
   const [managerOpen, setManagerOpen] = useState(false)
+  const [overviewMount, setOverviewMount] = useState<HTMLElement | null>(null)
   const urlsRef = useRef<string[]>([])
 
   const releaseUrls = useCallback(() => {
@@ -57,6 +59,10 @@ export function PropertyGallery({ propertyId, canManage, onChanged, variant = 'p
   }, [propertyId, releaseUrls])
 
   useEffect(() => { void load(); return releaseUrls }, [load, releaseUrls])
+  useEffect(() => {
+    const nextMount = overviewMountId ? document.getElementById(overviewMountId) : null
+    setOverviewMount((current) => current === nextMount ? current : nextMount)
+  })
 
   const selected = useMemo(() => photos.find((photo) => photo.id === selectedId) ?? photos.find((photo) => photo.is_cover) ?? photos[0] ?? null, [photos, selectedId])
   useEffect(() => { setCaption(selected?.caption ?? '') }, [selected?.id, selected?.caption])
@@ -140,6 +146,18 @@ export function PropertyGallery({ propertyId, canManage, onChanged, variant = 'p
     } finally { setBusy(false) }
   }
 
+  const overviewGallery = overviewMount && createPortal(<section className="property-overview-gallery" aria-label="Galeria de fotos do imóvel">
+    <div className="property-overview-gallery-heading"><div><span>Galeria</span><h2>Fotos do imóvel</h2></div><div><strong>{photos.length}</strong><span>{photos.length === 1 ? 'foto' : 'fotos'}</span></div></div>
+    {selected ? <>
+      <button className="property-overview-gallery-stage" type="button" onClick={() => setViewerOpen(true)} aria-label="Abrir galeria ampliada">
+        <img src={selected.objectUrl} alt={selected.caption || selected.filename}/>
+        <span>{photos.findIndex((photo) => photo.id === selected.id) + 1} / {photos.length}</span>
+        {selected.is_cover && <small><Star size={11} fill="currentColor"/> Capa</small>}
+      </button>
+      <div className="property-overview-gallery-footer"><div className="property-overview-gallery-thumbs">{photos.slice(0, 5).map(photo => <button type="button" className={photo.id === selected.id ? 'active' : ''} key={photo.id} onClick={() => setSelectedId(photo.id)}><img src={photo.objectUrl} alt={photo.caption || photo.filename}/></button>)}</div><button type="button" onClick={() => setViewerOpen(true)}><Camera size={14}/> Visualizar todas</button></div>
+    </> : <div className="property-overview-gallery-empty"><Camera size={27}/><strong>Nenhuma foto cadastrada</strong><span>A apresentação visual aparecerá aqui quando houver imagens.</span></div>}
+  </section>, overviewMount)
+
   return <>
     <article className={`panel property-media-panel property-gallery ${variant === 'hero' ? 'property-gallery--hero' : ''}`}>
       {variant !== 'hero' && <div className="property-panel-heading property-gallery-heading">
@@ -171,5 +189,6 @@ export function PropertyGallery({ propertyId, canManage, onChanged, variant = 'p
       onCancel={() => { if (!busy) setDeleteTarget(null) }}
       onConfirm={() => { if (deleteTarget) void remove(deleteTarget) }}
     />
+    {overviewGallery}
   </>
 }
