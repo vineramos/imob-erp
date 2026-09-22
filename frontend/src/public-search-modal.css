@@ -749,3 +749,180 @@
     padding-left: 0;
   }
 }
+
+
+/* Public search v8.4 — premium rent amount editor */
+.public-site-premium .public-rent-range-editor {
+  min-height: 58px !important;
+  padding: 6px 10px 5px !important;
+  display: grid !important;
+  grid-template-rows: auto auto auto !important;
+  align-content: center !important;
+  gap: 3px !important;
+  overflow: visible !important;
+}
+
+.public-site-premium .public-rent-amount-row {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0,1fr) auto minmax(0,1fr);
+  align-items: end;
+  gap: 6px;
+}
+
+.public-site-premium .public-rent-amount-field {
+  min-width: 0;
+  display: grid !important;
+  grid-template-columns: 1fr !important;
+  grid-template-rows: auto auto !important;
+  gap: 1px !important;
+  width: auto !important;
+  height: auto !important;
+  min-height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+  overflow: visible !important;
+}
+
+.public-site-premium .public-rent-amount-field > small {
+  color: #969ca5;
+  font-size: 6.5px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.public-site-premium .public-rent-amount-field > span {
+  min-width: 0;
+  height: 24px;
+  padding: 0 7px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid color-mix(in srgb,var(--site-line) 94%,transparent);
+  border-radius: 7px;
+  background: color-mix(in srgb,var(--site-surface) 96%,var(--site-primary-soft));
+}
+
+.public-site-premium .public-rent-amount-field > span:focus-within {
+  border-color: color-mix(in srgb,var(--site-primary) 48%,var(--site-line));
+  box-shadow: 0 0 0 2px color-mix(in srgb,var(--site-primary) 10%,transparent);
+}
+
+.public-site-premium .public-rent-amount-field b {
+  color: var(--site-muted);
+  font-size: 8px;
+  font-weight: 700;
+}
+
+.public-site-premium .public-rent-amount-field input {
+  min-width: 0;
+  width: 100%;
+  height: 22px;
+  padding: 0 !important;
+  border: 0 !important;
+  outline: 0 !important;
+  background: transparent !important;
+  color: var(--site-ink);
+  font: 700 10px/22px var(--site-body-font);
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
+.public-site-premium .public-rent-amount-field input::-webkit-outer-spin-button,
+.public-site-premium .public-rent-amount-field input::-webkit-inner-spin-button {
+  margin: 0;
+  -webkit-appearance: none;
+}
+
+.public-site-premium .public-rent-amount-field input::placeholder {
+  color: #a5aab2;
+  font-weight: 600;
+}
+
+.public-site-premium .public-rent-separator {
+  padding-bottom: 6px;
+  color: #a4a9b1;
+  font-size: 8px;
+}
+
+.public-site-premium .public-rent-condo-toggle {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  gap: 5px !important;
+  width: fit-content !important;
+  height: auto !important;
+  min-height: 13px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+  cursor: pointer;
+}
+
+.public-site-premium .public-rent-condo-toggle > input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.public-site-premium .public-rent-condo-toggle > span:last-child {
+  color: var(--site-muted);
+  font-size: 7px;
+  font-weight: 650;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.public-site-premium .public-rent-switch {
+  position: relative;
+  width: 20px;
+  height: 11px;
+  flex: 0 0 20px;
+  border-radius: 999px;
+  background: #d8dce1;
+  transition: background .15s ease;
+}
+
+.public-site-premium .public-rent-switch::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(15,23,42,.18);
+  transition: transform .15s ease;
+}
+
+.public-site-premium .public-rent-condo-toggle > input:checked + .public-rent-switch {
+  background: var(--site-primary);
+}
+
+.public-site-premium .public-rent-condo-toggle > input:checked + .public-rent-switch::after {
+  transform: translateX(9px);
+}
+
+@media (max-width: 720px) {
+  .public-site-premium .public-rent-range-editor {
+    min-height: 72px !important;
+  }
+
+  .public-site-premium .public-rent-amount-field > span {
+    height: 28px;
+  }
+
+  .public-site-premium .public-rent-amount-field input {
+    height: 26px;
+    font-size: 11px;
+    line-height: 26px;
+  }
+
+  .public-site-premium .public-rent-condo-toggle > span:last-child {
+    font-size: 8px;
+  }
+}
