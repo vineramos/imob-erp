@@ -87,6 +87,7 @@ function fontStack(value: string, fallback: string) {
 
 type Props = { organizationId: string; slug?: string | null }
 type PropertyTypeFilter = 'all' | 'apartment' | 'house' | 'commercial' | 'land' | 'studio' | 'other'
+type PublicSort = 'relevance' | 'price_asc' | 'price_desc' | 'bedrooms_desc' | 'newest'
 type HeroSize = 'compact' | 'standard' | 'expanded'
 
 type RentRangeProps = {
@@ -161,6 +162,10 @@ export function PublicSitePage({ organizationId, slug }: Props) {
   const [maxRent, setMaxRent] = useState(0)
   const [includeCondo, setIncludeCondo] = useState(false)
   const [bedrooms, setBedrooms] = useState(0)
+  const [furnishedFilter, setFurnishedFilter] = useState(false)
+  const [petsFilter, setPetsFilter] = useState(false)
+  const [featureFilters, setFeatureFilters] = useState<string[]>([])
+  const [searchSort, setSearchSort] = useState<PublicSort>('relevance')
   const [searchOpen, setSearchOpen] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
