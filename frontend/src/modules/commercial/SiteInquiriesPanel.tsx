@@ -137,6 +137,7 @@ export function SiteInquiriesPanel({ permissions }: Props) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [query, setQuery] = useState('')
+  const [viewMode, setViewMode] = useState<'pipeline' | 'list'>('pipeline')
   const [filter, setFilter] = useState<'all' | InquiryStatus>('all')
   const [updatingId, setUpdatingId] = useState<string | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -174,8 +175,25 @@ export function SiteInquiriesPanel({ permissions }: Props) {
     return () => window.removeEventListener('keydown', close)
   }, [selectedId, busy, compositionProposal])
 
-  const metrics = useMemo(() => ({ new: items.filter((item) => item.status === 'new').length, visits: items.filter((item) => item.status === 'visit_scheduled').length, active: items.filter((item) => ['contacted', 'qualified', 'proposal', 'converted'].includes(item.status)).length }), [items])
+  const metrics = useMemo(() => ({
+    new: items.filter((item) => item.status === 'new').length,
+    visits: items.filter((item) => item.status === 'visit_scheduled').length,
+    active: items.filter((item) => ['contacted', 'qualified', 'proposal', 'converted'].includes(item.status)).length,
+    proposals: items.filter((item) => ['proposal', 'converted'].includes(item.status)).length,
+    won: items.filter((item) => item.status === 'won').length,
+    lost: items.filter((item) => item.status === 'lost').length,
+  }), [items])
   const filtered = useMemo(() => { const term = query.trim().toLowerCase(); return items.filter((item) => { if (filter !== 'all' && item.status !== filter) return false; if (!term) return true; return `${item.property_code} ${item.property_title} ${item.name} ${item.email ?? ''} ${item.phone ?? ''} ${item.message ?? ''}`.toLowerCase().includes(term) }) }, [filter, items, query])
+  const pipelineItems = useMemo(() => { const term=query.trim().toLowerCase(); return items.filter(item=>!term||`${item.property_code} ${item.property_title} ${item.name} ${item.email ?? ''} ${item.phone ?? ''} ${item.message ?? ''}`.toLowerCase().includes(term)) }, [items, query])
+  const pipelineStages = [
+    {key:'new',label:'Novos',statuses:['new'] as InquiryStatus[]},
+    {key:'contact',label:'Contato',statuses:['contacted'] as InquiryStatus[]},
+    {key:'visit',label:'Visita',statuses:['visit_scheduled'] as InquiryStatus[]},
+    {key:'qualified',label:'Qualificados',statuses:['qualified'] as InquiryStatus[]},
+    {key:'proposal',label:'Propostas',statuses:['proposal','converted'] as InquiryStatus[]},
+    {key:'won',label:'Fechados',statuses:['won'] as InquiryStatus[]},
+    {key:'lost',label:'Perdidos',statuses:['lost'] as InquiryStatus[]},
+  ]
 
   async function loadFunnel(inquiryId: string, resetMessage = true) {
     if (resetMessage) { setModalError(''); setModalSuccess('') }
@@ -223,12 +241,22 @@ export function SiteInquiriesPanel({ permissions }: Props) {
 
   const selected = items.find((item) => item.id === selectedId) ?? null
 
-  return <section className="workspace commercial-workspace site-inquiries-workspace">
-    <div className="page-heading portfolio-heading"><div><span className="eyebrow">Comercial · Site público</span><h1>Interesses recebidos</h1><p>Do primeiro contato ao contrato, sem redigitar o interessado ou o imóvel.</p></div><button className="button secondary" type="button" onClick={() => void load()}><RefreshCw size={14}/> Atualizar</button></div>
-    <div className="dashboard-metrics commercial-metrics"><article className="panel metric-card"><span>Novos</span><strong>{metrics.new}</strong><small>aguardando primeiro contato</small></article><article className="panel metric-card"><span>Em atendimento</span><strong>{metrics.active}</strong><small>contato, proposta ou contrato</small></article><article className="panel metric-card"><span>Visitas</span><strong>{metrics.visits}</strong><small>agendadas pelo comercial</small></article></div>
+  return <section className="workspace commercial-workspace site-inquiries-workspace commercial-crm-v82">
+    <div className="page-heading portfolio-heading commercial-crm-heading"><div><span className="eyebrow">Comercial · CRM</span><h1>Funil comercial</h1><p>Leads, visitas, propostas e conversões em uma única operação.</p></div><button className="button secondary" type="button" onClick={() => void load()}><RefreshCw size={14}/> Atualizar</button></div>
+    <div className="dashboard-metrics commercial-metrics commercial-crm-metrics">
+      <button type="button" className={'panel metric-card'+(filter==='new'?' active':'')} onClick={()=>{setFilter('new');setViewMode('list')}}><span>Novos</span><strong>{metrics.new}</strong><small>aguardando contato</small></button>
+      <button type="button" className="panel metric-card" onClick={()=>setViewMode('pipeline')}><span>Em atendimento</span><strong>{metrics.active}</strong><small>negócios ativos</small></button>
+      <button type="button" className={'panel metric-card'+(filter==='visit_scheduled'?' active':'')} onClick={()=>{setFilter('visit_scheduled');setViewMode('list')}}><span>Visitas</span><strong>{metrics.visits}</strong><small>agendadas</small></button>
+      <button type="button" className="panel metric-card" onClick={()=>setViewMode('pipeline')}><span>Propostas</span><strong>{metrics.proposals}</strong><small>em negociação</small></button>
+      <button type="button" className="panel metric-card commercial-metric-success" onClick={()=>{setFilter('won');setViewMode('list')}}><span>Fechados</span><strong>{metrics.won}</strong><small>convertidos</small></button>
+    </div>
     {error && <div className="form-alert danger-alert" role="alert">{error}</div>}
-    <div className="portfolio-toolbar panel commercial-toolbar commercial-toolbar-wide site-inquiries-toolbar"><div className="portfolio-tabs"><button className={filter === 'all' ? 'active' : ''} type="button" onClick={() => setFilter('all')}>Todos <span>{items.length}</span></button><button className={filter === 'new' ? 'active' : ''} type="button" onClick={() => setFilter('new')}>Novos <span>{metrics.new}</span></button><button className={filter === 'visit_scheduled' ? 'active' : ''} type="button" onClick={() => setFilter('visit_scheduled')}>Visitas <span>{metrics.visits}</span></button></div><label className="portfolio-search"><Search size={14}/><input placeholder="Imóvel, nome, telefone ou e-mail..." value={query} onChange={(event) => setQuery(event.target.value)}/></label></div>
-    {loading ? <article className="panel settings-loading">Carregando interesses...</article> : <div className="site-inquiries-list">{filtered.map((item) => <article className={`panel site-inquiry-card status-${item.status}`} key={item.id}>
+    <div className="portfolio-toolbar panel commercial-toolbar commercial-toolbar-wide site-inquiries-toolbar commercial-crm-toolbar">
+      <div className="commercial-view-toggle"><button className={viewMode==='pipeline'?'active':''} type="button" onClick={()=>{setViewMode('pipeline');setFilter('all')}}>Funil</button><button className={viewMode==='list'?'active':''} type="button" onClick={()=>setViewMode('list')}>Lista</button></div>
+      <div className="portfolio-tabs"><button className={filter === 'all' ? 'active' : ''} type="button" onClick={() => setFilter('all')}>Todos <span>{items.length}</span></button><button className={filter === 'new' ? 'active' : ''} type="button" onClick={() => {setFilter('new');setViewMode('list')}}>Novos <span>{metrics.new}</span></button><button className={filter === 'visit_scheduled' ? 'active' : ''} type="button" onClick={() => {setFilter('visit_scheduled');setViewMode('list')}}>Visitas <span>{metrics.visits}</span></button><button className={filter === 'proposal' ? 'active' : ''} type="button" onClick={() => {setFilter('proposal');setViewMode('list')}}>Propostas <span>{metrics.proposals}</span></button></div>
+      <label className="portfolio-search"><Search size={14}/><input placeholder="Imóvel, nome, telefone ou e-mail..." value={query} onChange={(event) => setQuery(event.target.value)}/></label>
+    </div>
+    {loading ? <article className="panel settings-loading">Carregando interesses...</article> : viewMode==='pipeline' ? <div className="commercial-pipeline-board">{pipelineStages.map(stage=>{const stageItems=pipelineItems.filter(item=>stage.statuses.includes(item.status));return <section className={`commercial-pipeline-column stage-${stage.key}`} key={stage.key}><header><div><span>{stage.label}</span><strong>{stageItems.length}</strong></div></header><div className="commercial-pipeline-cards">{stageItems.map(item=><button type="button" className={`commercial-pipeline-card status-${item.status}`} key={item.id} onClick={()=>void openFunnel(item.id)}><div className="commercial-pipeline-card-top"><span>#{item.property_code}</span><i>{dateTime(item.created_at)}</i></div><strong>{item.name}</strong><p>{item.property_title}</p><small>{item.phone||item.email||'Contato não informado'}</small><div><span className={`status-badge ${item.status==='won'?'success':item.status==='lost'?'danger':'neutral'}`}>{statusLabels[item.status]}</span><b>Abrir atendimento</b></div></button>)}{stageItems.length===0&&<div className="commercial-pipeline-empty">Nenhum lead nesta etapa.</div>}</div></section>})}</div> : <div className="site-inquiries-list">{filtered.map((item) => <article className={`panel site-inquiry-card status-${item.status}`} key={item.id}>
       <div className="site-inquiry-property"><span className="eyebrow">IMÓVEL #{item.property_code}</span><strong>{item.property_title}</strong><small>Recebido em {dateTime(item.created_at)}</small></div>
       <div className="site-inquiry-contact"><strong>{item.name}</strong><div>{item.phone && <><a href={whatsappLink(item.phone)} target="_blank" rel="noreferrer"><MessageCircle size={13}/> WhatsApp</a><a href={`tel:${item.phone}`}><Phone size={13}/> Ligar</a></>}{item.email && <a href={`mailto:${item.email}?subject=Interesse no imóvel ${item.property_code}`}><Mail size={13}/> E-mail</a>}</div><small>Preferência: {item.preferred_contact === 'email' ? 'e-mail' : item.preferred_contact === 'phone' ? 'ligação' : 'WhatsApp'}</small></div>
       <div className="site-inquiry-message"><span>Mensagem</span><p>{item.message || 'Sem mensagem adicional.'}</p></div>
