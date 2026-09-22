@@ -409,6 +409,7 @@ def _public_response(item: Property, organization_id: UUID, cover_photo_id: UUID
         parking_spaces=item.parking_spaces,
         furnished=item.furnished,
         pets_allowed=item.pets_allowed,
+        features=dict(item.features or {}),
         title=item.public_title or f"Imóvel {item.internal_number:06d}",
         description=item.public_description or "",
         published_at=item.published_at,
