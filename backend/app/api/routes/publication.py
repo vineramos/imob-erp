@@ -437,6 +437,44 @@ def public_properties(organization_id: UUID, db: Session = Depends(get_db)) -> l
     return [_public_response(item, organization_id, covers.get(item.id)) for item in items]
 
 
+@router.get("/public/sites/{organization_id}/properties/{slug}/similar", response_model=list[PublicPropertySiteResponse])
+def public_similar_properties(organization_id: UUID, slug: str, db: Session = Depends(get_db)) -> list[PublicPropertySiteResponse]:
+    _public_site_settings(db, organization_id)
+    item = _public_property_item(db, organization_id, slug)
+    candidates = list(
+        db.scalars(
+            select(Property)
+            .where(
+                Property.organization_id == organization_id,
+                Property.publication_enabled.is_(True),
+                Property.status == "available",
+                Property.id != item.id,
+            )
+            .order_by(Property.published_at.desc().nullslast(), Property.internal_number.desc())
+            .limit(40)
+        ).all()
+    )
+
+    def similarity(candidate: Property) -> float:
+        score = 0.0
+        current_address = item.address or {}
+        candidate_address = candidate.address or {}
+        if candidate_address.get("neighborhood") and candidate_address.get("neighborhood") == current_address.get("neighborhood"):
+            score += 5
+        if candidate.property_type == item.property_type:
+            score += 3
+        score += max(0, 3 - abs(int(candidate.bedrooms or 0) - int(item.bedrooms or 0)))
+        base = float(item.rent_amount or 0)
+        value = float(candidate.rent_amount or 0)
+        if base > 0 and value > 0:
+            score += max(0, 3 - abs(value - base) / max(base, 1) * 6)
+        return score
+
+    selected = sorted(candidates, key=similarity, reverse=True)[:4]
+    covers = _cover_photo_map(db, selected)
+    return [_public_response(candidate, organization_id, covers.get(candidate.id)) for candidate in selected]
+
+
 @router.get("/public/sites/{organization_id}/properties/{slug}", response_model=PublicPropertySiteResponse)
 def public_property_detail(organization_id: UUID, slug: str, db: Session = Depends(get_db)) -> PublicPropertySiteResponse:
     _public_site_settings(db, organization_id)
