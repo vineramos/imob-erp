@@ -87,6 +87,10 @@ class SiteInquiryResponse(BaseModel):
     message: str | None = None
     status: str
     source: str
+    responsible_user_id: UUID | None = None
+    next_action_title: str | None = None
+    next_action_at: datetime | None = None
+    next_action_notes: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -601,6 +605,10 @@ def _site_inquiry_response(item: PublicSiteInquiry) -> SiteInquiryResponse:
         message=item.message,
         status=item.status,
         source=item.source,
+        responsible_user_id=item.responsible_user_id,
+        next_action_title=item.next_action_title,
+        next_action_at=item.next_action_at,
+        next_action_notes=item.next_action_notes,
         created_at=item.created_at,
         updated_at=item.updated_at,
     )
