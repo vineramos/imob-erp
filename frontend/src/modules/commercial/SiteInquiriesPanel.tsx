@@ -30,6 +30,10 @@ type SiteInquiry = {
   message: string | null
   status: InquiryStatus
   source: string
+  responsible_user_id: string | null
+  next_action_title: string | null
+  next_action_at: string | null
+  next_action_notes: string | null
   created_at: string
   updated_at: string
 }
@@ -86,14 +90,18 @@ type LeaseCharge = {
   end_date:string|null
 }
 type LeaseComposition = { proposal_id:string; rent_amount:number; start_date:string; end_date:string; monthly_charges:LeaseCharge[]; tenant_monthly_total:number }
+type CrmResponsible = { id:string; name:string; email:string|null }
+type CommercialTimelineEvent = { kind:string; label:string; detail:string|null; at:string }
 type CommercialFunnel = {
   inquiry: SiteInquiry
+  responsible: CrmResponsible | null
   person: { id: string; name: string; document_number: string | null; email: string | null; phone: string | null } | null
   property_status: string | null
   property_publication_enabled: boolean
   suggested_rent_amount: number | null
   visits: CommercialVisit[]
   proposals: CommercialProposal[]
+  timeline: CommercialTimelineEvent[]
 }
 type ProposalConversion = {
   proposal: CommercialProposal
@@ -122,6 +130,7 @@ function money(value: number | null) { return value == null ? '—' : Number(val
 function whatsappLink(phone: string) { let digits = phone.replace(/\D/g, ''); if (!digits.startsWith('55') && (digits.length === 10 || digits.length === 11)) digits = `55${digits}`; return `https://wa.me/${digits}` }
 function tomorrowLocal() { const value = new Date(); value.setDate(value.getDate() + 1); value.setMinutes(0, 0, 0); if (value.getHours() < 9) value.setHours(9); return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}-${String(value.getDate()).padStart(2, '0')}T${String(value.getHours()).padStart(2, '0')}:00` }
 function startDateDefault() { const value = new Date(); value.setDate(value.getDate() + 15); return value.toISOString().slice(0, 10) }
+function toLocalInput(value:string|null){if(!value)return '';const date=new Date(value);const offset=date.getTimezoneOffset()*60000;return new Date(date.getTime()-offset).toISOString().slice(0,16)}
 function isInsurance(charge:LeaseCharge){ return charge.kind==='guarantee_insurance'||charge.kind==='fire_insurance' }
 function retentionAmount(charge:LeaseCharge){
   if(!isInsurance(charge)||charge.beneficiary!=='third_party')return 0
@@ -134,6 +143,7 @@ export function SiteInquiriesPanel({ permissions }: Props) {
   const canManage = permissions.includes('crm.manage')
   const canCreateContract = permissions.includes('contracts.create')
   const [items, setItems] = useState<SiteInquiry[]>([])
+  const [responsibles, setResponsibles] = useState<CrmResponsible[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [query, setQuery] = useState('')
@@ -158,11 +168,15 @@ export function SiteInquiriesPanel({ permissions }: Props) {
   const [compositionProposal, setCompositionProposal] = useState<CommercialProposal|null>(null)
   const [composition, setComposition] = useState<LeaseComposition|null>(null)
   const [compositionLoading,setCompositionLoading]=useState(false)
+  const [workflowResponsible,setWorkflowResponsible]=useState('')
+  const [workflowAction,setWorkflowAction]=useState('')
+  const [workflowAt,setWorkflowAt]=useState('')
+  const [workflowNotes,setWorkflowNotes]=useState('')
   const [busy, setBusy] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true); setError('')
-    try { setItems(await apiRequest<SiteInquiry[]>('/crm/site-inquiries')) }
+    try { const [inquiries,team]=await Promise.all([apiRequest<SiteInquiry[]>('/crm/site-inquiries'),apiRequest<CrmResponsible[]>('/crm/responsibles')]);setItems(inquiries);setResponsibles(team) }
     catch (cause) { setError(cause instanceof ApiError ? cause.detail : 'Não foi possível carregar os interesses recebidos pelo site.') }
     finally { setLoading(false) }
   }, [])
@@ -198,12 +212,25 @@ export function SiteInquiriesPanel({ permissions }: Props) {
   async function loadFunnel(inquiryId: string, resetMessage = true) {
     if (resetMessage) { setModalError(''); setModalSuccess('') }
     setModalLoading(true)
-    try { const next = await apiRequest<CommercialFunnel>(`/crm/site-inquiries/${inquiryId}/funnel`); setFunnel(next); setItems((current) => current.map((row) => row.id === inquiryId ? { ...row, status: next.inquiry.status } : row)); if (resetMessage) setProposalRent(next.suggested_rent_amount == null ? null : Number(next.suggested_rent_amount)) }
+    try { const next = await apiRequest<CommercialFunnel>(`/crm/site-inquiries/${inquiryId}/funnel`); setFunnel(next); setItems((current) => current.map((row) => row.id === inquiryId ? { ...row, ...next.inquiry } : row)); setWorkflowResponsible(next.inquiry.responsible_user_id||'');setWorkflowAction(next.inquiry.next_action_title||'');setWorkflowAt(toLocalInput(next.inquiry.next_action_at));setWorkflowNotes(next.inquiry.next_action_notes||''); if (resetMessage) setProposalRent(next.suggested_rent_amount == null ? null : Number(next.suggested_rent_amount)) }
     catch (cause) { setModalError(cause instanceof ApiError ? cause.detail : 'Não foi possível abrir o atendimento comercial.') }
     finally { setModalLoading(false) }
   }
   async function openFunnel(inquiryId: string) { setSelectedId(inquiryId); setFunnel(null); setVisitOpen(false); setProposalOpen(false); setProposalRent(null); setCompositionProposal(null); setComposition(null); await loadFunnel(inquiryId) }
   async function changeStatus(item: SiteInquiry, nextStatus: InquiryStatus) { if (!canManage || nextStatus === item.status || !manualStatusOptions.includes(nextStatus)) return; setUpdatingId(item.id); setError(''); try { const updated = await apiRequest<SiteInquiry>(`/crm/site-inquiries/${item.id}`, { method: 'PATCH', body: JSON.stringify({ status: nextStatus }) }); setItems((current) => current.map((row) => row.id === item.id ? updated : row)) } catch (cause) { setError(cause instanceof ApiError ? cause.detail : 'Não foi possível atualizar o atendimento.') } finally { setUpdatingId(null) } }
+
+  async function saveWorkflow() {
+    if(!selectedId||!canManage)return
+    setBusy(true);setModalError('');setModalSuccess('')
+    try{
+      const nextAt=workflowAt?new Date(workflowAt):null
+      if(nextAt&&Number.isNaN(nextAt.getTime()))throw new Error('Data inválida')
+      await apiRequest(`/crm/site-inquiries/${selectedId}/workflow`,{method:'PATCH',body:JSON.stringify({responsible_user_id:workflowResponsible||null,next_action_title:workflowAction||null,next_action_at:nextAt?nextAt.toISOString():null,next_action_notes:workflowNotes||null})})
+      setModalSuccess('Responsável e próxima ação atualizados.')
+      await loadFunnel(selectedId,false)
+    }catch(cause){setModalError(cause instanceof ApiError?cause.detail:'Não foi possível atualizar o fluxo comercial.')}
+    finally{setBusy(false)}
+  }
 
   async function scheduleVisit(event: FormEvent) {
     event.preventDefault(); if (!selectedId || !visitStartsAt) return; setBusy(true); setModalError(''); setModalSuccess('')
@@ -256,7 +283,7 @@ export function SiteInquiriesPanel({ permissions }: Props) {
       <div className="portfolio-tabs"><button className={filter === 'all' ? 'active' : ''} type="button" onClick={() => setFilter('all')}>Todos <span>{items.length}</span></button><button className={filter === 'new' ? 'active' : ''} type="button" onClick={() => {setFilter('new');setViewMode('list')}}>Novos <span>{metrics.new}</span></button><button className={filter === 'visit_scheduled' ? 'active' : ''} type="button" onClick={() => {setFilter('visit_scheduled');setViewMode('list')}}>Visitas <span>{metrics.visits}</span></button><button className={filter === 'proposal' ? 'active' : ''} type="button" onClick={() => {setFilter('proposal');setViewMode('list')}}>Propostas <span>{metrics.proposals}</span></button></div>
       <label className="portfolio-search"><Search size={14}/><input placeholder="Imóvel, nome, telefone ou e-mail..." value={query} onChange={(event) => setQuery(event.target.value)}/></label>
     </div>
-    {loading ? <article className="panel settings-loading">Carregando interesses...</article> : viewMode==='pipeline' ? <div className="commercial-pipeline-board">{pipelineStages.map(stage=>{const stageItems=pipelineItems.filter(item=>stage.statuses.includes(item.status));return <section className={`commercial-pipeline-column stage-${stage.key}`} key={stage.key}><header><div><span>{stage.label}</span><strong>{stageItems.length}</strong></div></header><div className="commercial-pipeline-cards">{stageItems.map(item=><button type="button" className={`commercial-pipeline-card status-${item.status}`} key={item.id} onClick={()=>void openFunnel(item.id)}><div className="commercial-pipeline-card-top"><span>#{item.property_code}</span><i>{dateTime(item.created_at)}</i></div><strong>{item.name}</strong><p>{item.property_title}</p><small>{item.phone||item.email||'Contato não informado'}</small><div><span className={`status-badge ${item.status==='won'?'success':item.status==='lost'?'danger':'neutral'}`}>{statusLabels[item.status]}</span><b>Abrir atendimento</b></div></button>)}{stageItems.length===0&&<div className="commercial-pipeline-empty">Nenhum lead nesta etapa.</div>}</div></section>})}</div> : <div className="site-inquiries-list">{filtered.map((item) => <article className={`panel site-inquiry-card status-${item.status}`} key={item.id}>
+    {loading ? <article className="panel settings-loading">Carregando interesses...</article> : viewMode==='pipeline' ? <div className="commercial-pipeline-board">{pipelineStages.map(stage=>{const stageItems=pipelineItems.filter(item=>stage.statuses.includes(item.status));return <section className={`commercial-pipeline-column stage-${stage.key}`} key={stage.key}><header><div><span>{stage.label}</span><strong>{stageItems.length}</strong></div></header><div className="commercial-pipeline-cards">{stageItems.map(item=><button type="button" className={`commercial-pipeline-card status-${item.status}`} key={item.id} onClick={()=>void openFunnel(item.id)}><div className="commercial-pipeline-card-top"><span>#{item.property_code}</span><i>{dateTime(item.created_at)}</i></div><strong>{item.name}</strong><p>{item.property_title}</p><small>{item.phone||item.email||'Contato não informado'}</small>{item.responsible_user_id&&<small className="pipeline-owner">Responsável: {responsibles.find(row=>row.id===item.responsible_user_id)?.name||'Equipe comercial'}</small>}{item.next_action_title&&<small className="pipeline-next-action">Próxima: {item.next_action_title}{item.next_action_at?' · '+dateTime(item.next_action_at):''}</small>}<div><span className={`status-badge ${item.status==='won'?'success':item.status==='lost'?'danger':'neutral'}`}>{statusLabels[item.status]}</span><b>Abrir atendimento</b></div></button>)}{stageItems.length===0&&<div className="commercial-pipeline-empty">Nenhum lead nesta etapa.</div>}</div></section>})}</div> : <div className="site-inquiries-list">{filtered.map((item) => <article className={`panel site-inquiry-card status-${item.status}`} key={item.id}>
       <div className="site-inquiry-property"><span className="eyebrow">IMÓVEL #{item.property_code}</span><strong>{item.property_title}</strong><small>Recebido em {dateTime(item.created_at)}</small></div>
       <div className="site-inquiry-contact"><strong>{item.name}</strong><div>{item.phone && <><a href={whatsappLink(item.phone)} target="_blank" rel="noreferrer"><MessageCircle size={13}/> WhatsApp</a><a href={`tel:${item.phone}`}><Phone size={13}/> Ligar</a></>}{item.email && <a href={`mailto:${item.email}?subject=Interesse no imóvel ${item.property_code}`}><Mail size={13}/> E-mail</a>}</div><small>Preferência: {item.preferred_contact === 'email' ? 'e-mail' : item.preferred_contact === 'phone' ? 'ligação' : 'WhatsApp'}</small></div>
       <div className="site-inquiry-message"><span>Mensagem</span><p>{item.message || 'Sem mensagem adicional.'}</p></div>
@@ -271,6 +298,8 @@ export function SiteInquiriesPanel({ permissions }: Props) {
           {modalLoading && !funnel ? <div className="settings-loading">Carregando atendimento...</div> : funnel && <>
             <section className="funnel-summary-grid"><article className="funnel-summary-card"><span>Interessado</span><strong>{funnel.person?.name || funnel.inquiry.name}</strong><small>{funnel.person ? 'Cadastro vinculado automaticamente' : 'Será cadastrado no próximo passo'}</small></article><article className="funnel-summary-card"><span>Imóvel</span><strong>#{funnel.inquiry.property_code}</strong><small>{funnel.property_status || 'indisponível'} · {funnel.property_publication_enabled ? 'publicado' : 'fora do site'}</small></article><article className="funnel-summary-card"><span>Aluguel de referência</span><strong>{money(funnel.suggested_rent_amount)}</strong><small>valor atual do estoque</small></article></section>
 
+            <section className="canonical-modal-section funnel-section crm-workflow-section"><div className="funnel-section-heading"><div><span className="eyebrow">Gestão do atendimento</span><h3>Responsável e próxima ação</h3></div>{funnel.responsible&&<span title={funnel.responsible.email||''}>{funnel.responsible.name.slice(0,1).toUpperCase()}</span>}</div><div className="crm-workflow-grid"><label className="field"><span>Responsável</span><select disabled={!canManage||busy} value={workflowResponsible} onChange={event=>setWorkflowResponsible(event.target.value)}><option value="">Não atribuído</option>{responsibles.map(row=><option key={row.id} value={row.id}>{row.name}</option>)}</select></label><label className="field"><span>Próxima ação</span><input disabled={!canManage||busy} maxLength={180} value={workflowAction} onChange={event=>setWorkflowAction(event.target.value)} placeholder="Ex.: ligar, enviar proposta, confirmar visita"/></label><label className="field"><span>Quando</span><input disabled={!canManage||busy} type="datetime-local" value={workflowAt} onChange={event=>setWorkflowAt(event.target.value)}/></label><label className="field crm-workflow-notes"><span>Observações</span><input disabled={!canManage||busy} maxLength={2000} value={workflowNotes} onChange={event=>setWorkflowNotes(event.target.value)} placeholder="Contexto para o próximo contato"/></label></div>{canManage&&<div className="funnel-inline-actions"><button className="button secondary" type="button" disabled={busy} onClick={()=>void saveWorkflow()}><UserRoundCheck size={14}/> Salvar gestão</button></div>}</section>
+
             {canManage && funnel.inquiry.status !== 'won' && funnel.inquiry.status !== 'lost' && <div className="funnel-actions"><button className="button secondary" type="button" onClick={() => { setVisitOpen((value) => !value); setProposalOpen(false) }}><CalendarPlus2 size={15}/> Agendar visita</button><button className="button secondary" type="button" onClick={() => { setProposalOpen((value) => !value); setVisitOpen(false); if (proposalRent == null && funnel.suggested_rent_amount != null) setProposalRent(Number(funnel.suggested_rent_amount)) }}><FilePlus2 size={15}/> Criar proposta</button></div>}
 
             {visitOpen && <form className="funnel-inline-form" onSubmit={(event) => void scheduleVisit(event)}><div className="funnel-inline-heading"><div><span className="eyebrow">Visita</span><strong>Agendar no calendário comercial</strong></div><button type="button" className="portfolio-modal-close" onClick={() => setVisitOpen(false)}><X size={15}/></button></div><div className="funnel-form-grid"><label className="field"><span>Data e hora</span><input required type="datetime-local" value={visitStartsAt} onChange={(event) => setVisitStartsAt(event.target.value)}/></label><label className="field"><span>Duração</span><select value={visitDuration} onChange={(event) => setVisitDuration(Number(event.target.value))}><option value={30}>30 min</option><option value={45}>45 min</option><option value={60}>1 hora</option><option value={90}>1h30</option><option value={120}>2 horas</option></select></label></div><label className="field"><span>Observações</span><textarea rows={2} maxLength={2000} value={visitNotes} onChange={(event) => setVisitNotes(event.target.value)} placeholder="Orientações para a visita..."/></label><div className="funnel-inline-actions"><button className="button primary" disabled={busy} type="submit"><CalendarCheck2 size={14}/> Confirmar visita</button></div></form>}
@@ -280,6 +309,8 @@ export function SiteInquiriesPanel({ permissions }: Props) {
             <section className="canonical-modal-section funnel-section"><div className="funnel-section-heading"><div><span className="eyebrow">Visitas</span><h3>Histórico de visitas</h3></div><span>{funnel.visits.length}</span></div>{funnel.visits.length === 0 ? <p className="funnel-empty-copy">Nenhuma visita agendada.</p> : <div className="funnel-timeline">{funnel.visits.map((visit) => <article key={visit.id}><div><strong>{visit.code} · {dateTime(visit.starts_at)}</strong><span>{visit.responsible_name || 'Responsável comercial'} · {visitStatusLabels[visit.status]}</span>{visit.notes && <small>{visit.notes}</small>}</div>{canManage && visit.status === 'scheduled' && <div className="funnel-row-actions"><button type="button" className="mini-action success" disabled={busy} onClick={() => void closeVisit(visit, 'completed')}><Check size={13}/> Realizada</button><button type="button" className="mini-action" disabled={busy} onClick={() => void closeVisit(visit, 'no_show')}>Não compareceu</button><button type="button" className="mini-action danger" disabled={busy} onClick={() => void closeVisit(visit, 'cancelled')}>Cancelar</button></div>}</article>)}</div>}</section>
 
             <section className="canonical-modal-section funnel-section"><div className="funnel-section-heading"><div><span className="eyebrow">Propostas</span><h3>Negociação e conversão</h3></div><span>{funnel.proposals.length}</span></div>{funnel.proposals.length === 0 ? <p className="funnel-empty-copy">Nenhuma proposta criada.</p> : <div className="funnel-proposals">{funnel.proposals.map((proposal) => <article key={proposal.id}><div className="funnel-proposal-main"><div><strong>{proposal.code}</strong><span>{money(proposal.rent_amount)} · {proposal.term_months} meses · {guaranteeLabels[proposal.guarantee_type]}</span><small>Início {new Date(`${proposal.start_date}T12:00:00`).toLocaleDateString('pt-BR')}</small></div><span className={`status-badge ${proposal.status === 'accepted' || proposal.status === 'won' ? 'success' : proposal.status === 'rejected' || proposal.status === 'withdrawn' ? 'danger' : 'neutral'}`}>{proposalStatusLabels[proposal.status]}</span></div>{proposal.closed_reason && <p>{proposal.closed_reason}</p>}{proposal.lease_code && <div className="funnel-contract-link"><FileCheck2 size={14}/><strong>{proposal.lease_code}</strong><button type="button" onClick={() => window.location.assign('/app/contracts')}>Abrir contratos</button></div>}{canManage && proposal.status === 'submitted' && <div className="funnel-row-actions"><button type="button" className="mini-action success" disabled={busy} onClick={() => void proposalAction(proposal, 'accepted')}><Check size={13}/> Aceitar</button><button type="button" className="mini-action danger" disabled={busy} onClick={() => void proposalAction(proposal, 'rejected')}>Recusar</button><button type="button" className="mini-action" disabled={busy} onClick={() => void proposalAction(proposal, 'withdrawn')}>Retirada</button></div>}{canManage && canCreateContract && proposal.status === 'accepted' && <div className="funnel-row-actions"><button type="button" className="button primary compact-button" disabled={busy||compositionLoading} onClick={() => void openComposition(proposal)}><FilePlus2 size={14}/> Gerar contrato</button><small>Primeiro revise aluguel + condomínio + IPTU + seguros. O anúncio só sai do ar após a assinatura final.</small></div>}</article>)}</div>}</section>
+
+            <section className="canonical-modal-section funnel-section crm-timeline-section"><div className="funnel-section-heading"><div><span className="eyebrow">Histórico</span><h3>Linha do tempo comercial</h3></div><span>{funnel.timeline.length}</span></div><div className="crm-timeline">{funnel.timeline.map((event,index)=><article key={event.kind+'-'+event.at+'-'+index} className={'timeline-'+event.kind}><i></i><div><strong>{event.label}</strong><span>{event.detail||'Atualização comercial'}</span><small>{dateTime(event.at)}</small></div></article>)}</div></section>
           </>}
         </div>
       </div>
