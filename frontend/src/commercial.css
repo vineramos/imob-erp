@@ -86,3 +86,88 @@
   .signature-timeline { grid-column: auto; }
   .commercial-metrics { grid-template-columns: 1fr; }
 }
+
+
+/* Commercial publication v8.2 */
+.commercial-toolbar-v82 {
+  display: grid;
+  grid-template-columns: auto minmax(220px,1fr) 150px auto 170px;
+  gap: 8px;
+  align-items: center;
+}
+.commercial-toolbar-v82 > select,
+.commercial-sort {
+  min-height: 36px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+}
+.commercial-toolbar-v82 > select {
+  padding-inline: 9px;
+  color: var(--text);
+  font-size: 9.5px;
+}
+.commercial-quick-filter {
+  min-height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: 9px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.commercial-quick-filter.active {
+  border-color: #c6aa67;
+  background: #fbf6e9;
+  color: #725a21;
+}
+.commercial-sort {
+  padding-inline: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.commercial-sort svg { color: var(--text-muted); }
+.commercial-sort select {
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text);
+  font-size: 9px;
+}
+.commercial-property-card-v82 {
+  min-height: 172px;
+}
+.commercial-property-card-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin: 12px 0 4px;
+}
+.commercial-property-card-facts span {
+  min-height: 24px;
+  padding: 4px 7px;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  background: var(--surface-soft);
+  color: var(--text-muted);
+  font-size: 8px;
+  font-weight: 650;
+}
+@media(max-width:1180px){
+  .commercial-toolbar-v82 { grid-template-columns:1fr 1fr 1fr; }
+  .commercial-toolbar-v82 .portfolio-tabs { grid-column:1/-1; }
+}
+@media(max-width:760px){
+  .commercial-toolbar-v82 { grid-template-columns:1fr 1fr; }
+  .commercial-toolbar-v82 .portfolio-search { grid-column:1/-1; }
+}
+@media(max-width:520px){
+  .commercial-toolbar-v82 { grid-template-columns:1fr; }
+  .commercial-toolbar-v82 .portfolio-tabs,
+  .commercial-toolbar-v82 .portfolio-search { grid-column:auto; }
+}
