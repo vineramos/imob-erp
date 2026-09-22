@@ -612,3 +612,48 @@
 @media(max-width:620px){
   .commercial-funnel-modal .crm-workflow-grid-v86{grid-template-columns:1fr!important}
 }
+
+
+/* CRM v8.7 — editable Kanban stage and manual commercial history */
+.commercial-funnel-modal .crm-workflow-grid-v86 .field:first-child select{
+  background:var(--surface)!important;
+  color:var(--text)!important;
+  font-weight:720!important;
+}
+.crm-manual-history-form{
+  margin-top:6px;
+  padding:10px;
+  display:grid;
+  grid-template-columns:minmax(0,.85fr) minmax(0,1.6fr) auto;
+  gap:8px;
+  align-items:end;
+  border:1px solid var(--border);
+  border-radius:8px;
+  background:var(--surface-muted);
+}
+.crm-manual-history-form .field{min-width:0}
+.crm-manual-history-form input,
+.crm-manual-history-form textarea{
+  width:100%;
+  min-width:0;
+  box-sizing:border-box;
+  border:1px solid var(--border);
+  border-radius:8px;
+  background:var(--surface);
+  color:var(--text);
+  font:inherit;
+  font-size:9px;
+  outline:0;
+}
+.crm-manual-history-form input{height:34px;padding:0 9px}
+.crm-manual-history-form textarea{min-height:54px;padding:8px 9px;resize:vertical}
+.crm-manual-history-form input:focus,
+.crm-manual-history-form textarea:focus{
+  border-color:var(--brand-primary);
+  box-shadow:0 0 0 3px var(--brand-primary-soft);
+}
+.crm-timeline article.timeline-manual>i{background:#b88a35}
+@media(max-width:820px){
+  .crm-manual-history-form{grid-template-columns:1fr}
+  .crm-manual-history-form .funnel-inline-actions{justify-content:flex-start}
+}
