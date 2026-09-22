@@ -36,6 +36,19 @@ function publicLocation(item: PublicProperty) {
   return [item.address.neighborhood, item.address.city, item.address.state].filter(Boolean).join(' · ') || 'Localização sob consulta'
 }
 
+function publicMapAddress(item: PublicProperty) {
+  return [
+    item.address.street,
+    item.address.number,
+    item.address.complement,
+    item.address.neighborhood,
+    item.address.city,
+    item.address.state,
+    item.address.postal_code,
+    'Brasil',
+  ].filter(Boolean).join(', ')
+}
+
 function propertyType(value: string) {
   const labels: Record<string, string> = { apartment: 'Apartamento', house: 'Casa', commercial: 'Comercial', land: 'Terreno', studio: 'Studio', other: 'Imóvel' }
   return labels[value] ?? value
@@ -242,7 +255,11 @@ export function PublicSitePage({ organizationId, slug }: Props) {
 
   if (selected) return <main className="public-site public-site-premium" style={siteStyle}>
     <header className="public-header">{brand}<nav className="public-nav"><a href={`/site/${organizationId}#imoveis`}>Alugar</a><a href={`/site/${organizationId}#bairros`}>Bairros</a><a href={`/site/${organizationId}#servicos`}>Serviços</a><a href="#contato">Contato</a></nav><div className="public-header-actions">{contactActions}<a className="public-announce" href={`/site/${organizationId}#anunciar`}>Anunciar imóvel</a></div></header>
-    <section className="public-detail-shell"><a className="public-back" href={`/site/${organizationId}#imoveis`}><ArrowLeft size={15}/> Voltar aos imóveis</a><div className="public-detail-grid"><PublicPropertyGallery organizationId={organizationId} item={selected}/><aside className="public-detail-copy"><div className="public-detail-labels"><span>PARA ALUGAR</span><small>Ref. {selected.code}</small></div><h1>{selected.title}</h1><p className="public-location"><MapPin size={15}/>{publicLocation(selected)}</p><strong className="public-price">{money(selected.rent_amount)}</strong><small>aluguel mensal</small><div className="public-facts"><span><BedDouble size={18}/><strong>{formatBedroomSummary(selected.bedrooms,selected.suites)}</strong></span><span><Bath size={18}/><strong>{selected.bathrooms}</strong> banheiros</span><span><Car size={18}/><strong>{selected.parking_spaces}</strong> vagas</span><span><Ruler size={18}/><strong>{selected.area_m2 ?? '—'}</strong> m²</span></div><div className="public-costs"><div><span>Condomínio</span><strong>{money(selected.condo_amount)}</strong></div><div><span>IPTU</span><strong>{money(selected.iptu_amount)}</strong></div><div><span>Pets</span><strong>{selected.pets_allowed ? 'Permitidos' : 'Consulte'}</strong></div></div><div className="public-security-note"><ShieldCheck size={16}/><span>Por segurança, o endereço completo é apresentado durante o atendimento e a visita.</span></div></aside></div><article className="public-description-panel"><span className="public-kicker">SOBRE O IMÓVEL</span><h2>Detalhes</h2><p>{selected.description || 'Entre em contato para receber mais informações sobre este imóvel.'}</p></article></section>
+    <section className="public-detail-shell"><a className="public-back" href={`/site/${organizationId}#imoveis`}><ArrowLeft size={15}/> Voltar aos imóveis</a><div className="public-detail-grid"><PublicPropertyGallery organizationId={organizationId} item={selected}/><aside className="public-detail-copy"><div className="public-detail-labels"><span>PARA ALUGAR</span><small>Ref. {selected.code}</small></div><h1>{selected.title}</h1><p className="public-location"><MapPin size={15}/>{publicLocation(selected)}</p><strong className="public-price">{money(selected.rent_amount)}</strong><small>aluguel mensal</small><div className="public-facts"><span><BedDouble size={18}/><strong>{formatBedroomSummary(selected.bedrooms,selected.suites)}</strong></span><span><Bath size={18}/><strong>{selected.bathrooms}</strong> banheiros</span><span><Car size={18}/><strong>{selected.parking_spaces}</strong> vagas</span><span><Ruler size={18}/><strong>{selected.area_m2 ?? '—'}</strong> m²</span></div><div className="public-costs"><div><span>Condomínio</span><strong>{money(selected.condo_amount)}</strong></div><div><span>IPTU</span><strong>{money(selected.iptu_amount)}</strong></div><div><span>Pets</span><strong>{selected.pets_allowed ? 'Permitidos' : 'Consulte'}</strong></div></div><div className="public-security-note"><ShieldCheck size={16}/><span>Por segurança, o endereço completo é apresentado durante o atendimento e a visita.</span></div></aside></div><article className="public-description-panel"><span className="public-kicker">SOBRE O IMÓVEL</span><h2>Detalhes</h2><p>{selected.description || 'Entre em contato para receber mais informações sobre este imóvel.'}</p></article>
+    <section className="public-property-map-section" aria-label="Localização do imóvel">
+      <div className="public-property-map-heading"><div><span className="public-kicker">LOCALIZAÇÃO</span><h2>{selected.address.neighborhood || selected.address.city || 'Localização'}</h2><p>{publicLocation(selected)}</p></div><a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(publicMapAddress(selected))}`} target="_blank" rel="noreferrer">Abrir no Google Maps <ArrowRight size={14}/></a></div>
+      <iframe title={`Mapa do imóvel ${selected.code}`} loading="lazy" allowFullScreen referrerPolicy="no-referrer-when-downgrade" src={`https://www.google.com/maps?q=${encodeURIComponent(publicMapAddress(selected))}&output=embed`}/>
+    </section></section>
     <section className="public-detail-contact public-inquiry-lead" id="contato"><div className="public-inquiry-intro"><span className="public-kicker">AGENDE SUA VISITA</span><h2>Gostou deste imóvel?</h2><p>Deixe seus dados e a equipe recebe este interesse diretamente no CRM, já vinculado ao imóvel.</p>{contactActions}</div><PublicInquiryForm organizationId={organizationId} item={selected}/></section>
     <footer className="public-footer"><div>{brand}</div><div><strong>Catálogo conectado ao Imob ERP</strong><span>Informações sujeitas a confirmação e disponibilidade.</span></div></footer>
   </main>
