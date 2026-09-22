@@ -1234,3 +1234,34 @@
     min-height: 72px !important;
   }
 }
+
+
+/* Public search v8.9 — rent filter without condominium option */
+.public-site-premium .public-rent-range-editor,
+.public-site-premium .public-search-premium > .public-rent-range-editor,
+.public-site-premium .public-search-modal .public-rent-range-editor {
+  grid-template-rows: auto 30px !important;
+  min-height: 58px !important;
+  height: auto !important;
+  align-content: center !important;
+  gap: 4px !important;
+  padding: 8px 10px !important;
+}
+
+.public-site-premium .public-search-premium > .public-rent-range-editor {
+  height: 58px !important;
+  min-height: 58px !important;
+}
+
+.public-site-premium .public-rent-combined {
+  height: 30px;
+}
+
+.public-site-premium .public-rent-inline-field {
+  padding-inline: 10px !important;
+}
+
+.public-site-premium .public-rent-inline-field input {
+  height: 28px;
+  line-height: 28px;
+}
