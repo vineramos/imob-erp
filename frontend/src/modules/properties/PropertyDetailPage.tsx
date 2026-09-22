@@ -82,7 +82,7 @@ export function PropertyDetailPage(props:Props){
 
   async function share(){
     const url=property.publication_enabled&&property.public_slug?`${window.location.origin}/site/${props.organizationId}/imoveis/${property.public_slug}`:window.location.href
-    if(navigator.share){await navigator.share({title,text:addressLine(property),url}).catch(()=>undefined);return}
+    if(navigator.share){await navigator.share({title:addressLine(property),text:addressLine(property),url}).catch(()=>undefined);return}
     await navigator.clipboard?.writeText(url)
   }
 
