@@ -26,6 +26,10 @@ export function CapturesPage({ permissions }: Props) {
   const [people, setPeople] = useState<Person[]>([])
   const [responsibles, setResponsibles] = useState<Responsible[]>([])
   const [query, setQuery] = useState('')
+  const [statusFilter,setStatusFilter]=useState('all')
+  const [sourceFilter,setSourceFilter]=useState('all')
+  const [responsibleFilter,setResponsibleFilter]=useState('all')
+  const [captureSort,setCaptureSort]=useState<'recent'|'rent_desc'|'rent_asc'|'stage'>('recent')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [showForm, setShowForm] = useState(false)
@@ -69,9 +73,22 @@ export function CapturesPage({ permissions }: Props) {
 
   const filtered = useMemo(() => {
     const term = query.trim().toLowerCase()
-    if (!term) return items
-    return items.filter((item) => `${item.contact_person_name ?? ''} ${addressLine(item.property_address)} ${sourceLabels[item.source] ?? item.source}`.toLowerCase().includes(term))
-  }, [items, query])
+    const result = items.filter((item) => {
+      if (statusFilter !== 'all' && item.status !== statusFilter) return false
+      if (sourceFilter !== 'all' && item.source !== sourceFilter) return false
+      if (responsibleFilter === 'unassigned' && item.responsible_user_id) return false
+      if (responsibleFilter !== 'all' && responsibleFilter !== 'unassigned' && item.responsible_user_id !== responsibleFilter) return false
+      if (!term) return true
+      const haystack = (item.contact_person_name ?? '') + ' ' + addressLine(item.property_address) + ' ' + (sourceLabels[item.source] ?? item.source)
+      return haystack.toLowerCase().includes(term)
+    })
+    return [...result].sort((a,b) => {
+      if (captureSort === 'rent_desc') return Number(b.estimated_rent ?? -1) - Number(a.estimated_rent ?? -1)
+      if (captureSort === 'rent_asc') return Number(a.estimated_rent ?? Number.MAX_SAFE_INTEGER) - Number(b.estimated_rent ?? Number.MAX_SAFE_INTEGER)
+      if (captureSort === 'stage') return activeStages.indexOf(a.status as (typeof activeStages)[number]) - activeStages.indexOf(b.status as (typeof activeStages)[number])
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    })
+  }, [items, query, statusFilter, sourceFilter, responsibleFilter, captureSort])
 
   const counts = useMemo(() => ({
     open: items.filter((item) => item.status !== 'lost' && item.status !== 'available').length,
@@ -142,7 +159,7 @@ export function CapturesPage({ permissions }: Props) {
 
     <div className="metric-grid capture-metrics"><article className="metric-card"><span>Em andamento</span><strong>{counts.open}</strong><small>Captações ativas</small></article><article className="metric-card"><span>Aprovadas</span><strong>{counts.approved}</strong><small>Prontas ou já convertidas</small></article><article className="metric-card"><span>Perdidas</span><strong>{counts.lost}</strong><small>Motivo preservado</small></article><article className="metric-card"><span>Total</span><strong>{items.length}</strong><small>Histórico da operação</small></article></div>
 
-    <article className="panel portfolio-toolbar"><label className="portfolio-search capture-search"><Search size={15}/><input placeholder="Buscar por contato, endereço ou origem..." value={query} onChange={(event) => setQuery(event.target.value)}/></label></article>
+    <article className="panel portfolio-toolbar capture-toolbar-v82"><label className="portfolio-search capture-search"><Search size={15}/><input placeholder="Buscar por contato, endereço ou origem..." value={query} onChange={(event) => setQuery(event.target.value)}/></label><select value={statusFilter} onChange={e=>setStatusFilter(e.target.value)}><option value="all">Todas as etapas</option>{Object.entries(statusLabels).map(([key,label])=><option value={key} key={key}>{label}</option>)}</select><select value={sourceFilter} onChange={e=>setSourceFilter(e.target.value)}><option value="all">Todas as origens</option>{Object.entries(sourceLabels).map(([key,label])=><option value={key} key={key}>{label}</option>)}</select><select value={responsibleFilter} onChange={e=>setResponsibleFilter(e.target.value)}><option value="all">Todos os responsáveis</option><option value="unassigned">Sem responsável</option>{responsibles.map(item=><option value={item.id} key={item.id}>{item.name}</option>)}</select><select value={captureSort} onChange={e=>setCaptureSort(e.target.value as 'recent'|'rent_desc'|'rent_asc'|'stage')}><option value="recent">Mais recentes</option><option value="stage">Etapa do funil</option><option value="rent_desc">Maior aluguel</option><option value="rent_asc">Menor aluguel</option></select></article>
     {loading ? <article className="panel settings-loading">Carregando captações...</article> : <div className="portfolio-card-list">{filtered.map((item) => <article className="panel capture-row" key={item.id}><div className="capture-status-rail"><i className={`capture-dot ${item.status}`}/></div><div className="capture-main"><div><strong>{item.contact_person_name || 'Contato ainda não vinculado'}</strong><span className="status-badge neutral">{sourceLabels[item.source] ?? item.source}</span></div><span><MapPin size={13}/>{addressLine(item.property_address)}</span><small>{item.notes || 'Sem observações adicionais.'}</small></div><div className="capture-value"><span>Aluguel estimado</span><strong>{money(item.estimated_rent)}</strong></div><div className="capture-stage"><span>Etapa</span><strong>{statusLabels[item.status] ?? item.status}</strong><small>{new Date(item.created_at).toLocaleDateString('pt-BR')}</small>{canManage && <button className="button secondary capture-manage-button" type="button" onClick={() => openManage(item)}>Gerenciar</button>}</div></article>)}{filtered.length === 0 && <article className="panel portfolio-empty"><Handshake size={27}/><strong>Nenhuma captação encontrada.</strong><span>As novas oportunidades aparecerão aqui antes de virarem imóveis administrados.</span></article>}</div>}
 
     <article className="panel governance-note-card capture-governance"><UserRound size={21}/><div><span className="eyebrow">Regra preservada</span><h2>Captação não é imóvel ainda</h2><p>A oportunidade mantém seu próprio histórico. Somente depois da aprovação e conversão ela gera o cadastro definitivo do imóvel.</p></div></article>
