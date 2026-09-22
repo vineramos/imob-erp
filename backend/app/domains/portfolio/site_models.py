@@ -35,6 +35,9 @@ class PublicSiteInquiry(Base):
     consent_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="new", index=True)
     source: Mapped[str] = mapped_column(String(40), nullable=False, default="public_site")
+    next_action_title: Mapped[str | None] = mapped_column(String(180), nullable=True)
+    next_action_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+    next_action_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     requester_ip: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     user_agent: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
