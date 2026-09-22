@@ -21,6 +21,7 @@ from app.domains.portfolio.schemas import (
     PersonResponse,
     PersonUpdate,
     PropertyCreate,
+    PropertyFeatures,
     PropertyResponse,
     PropertyUpdate,
 )
@@ -69,7 +70,7 @@ def _property_response(item: Property) -> PropertyResponse:
         parking_spaces=item.parking_spaces,
         furnished=item.furnished,
         pets_allowed=item.pets_allowed,
-        features=dict(item.features or {}),
+        features=PropertyFeatures.model_validate(item.features or {}).model_dump(),
         public_title=item.public_title,
         publication_enabled=item.publication_enabled,
         owners=[
