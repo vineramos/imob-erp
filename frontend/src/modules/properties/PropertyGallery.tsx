@@ -70,14 +70,28 @@ export function PropertyGallery({ propertyId, canManage, onChanged, variant = 'p
   useEffect(() => { setCaption(selected?.caption ?? '') }, [selected?.id, selected?.caption])
   useEffect(() => {
     if (!viewerOpen) return
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setViewerOpen(false)
-      if (event.key === 'ArrowLeft') selectRelative(-1)
-      if (event.key === 'ArrowRight') selectRelative(1)
+    const handleViewerKeyboard = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        event.stopPropagation()
+        setViewerOpen(false)
+        return
+      }
+      if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return
+      event.preventDefault()
+      event.stopPropagation()
+      const direction = event.key === 'ArrowLeft' ? -1 : 1
+      setSelectedId((current) => {
+        if (!current || photos.length < 2) return current
+        const currentIndex = photos.findIndex((photo) => photo.id === current)
+        if (currentIndex < 0) return photos[0]?.id ?? current
+        const nextIndex = (currentIndex + direction + photos.length) % photos.length
+        return photos[nextIndex].id
+      })
     }
-    window.addEventListener('keydown', closeOnEscape)
-    return () => window.removeEventListener('keydown', closeOnEscape)
-  }, [viewerOpen])
+    window.addEventListener('keydown', handleViewerKeyboard, true)
+    return () => window.removeEventListener('keydown', handleViewerKeyboard, true)
+  }, [viewerOpen, photos])
 
   function selectRelative(direction: -1 | 1) {
     if (!selected || photos.length < 2) return
