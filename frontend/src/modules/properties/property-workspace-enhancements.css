@@ -549,3 +549,321 @@
     padding-top:0;
   }
 }
+
+
+/* Property portfolio v8.4 — richer list presentation */
+.property-list-heading {
+  align-items: end;
+}
+
+.property-portfolio-stats {
+  margin-top: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+}
+
+.property-portfolio-stats span {
+  min-height: 27px;
+  padding: 0 9px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: color-mix(in srgb,var(--surface) 82%,var(--surface-soft));
+  color: var(--text-muted);
+  font-size: 8.5px;
+}
+
+.property-portfolio-stats strong {
+  color: var(--text);
+  font-size: 9.5px;
+  font-weight: 780;
+}
+
+.property-list-grid-v82 {
+  display: grid;
+  gap: 10px;
+}
+
+.property-list-card-v83 {
+  width: 100%;
+  min-height: 142px;
+  padding: 0 !important;
+  display: grid !important;
+  grid-template-columns: 186px minmax(0,1fr) 170px;
+  align-items: stretch !important;
+  overflow: hidden;
+  border-radius: 14px;
+  background: var(--surface);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color .16s ease, box-shadow .16s ease, transform .16s ease;
+}
+
+.property-list-card-v83:hover {
+  border-color: color-mix(in srgb,#b88a35 28%,var(--border));
+  box-shadow: 0 10px 26px rgba(15,23,42,.07);
+  transform: translateY(-1px);
+}
+
+.property-list-card-media {
+  position: relative;
+  min-width: 0;
+  min-height: 142px;
+  overflow: hidden;
+  background: #eef2f5;
+}
+
+.property-list-card-media img {
+  width: 100%;
+  height: 100%;
+  min-height: 142px;
+  display: block;
+  object-fit: cover;
+  object-position: center;
+  transition: transform .26s ease;
+}
+
+.property-list-card-v83:hover .property-list-card-media img {
+  transform: scale(1.025);
+}
+
+.property-list-card-media-fallback {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 6px;
+  background:
+    radial-gradient(circle at 50% 0%, rgba(177,132,54,.08), transparent 45%),
+    linear-gradient(180deg,#f5f7f8,#edf1f4);
+  color: #8793a0;
+}
+
+.property-list-card-media-fallback svg {
+  color: #b18436;
+}
+
+.property-list-card-media-fallback span {
+  font-size: 8px;
+  font-weight: 650;
+}
+
+.property-list-card-main {
+  min-width: 0;
+  padding: 17px 20px 15px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.property-list-card-kicker {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.property-list-card-kicker > span {
+  color: var(--text-muted);
+  font-size: 7.5px;
+  font-weight: 760;
+  letter-spacing: .04em;
+}
+
+.property-list-card-kicker .status-badge {
+  min-height: 20px;
+  padding: 0 6px;
+  font-size: 7px;
+}
+
+.property-list-card-kicker em {
+  min-height: 20px;
+  padding: 0 7px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border-radius: 999px;
+  background: color-mix(in srgb,var(--success) 9%,transparent);
+  color: var(--success);
+  font-size: 7px;
+  font-style: normal;
+  font-weight: 780;
+}
+
+.property-list-card-title {
+  margin-top: 7px;
+  display: block;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 760;
+  line-height: 1.28;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.property-list-card-address {
+  margin-top: 5px;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 8.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.property-list-card-address svg {
+  flex: 0 0 auto;
+  color: #8e99a6;
+}
+
+.property-list-card-facts-v83 {
+  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px 11px;
+}
+
+.property-list-card-facts-v83 span {
+  min-height: auto;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 8px;
+  font-weight: 620;
+}
+
+.property-list-card-facts-v83 svg {
+  color: #708196;
+}
+
+.property-list-card-flags {
+  margin-top: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.property-list-card-flags span {
+  min-height: 21px;
+  padding: 0 7px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border-radius: 999px;
+  background: var(--surface-soft);
+  color: var(--text-muted);
+  font-size: 7px;
+  font-weight: 690;
+}
+
+.property-list-card-price {
+  min-width: 0;
+  padding: 17px 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  border-left: 1px solid var(--border);
+  background: color-mix(in srgb,var(--surface-soft) 46%,var(--surface));
+}
+
+.property-list-card-price > span {
+  color: var(--text-muted);
+  font-size: 7.5px;
+  font-weight: 650;
+}
+
+.property-list-card-price > strong {
+  margin-top: 4px;
+  color: var(--text);
+  font-size: 17px;
+  line-height: 1;
+  letter-spacing: -.025em;
+}
+
+.property-list-card-price small {
+  margin-top: 5px;
+  color: var(--text-muted);
+  font-size: 7.5px;
+}
+
+.property-list-card-price b {
+  margin-top: auto;
+  padding-top: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--primary);
+  font-size: 8px;
+  font-weight: 760;
+}
+
+@media(max-width:980px){
+  .property-list-card-v83 {
+    grid-template-columns:150px minmax(0,1fr) 150px;
+  }
+
+  .property-list-card-main {
+    padding-inline:15px;
+  }
+}
+
+@media(max-width:760px){
+  .property-list-card-v83 {
+    grid-template-columns:110px minmax(0,1fr);
+  }
+
+  .property-list-card-price {
+    grid-column:2;
+    padding:0 14px 13px;
+    border-left:0;
+    background:transparent;
+  }
+
+  .property-list-card-price b {
+    display:none;
+  }
+
+  .property-list-card-facts-v83 span:nth-child(n+3) {
+    display:none;
+  }
+}
+
+@media(max-width:560px){
+  .property-portfolio-stats {
+    gap:5px;
+  }
+
+  .property-list-card-v83 {
+    grid-template-columns:1fr;
+  }
+
+  .property-list-card-media {
+    min-height:150px;
+    aspect-ratio:16/8;
+  }
+
+  .property-list-card-main {
+    padding:14px;
+  }
+
+  .property-list-card-price {
+    grid-column:1;
+    padding:0 14px 14px;
+  }
+}
