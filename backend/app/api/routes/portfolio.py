@@ -69,6 +69,7 @@ def _property_response(item: Property) -> PropertyResponse:
         parking_spaces=item.parking_spaces,
         furnished=item.furnished,
         pets_allowed=item.pets_allowed,
+        features=dict(item.features or {}),
         public_title=item.public_title,
         publication_enabled=item.publication_enabled,
         owners=[
@@ -310,6 +311,7 @@ def create_property(
         parking_spaces=payload.parking_spaces,
         furnished=payload.furnished,
         pets_allowed=payload.pets_allowed,
+        features=payload.features.model_dump(),
         public_title=(payload.public_title or "").strip() or None,
         public_description=(payload.public_description or "").strip() or None,
         publication_enabled=payload.publication_enabled,
@@ -385,6 +387,7 @@ def update_property(
     item.parking_spaces = payload.parking_spaces
     item.furnished = payload.furnished
     item.pets_allowed = payload.pets_allowed
+    item.features = payload.features.model_dump()
     item.public_title = (payload.public_title or "").strip() or None
 
     item.owners.clear()
