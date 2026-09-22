@@ -685,3 +685,177 @@
     min-height: 210px;
   }
 }
+
+
+/* Etapa 2.3 — acabamento final aprovado */
+.property-detail-v81 .property-gallery--hero .property-gallery-main::after {
+  background:
+    linear-gradient(90deg, rgba(5, 12, 22, .66) 0%, rgba(5, 12, 22, .38) 34%, rgba(5, 12, 22, .08) 67%, rgba(5, 12, 22, .16) 100%),
+    linear-gradient(0deg, rgba(5, 12, 22, .14) 0%, transparent 42%);
+}
+
+.property-detail-v81 .property-hero-copy > div:nth-child(2) {
+  max-width: min(760px, 62%);
+}
+
+.property-detail-v81 .property-hero-copy h1 {
+  max-width: 760px;
+  font-size: clamp(30px, 2.85vw, 44px);
+  line-height: 1.035;
+}
+
+.property-detail-v81 .property-hero-price {
+  width: min(228px, 22%);
+  padding: 15px 17px;
+  border-radius: 9px;
+  background: rgba(7, 16, 27, .68);
+}
+
+.property-detail-v81 .property-hero-price strong {
+  font-size: clamp(21px, 1.75vw, 27px);
+}
+
+.property-detail-v81 .property-gallery--hero > .property-hero-actions button {
+  min-height: 38px;
+  padding-inline: 14px;
+}
+
+.property-detail-v81 .property-overview-layout {
+  gap: 10px;
+}
+
+.property-detail-v81 .property-overview-layout > .property-surface,
+.property-detail-v81 .property-overview-gallery-slot {
+  border-radius: 11px;
+  box-shadow: 0 4px 16px rgba(15,23,42,.022);
+}
+
+.property-detail-v81 .property-overview-layout > .property-surface {
+  padding: 17px 19px;
+}
+
+.property-detail-v81 .property-overview-gallery {
+  min-height: 0;
+  padding: 17px 17px 13px;
+  grid-template-rows: auto auto auto;
+}
+
+.property-detail-v81 .property-overview-gallery-stage {
+  min-height: 0;
+  aspect-ratio: 16 / 8.9;
+  max-height: 330px;
+}
+
+.property-detail-v81 .property-overview-gallery-heading {
+  margin-bottom: 11px;
+}
+
+.property-detail-v81 .property-overview-gallery-footer {
+  padding-top: 8px;
+}
+
+.property-detail-v81 .property-overview-facts > div {
+  padding: 6px 0;
+}
+
+.property-detail-v81 .property-overview-summary {
+  align-content: stretch;
+  grid-template-rows: auto auto;
+}
+
+.property-detail-v81 .property-overview-summary > section + section {
+  margin-top: 14px;
+  padding-top: 14px;
+}
+
+.property-detail-v81 .property-money-summary .primary {
+  padding-bottom: 10px;
+}
+
+.property-detail-v81 .property-money-summary .primary strong {
+  font-size: 20px;
+}
+
+.property-detail-v81 .property-description,
+.property-detail-v81 .property-progress-surface,
+.property-detail-v81 .property-overview-activity {
+  min-height: 225px;
+}
+
+.property-detail-v81 .property-description > p {
+  max-height: 158px;
+  overflow: auto;
+  padding-right: 4px;
+  font-size: 10.25px;
+  line-height: 1.6;
+  scrollbar-width: thin;
+}
+
+.property-detail-v81 .property-commercial-flow::before {
+  left: 14px;
+  background: color-mix(in srgb, var(--border) 72%, transparent);
+}
+
+.property-detail-v81 .property-commercial-flow > div {
+  gap: 9px;
+  padding-bottom: 11px;
+}
+
+.property-detail-v81 .property-commercial-flow > div > svg {
+  width: 26px;
+  height: 26px;
+  padding: 5px;
+  box-shadow: 0 0 0 3px var(--surface);
+}
+
+.property-detail-v81 .property-commercial-flow strong {
+  font-size: 9.5px;
+}
+
+.property-detail-v81 .property-commercial-flow small {
+  font-size: 8px;
+}
+
+.property-detail-v81 .property-overview-activity .ui-timeline li {
+  padding-block: 5px;
+}
+
+.property-detail-v81 .property-publication-inline {
+  margin-top: 10px;
+  padding-top: 10px;
+}
+
+@media (max-width: 1320px) {
+  .property-detail-v81 .property-hero-copy h1 {
+    font-size: clamp(29px, 3.2vw, 40px);
+  }
+
+  .property-detail-v81 .property-overview-gallery-stage {
+    max-height: none;
+  }
+
+  .property-detail-v81 .property-description,
+  .property-detail-v81 .property-progress-surface,
+  .property-detail-v81 .property-overview-activity {
+    min-height: 0;
+  }
+}
+
+@media (max-width: 680px) {
+  .property-detail-v81 .property-gallery--hero .property-gallery-main::after {
+    background: linear-gradient(180deg, rgba(5,12,22,.15), rgba(5,12,22,.72));
+  }
+
+  .property-detail-v81 .property-hero-copy h1 {
+    font-size: 28px;
+  }
+
+  .property-detail-v81 .property-description > p {
+    max-height: none;
+    overflow: visible;
+  }
+
+  .property-detail-v81 .property-overview-gallery-stage {
+    aspect-ratio: 4 / 3;
+  }
+}
