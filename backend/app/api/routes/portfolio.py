@@ -23,6 +23,7 @@ from app.domains.portfolio.schemas import (
     PropertyCreate,
     PropertyFeatures,
     PropertyResponse,
+    PropertyResponsibleBrokerUpdate,
     PropertyUpdate,
 )
 
@@ -81,6 +82,15 @@ def _property_response(item: Property) -> PropertyResponse:
             }
             for owner in item.owners
         ],
+        responsible_broker=(
+            {
+                "person_id": str(item.responsible_broker.id),
+                "name": item.responsible_broker.name,
+                "email": item.responsible_broker.email,
+                "phone": item.responsible_broker.phone,
+            }
+            if item.responsible_broker else None
+        ),
         created_at=item.created_at,
         updated_at=item.updated_at,
     )
@@ -274,7 +284,7 @@ def list_properties(
 ) -> list[PropertyResponse]:
     stmt = (
         select(Property)
-        .options(selectinload(Property.owners).selectinload(PropertyOwner.person))
+        .options(selectinload(Property.owners).selectinload(PropertyOwner.person), selectinload(Property.responsible_broker))
         .where(Property.organization_id == context.user.organization_id)
         .order_by(Property.internal_number.desc())
         .limit(150)
@@ -340,7 +350,7 @@ def create_property(
     )
     db.commit()
     item = db.scalar(
-        select(Property).options(selectinload(Property.owners).selectinload(PropertyOwner.person)).where(Property.id == item.id)
+        select(Property).options(selectinload(Property.owners).selectinload(PropertyOwner.person), selectinload(Property.responsible_broker)).where(Property.id == item.id)
     )
     return _property_response(item)
 
@@ -354,7 +364,7 @@ def update_property(
     db: Session = Depends(get_db),
 ) -> PropertyResponse:
     item = db.scalar(
-        select(Property).options(selectinload(Property.owners).selectinload(PropertyOwner.person)).where(
+        select(Property).options(selectinload(Property.owners).selectinload(PropertyOwner.person), selectinload(Property.responsible_broker)).where(
             Property.id == property_id,
             Property.organization_id == context.user.organization_id,
         )
@@ -418,7 +428,79 @@ def update_property(
     )
     db.commit()
     item = db.scalar(
-        select(Property).options(selectinload(Property.owners).selectinload(PropertyOwner.person)).where(Property.id == item.id)
+        select(Property).options(selectinload(Property.owners).selectinload(PropertyOwner.person), selectinload(Property.responsible_broker)).where(Property.id == item.id)
+    )
+    return _property_response(item)
+
+
+@router.patch("/properties/{property_id}/responsible-broker", response_model=PropertyResponse)
+def update_property_responsible_broker(
+    property_id: UUID,
+    payload: PropertyResponsibleBrokerUpdate,
+    request: Request,
+    context: UserContext = Depends(require_permission("properties.edit")),
+    db: Session = Depends(get_db),
+) -> PropertyResponse:
+    item = db.scalar(
+        select(Property)
+        .options(
+            selectinload(Property.owners).selectinload(PropertyOwner.person),
+            selectinload(Property.responsible_broker),
+        )
+        .where(
+            Property.id == property_id,
+            Property.organization_id == context.user.organization_id,
+        )
+    )
+    if item is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Imóvel não encontrado.")
+
+    broker = None
+    if payload.broker_person_id is not None:
+        broker = db.scalar(
+            select(Person)
+            .options(selectinload(Person.roles))
+            .where(
+                Person.id == payload.broker_person_id,
+                Person.organization_id == context.user.organization_id,
+                Person.is_active.is_(True),
+            )
+        )
+        if broker is None or not any(role.role_key == "broker" and role.is_active for role in broker.roles):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Selecione um corretor ativo da imobiliária.",
+            )
+
+    before_broker_id = str(item.responsible_broker_person_id) if item.responsible_broker_person_id else None
+    before_broker_name = item.responsible_broker.name if item.responsible_broker else None
+    item.responsible_broker_person_id = broker.id if broker else None
+
+    ip_address, user_agent = _request_metadata(request)
+    write_audit(
+        db,
+        context=context,
+        action="properties.responsible_broker.updated",
+        module="properties",
+        entity_type="property",
+        entity_id=str(item.id),
+        before_data={"broker_person_id": before_broker_id, "broker_name": before_broker_name},
+        after_data={
+            "broker_person_id": str(broker.id) if broker else None,
+            "broker_name": broker.name if broker else None,
+        },
+        ip_address=ip_address,
+        user_agent=user_agent,
+    )
+    db.commit()
+
+    item = db.scalar(
+        select(Property)
+        .options(
+            selectinload(Property.owners).selectinload(PropertyOwner.person),
+            selectinload(Property.responsible_broker),
+        )
+        .where(Property.id == item.id)
     )
     return _property_response(item)
 
