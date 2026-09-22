@@ -15,6 +15,7 @@ import { PropertyGallery } from './PropertyGallery'
 import { PropertyLifecyclePanel } from './PropertyLifecyclePanel'
 import { PropertyMaintenancePanel } from './PropertyMaintenancePanel'
 import './property-detail-v81.css'
+import './property-detail-v81-fidelity.css'
 
 export type PropertyDetailTab = 'overview' | 'finance' | 'contracts' | 'documents' | 'traceability' | 'inspections' | 'maintenance' | 'features' | 'location'
 export type PropertyLease = { id:string; code:string; property_id:string; tenants:Array<{name:string}>; status:string; rent_amount:number; start_date:string; end_date:string; archive_status:string; final_document_hash:string|null; signed_at:string|null }
@@ -88,16 +89,16 @@ export function PropertyDetailPage(props:Props){
 
   const heroContent=<div className="property-hero-copy">
     <div className="property-hero-top"><StatusBadge tone={statusTone(property.status)}>{statusLabels[property.status]??property.status}</StatusBadge><span>IMÓVEL {property.code}</span></div>
-    <div><p>{propertyTypes[property.property_type]??property.property_type} · {property.purpose==='sale'?'Venda':'Locação'}</p><h1>{title}</h1><address><MapPin size={16}/>{addressLine(property)} · {property.address.neighborhood}, {property.address.city}/{property.address.state}</address></div>
+    <div><p>{propertyTypes[property.property_type]??property.property_type} · {property.purpose==='sale'?'Venda':'Locação'}</p><h1>{addressLine(property)}</h1><address><MapPin size={16}/>{[property.address.neighborhood, property.address.city, property.address.state].filter(Boolean).join(' · ')}</address></div>
     <div className="property-hero-specs"><span><Maximize2 size={17}/><strong>{property.area_m2??'—'} m²</strong></span><span><BedDouble size={17}/><strong>{property.bedrooms} quartos</strong></span><span><Bath size={17}/><strong>{property.suites} suítes</strong></span><span><Car size={17}/><strong>{property.parking_spaces} vagas</strong></span></div>
     <div className="property-hero-price"><span>{property.purpose==='sale'?'Valor de venda':'Valor mensal'}</span><strong>{money(property.rent_amount)}</strong><small>Condomínio {money(property.condo_amount)} · IPTU {money(property.iptu_amount)}</small></div>
   </div>
 
   const heroActions=<div className="property-hero-actions">
-    {canEdit&&<button type="button" onClick={props.onEdit}><Pencil size={15}/> Editar</button>}
-    <button type="button" onClick={()=>void share()}><Share2 size={15}/> Compartilhar</button>
     <button className="primary" type="button" onClick={()=>navigate(`/app/agenda?propertyId=${property.id}`)}><CalendarPlus size={15}/> Agendar visita</button>
-    {props.organizationId&&<button type="button" onClick={()=>props.onOpenSite(property.publication_enabled?property.public_slug:null)}><ExternalLink size={15}/> {property.publication_enabled?'Ver anúncio':'Abrir site'}</button>}
+    <button type="button" onClick={()=>void share()}><Share2 size={15}/> Compartilhar</button>
+    {canEdit&&<button type="button" onClick={props.onEdit}><Pencil size={15}/> Editar</button>}
+    {props.organizationId&&<button className="tertiary" type="button" onClick={()=>props.onOpenSite(property.publication_enabled?property.public_slug:null)}><ExternalLink size={15}/> {property.publication_enabled?'Ver anúncio':'Abrir site'}</button>}
   </div>
 
   return <section className="workspace property-detail-workspace property-detail-v81" data-property-id={property.id} data-property-code={property.code}>
