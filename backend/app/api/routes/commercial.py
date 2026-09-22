@@ -280,6 +280,105 @@ def _lease_from_proposal(db: Session, proposal: CommercialProposal, context: Use
     return lease
 
 
+@router.get("/crm/brokers/{person_id}/activity")
+def broker_commercial_activity(person_id: UUID, context: UserContext = Depends(require_permission("crm.view")), db: Session = Depends(get_db)):
+    broker = db.scalar(
+        select(Person).options(selectinload(Person.roles)).where(
+            Person.id == person_id,
+            Person.organization_id == context.user.organization_id,
+            Person.is_active.is_(True),
+        )
+    )
+    if broker is None or not any(role.role_key == "broker" and role.is_active for role in broker.roles):
+        raise HTTPException(404, "Corretor não encontrado.")
+
+    linked_user = None
+    if broker.email:
+        linked_user = db.scalar(
+            select(AppUser).where(
+                AppUser.organization_id == context.user.organization_id,
+                AppUser.is_active.is_(True),
+                func.lower(AppUser.email) == broker.email.strip().lower(),
+            )
+        )
+
+    if linked_user is None:
+        return {
+            "broker_person_id": broker.id,
+            "linked_user": None,
+            "link_status": "missing_user_link",
+            "leads": [],
+            "visits": [],
+            "proposals": [],
+        }
+
+    inquiries = db.scalars(
+        select(PublicSiteInquiry).where(
+            PublicSiteInquiry.organization_id == context.user.organization_id,
+            PublicSiteInquiry.responsible_user_id == linked_user.id,
+        ).order_by(PublicSiteInquiry.updated_at.desc()).limit(100)
+    ).all()
+    visits = db.scalars(
+        select(CommercialVisit).where(
+            CommercialVisit.organization_id == context.user.organization_id,
+            CommercialVisit.responsible_user_id == linked_user.id,
+        ).order_by(CommercialVisit.starts_at.desc()).limit(100)
+    ).all()
+    proposals = db.scalars(
+        select(CommercialProposal).where(
+            CommercialProposal.organization_id == context.user.organization_id,
+            CommercialProposal.responsible_user_id == linked_user.id,
+        ).order_by(CommercialProposal.internal_number.desc()).limit(100)
+    ).all()
+
+    inquiry_map = {row.id: row for row in inquiries}
+    for row in visits:
+        if row.inquiry_id not in inquiry_map:
+            inquiry_map[row.inquiry_id] = db.get(PublicSiteInquiry, row.inquiry_id)
+    for row in proposals:
+        if row.inquiry_id not in inquiry_map:
+            inquiry_map[row.inquiry_id] = db.get(PublicSiteInquiry, row.inquiry_id)
+
+    return {
+        "broker_person_id": broker.id,
+        "linked_user": {"id": linked_user.id, "name": linked_user.name, "email": linked_user.email},
+        "link_status": "linked_by_email",
+        "leads": [
+            {
+                "id": row.id,
+                "property_code": row.property_code,
+                "property_title": row.property_title,
+                "name": row.name,
+                "email": row.email,
+                "phone": row.phone,
+                "status": row.status,
+                "next_action_title": row.next_action_title,
+                "next_action_at": row.next_action_at,
+                "updated_at": row.updated_at,
+            }
+            for row in inquiries
+        ],
+        "visits": [
+            {
+                **_visit(db, row),
+                "lead_name": inquiry_map[row.inquiry_id].name if inquiry_map.get(row.inquiry_id) else None,
+                "property_code": inquiry_map[row.inquiry_id].property_code if inquiry_map.get(row.inquiry_id) else None,
+                "property_title": inquiry_map[row.inquiry_id].property_title if inquiry_map.get(row.inquiry_id) else None,
+            }
+            for row in visits
+        ],
+        "proposals": [
+            {
+                **_proposal(db, row),
+                "lead_name": inquiry_map[row.inquiry_id].name if inquiry_map.get(row.inquiry_id) else None,
+                "property_code": inquiry_map[row.inquiry_id].property_code if inquiry_map.get(row.inquiry_id) else None,
+                "property_title": inquiry_map[row.inquiry_id].property_title if inquiry_map.get(row.inquiry_id) else None,
+            }
+            for row in proposals
+        ],
+    }
+
+
 @router.get("/crm/responsibles")
 def list_crm_responsibles(context: UserContext = Depends(require_permission("crm.view")), db: Session = Depends(get_db)):
     rows = db.scalars(select(AppUser).where(AppUser.organization_id == context.user.organization_id, AppUser.is_active.is_(True)).order_by(AppUser.name.asc())).all()
