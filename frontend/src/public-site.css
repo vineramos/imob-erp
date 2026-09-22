@@ -241,10 +241,10 @@
 
 /* Mapa do imóvel no site público */
 .public-property-map-section {
-  margin-top: 18px;
+  margin-top: 22px;
+  padding-top: 18px;
   overflow: hidden;
-  border: 1px solid #e5e0d9;
-  border-radius: 12px;
+  border-top: 1px solid #eee9e3;
   background: #fff;
 }
 .public-property-map-heading {
@@ -255,6 +255,8 @@
   justify-content: space-between;
   gap: 18px;
   border-bottom: 1px solid #eee9e3;
+  padding-left: 0;
+  padding-right: 0;
 }
 .public-property-map-heading > div {
   min-width: 0;
