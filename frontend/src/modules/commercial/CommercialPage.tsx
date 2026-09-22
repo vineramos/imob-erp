@@ -1,4 +1,4 @@
-import { CheckCircle2, CircleAlert, ExternalLink, Globe2, RefreshCw, Save, Search, Send, X, XCircle } from 'lucide-react'
+import { ArrowUpDown, CheckCircle2, CircleAlert, ExternalLink, Globe2, RefreshCw, Save, Search, Send, X, XCircle } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ApiError, apiRequest } from '../../api/client'
 import type { IntegrationsConfig, Property, PublicationReadiness } from '../../api/types'
@@ -38,6 +38,9 @@ export function CommercialPage({ permissions, organizationId }: Props) {
   const [saving, setSaving] = useState(false)
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState<'all' | 'published' | 'available'>('all')
+  const [typeFilter,setTypeFilter]=useState('all')
+  const [furnishedOnly,setFurnishedOnly]=useState(false)
+  const [commercialSort,setCommercialSort]=useState<'recent'|'price_asc'|'price_desc'|'bedrooms_desc'>('recent')
   const [pageError, setPageError] = useState('')
   const [modalError, setModalError] = useState('')
   const [success, setSuccess] = useState('')
@@ -61,12 +64,20 @@ export function CommercialPage({ permissions, organizationId }: Props) {
 
   const filtered = useMemo(() => {
     const term = query.trim().toLowerCase()
-    return items.filter((item) => {
+    const result=items.filter((item) => {
       if (filter === 'published' && !item.publication_enabled) return false
       if (filter === 'available' && item.status !== 'available') return false
-      return !term || `${item.code} ${item.public_title ?? ''} ${addressLine(item.address)}`.toLowerCase().includes(term)
+      if (typeFilter !== 'all' && item.property_type !== typeFilter) return false
+      if (furnishedOnly && !item.furnished) return false
+      return !term || (item.code+' '+(item.public_title ?? '')+' '+addressLine(item.address)).toLowerCase().includes(term)
     })
-  }, [items, query, filter])
+    return [...result].sort((a,b)=>{
+      if(commercialSort==='price_asc')return Number(a.rent_amount??Number.MAX_SAFE_INTEGER)-Number(b.rent_amount??Number.MAX_SAFE_INTEGER)
+      if(commercialSort==='price_desc')return Number(b.rent_amount??-1)-Number(a.rent_amount??-1)
+      if(commercialSort==='bedrooms_desc')return b.bedrooms-a.bedrooms||b.suites-a.suites
+      return new Date(b.updated_at).getTime()-new Date(a.updated_at).getTime()
+    })
+  }, [items, query, filter, typeFilter, furnishedOnly, commercialSort])
   const metrics = useMemo(() => ({
     available: items.filter((item) => item.status === 'available').length,
     published: items.filter((item) => item.publication_enabled).length,
@@ -125,8 +136,8 @@ export function CommercialPage({ permissions, organizationId }: Props) {
     {!integrations?.public_site_enabled && <div className="form-alert warning-alert"><CircleAlert size={16}/> O site público está desabilitado. O perfil e o checklist continuam funcionando normalmente.</div>}
     {pageError && <div className="form-alert danger-alert">{pageError}</div>}{success && <div className="form-alert success-alert">{success}</div>}
 
-    <div className="portfolio-toolbar panel commercial-toolbar commercial-toolbar-wide"><div className="portfolio-tabs"><button className={filter === 'all' ? 'active' : ''} onClick={() => setFilter('all')} type="button">Todos <span>{items.length}</span></button><button className={filter === 'available' ? 'active' : ''} onClick={() => setFilter('available')} type="button">Disponíveis <span>{metrics.available}</span></button><button className={filter === 'published' ? 'active' : ''} onClick={() => setFilter('published')} type="button">Publicados <span>{metrics.published}</span></button></div><label className="portfolio-search"><Search size={14}/><input placeholder="Código, título ou endereço..." value={query} onChange={(e) => setQuery(e.target.value)}/></label></div>
-    {loading ? <article className="panel settings-loading">Carregando catálogo...</article> : <div className="commercial-card-grid">{filtered.map((item) => <button className="panel commercial-property-card" type="button" key={item.id} onClick={() => void inspect(item.id)}><div className="commercial-property-card-top"><div><span className="eyebrow">IMÓVEL #{item.code}</span><strong>{item.public_title || addressLine(item.address)}</strong><small>{addressLine(item.address)}</small></div><i className={`status-badge ${item.publication_enabled ? 'success' : item.status === 'available' ? 'warning' : 'neutral'}`}>{item.publication_enabled ? 'Publicado' : item.status === 'available' ? 'Aguardando' : item.status}</i></div><div className="commercial-property-card-value"><span>Aluguel</span><strong>{money(item.rent_amount)}</strong></div></button>)}{filtered.length === 0 && <article className="panel portfolio-empty"><Globe2 size={26}/><strong>Nenhum imóvel neste filtro.</strong></article>}</div>}
+    <div className="portfolio-toolbar panel commercial-toolbar commercial-toolbar-wide commercial-toolbar-v82"><div className="portfolio-tabs"><button className={filter === 'all' ? 'active' : ''} onClick={() => setFilter('all')} type="button">Todos <span>{items.length}</span></button><button className={filter === 'available' ? 'active' : ''} onClick={() => setFilter('available')} type="button">Disponíveis <span>{metrics.available}</span></button><button className={filter === 'published' ? 'active' : ''} onClick={() => setFilter('published')} type="button">Publicados <span>{metrics.published}</span></button></div><label className="portfolio-search"><Search size={14}/><input placeholder="Código, título ou endereço..." value={query} onChange={(e) => setQuery(e.target.value)}/></label><select value={typeFilter} onChange={e=>setTypeFilter(e.target.value)}><option value="all">Todos os tipos</option><option value="apartment">Apartamento</option><option value="house">Casa</option><option value="commercial">Comercial</option><option value="land">Terreno</option><option value="studio">Studio</option><option value="other">Outro</option></select><button type="button" className={'commercial-quick-filter '+(furnishedOnly?'active':'')} onClick={()=>setFurnishedOnly(value=>!value)}>Mobiliado</button><label className="commercial-sort"><ArrowUpDown size={13}/><select value={commercialSort} onChange={e=>setCommercialSort(e.target.value as 'recent'|'price_asc'|'price_desc'|'bedrooms_desc')}><option value="recent">Mais recentes</option><option value="price_asc">Menor aluguel</option><option value="price_desc">Maior aluguel</option><option value="bedrooms_desc">Mais quartos</option></select></label></div>
+    {loading ? <article className="panel settings-loading">Carregando catálogo...</article> : <div className="commercial-card-grid">{filtered.map((item) => <button className="panel commercial-property-card commercial-property-card-v82" type="button" key={item.id} onClick={() => void inspect(item.id)}><div className="commercial-property-card-top"><div><span className="eyebrow">IMÓVEL #{item.code}</span><strong>{item.public_title || addressLine(item.address)}</strong><small>{addressLine(item.address)}</small></div><i className={`status-badge ${item.publication_enabled ? 'success' : item.status === 'available' ? 'warning' : 'neutral'}`}>{item.publication_enabled ? 'Publicado' : item.status === 'available' ? 'Aguardando' : item.status}</i></div><div className="commercial-property-card-facts"><span>{item.bedrooms} qtos</span>{item.suites>0&&<span>{item.suites} suítes</span>}<span>{item.parking_spaces} vagas</span>{item.furnished&&<span>Mobiliado</span>}<span>{item.address.neighborhood||item.address.city}</span></div><div className="commercial-property-card-value"><span>Aluguel</span><strong>{money(item.rent_amount)}</strong></div></button>)}{filtered.length === 0 && <article className="panel portfolio-empty"><Globe2 size={26}/><strong>Nenhum imóvel neste filtro.</strong><span>Ajuste a busca ou os filtros do catálogo comercial.</span></article>}</div>}
     <article className="panel commercial-api-note"><Globe2 size={22}/><div><span className="eyebrow">API pública</span><h2>Catálogo desacoplado do ERP</h2><p>Somente dados comerciais sanitizados saem pela API. Organização atual: {organizationId.slice(0, 8)}…</p></div></article>
 
     {modalOpen && <div className="portfolio-modal-backdrop" onMouseDown={(event) => { if (event.currentTarget === event.target && !saving) setModalOpen(false) }}>
