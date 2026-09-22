@@ -71,11 +71,13 @@ class Property(Base):
     publication_enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     publication_updated_by_user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("app_users.id"))
+    responsible_broker_person_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("persons.id"), index=True)
     created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("app_users.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
     owners: Mapped[list["PropertyOwner"]] = relationship(back_populates="property", cascade="all, delete-orphan")
+    responsible_broker: Mapped[Person | None] = relationship(foreign_keys=[responsible_broker_person_id])
 
 
 class PropertyOwner(Base):
