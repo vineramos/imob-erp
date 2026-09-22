@@ -116,13 +116,13 @@ function RentRangeControl({ compact=false, minRent, maxRent, includeCondo, onMin
   return <div className={`public-rent-range public-rent-range-editor${compact?' compact':''}`}>
     <span className="public-rent-range-label">Valor do aluguel</span>
     <div className="public-rent-amount-row">
-      <label className="public-rent-amount-field"><small>De</small><span><b>R$</b><input aria-label="Valor mínimo" inputMode="numeric" type="number" min={0} step={100} value={minRent || ''} placeholder="Mínimo" onChange={(event) => {
+      <label className="public-rent-amount-field"><span><em>De</em><b>R$</b><input aria-label="Valor mínimo" inputMode="numeric" type="number" min={0} step={100} value={minRent || ''} placeholder="Mínimo" onChange={(event) => {
         const value = Math.max(0, Number(event.target.value || 0))
         onMinRent(value)
         if (maxRent > 0 && value > maxRent) onMaxRent(0)
       }}/></span></label>
       <span className="public-rent-separator">—</span>
-      <label className="public-rent-amount-field"><small>Até</small><span><b>R$</b><input aria-label="Valor máximo" inputMode="numeric" type="number" min={minRent} step={100} value={maxRent || ''} placeholder="Máximo" onChange={(event) => onMaxRent(Math.max(0, Number(event.target.value || 0)))}/></span></label>
+      <label className="public-rent-amount-field"><span><em>Até</em><b>R$</b><input aria-label="Valor máximo" inputMode="numeric" type="number" min={minRent} step={100} value={maxRent || ''} placeholder="Máximo" onChange={(event) => onMaxRent(Math.max(0, Number(event.target.value || 0)))}/></span></label>
     </div>
     <label className="public-rent-condo-toggle"><input type="checkbox" checked={includeCondo} onChange={(event) => onIncludeCondo(event.target.checked)}/><span className="public-rent-switch" aria-hidden="true"/><span>{compact?'Com condomínio':'Incluir condomínio'}</span></label>
   </div>
