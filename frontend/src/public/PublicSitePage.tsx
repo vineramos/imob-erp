@@ -176,13 +176,13 @@ export function PublicSitePage({ organizationId, slug }: Props) {
     setLoading(true); setError('')
     Promise.all([
       publicApiRequest<PublicSiteProfile>(`/public/sites/${organizationId}`),
-      slug ? publicApiRequest<PublicProperty>(`/public/sites/${organizationId}/properties/${slug}`).then((item) => [item]) : publicApiRequest<PublicProperty[]>(`/public/sites/${organizationId}/properties`),
+      publicApiRequest<PublicProperty[]>(`/public/sites/${organizationId}/properties`),
     ])
       .then(([loadedProfile, loadedItems]) => {
         if (!active) return
         const rentals = loadedItems.filter((item) => item.purpose === 'rent')
-        setProfile(loadedProfile); setItems(rentals); setSelected(slug ? rentals[0] ?? null : null)
-        if (slug && !rentals.length) setError('Este imóvel não está disponível para locação.')
+        setProfile(loadedProfile); setItems(rentals); const current=slug?rentals.find(item=>item.slug===slug)??null:null; setSelected(current)
+        if (slug && !current) setError('Este imóvel não está disponível para locação.')
       })
       .catch((cause) => { if (active) setError(cause instanceof ApiError ? cause.detail : 'Não foi possível carregar os imóveis.') })
       .finally(() => { if (active) setLoading(false) })
@@ -227,17 +227,25 @@ export function PublicSitePage({ organizationId, slug }: Props) {
 
   const filtered = useMemo(() => {
     const term = query.trim().toLowerCase()
-    return items.filter((item) => {
+    const result=items.filter((item) => {
       if (typeFilter !== 'all' && item.property_type !== typeFilter) return false
       const searchValue = propertySearchValue(item, includeCondo)
       if ((minRent > 0 || maxRent > 0) && searchValue == null) return false
       if (minRent > 0 && searchValue != null && searchValue < minRent) return false
       if (maxRent > 0 && searchValue != null && searchValue > maxRent) return false
       if (bedrooms > 0 && item.bedrooms < bedrooms) return false
+      if (furnishedFilter && !item.furnished) return false
+      if (petsFilter && !item.pets_allowed) return false
+      const featureSet=new Set([...(item.features.property??[]),...(item.features.condominium??[])])
+      if(featureFilters.some(feature=>!featureSet.has(feature))) return false
       if (!term) return true
-      return `${item.title} ${item.description} ${publicLocation(item)} ${propertyType(item.property_type)}`.toLowerCase().includes(term)
+      return (item.title+' '+item.description+' '+publicLocation(item)+' '+propertyType(item.property_type)).toLowerCase().includes(term)
     })
-  }, [bedrooms, includeCondo, items, maxRent, minRent, query, typeFilter])
+    if(searchSort==='price_asc')return [...result].sort((a,b)=>Number(a.rent_amount??Number.MAX_SAFE_INTEGER)-Number(b.rent_amount??Number.MAX_SAFE_INTEGER))
+    if(searchSort==='price_desc')return [...result].sort((a,b)=>Number(b.rent_amount??-1)-Number(a.rent_amount??-1))
+    if(searchSort==='bedrooms_desc')return [...result].sort((a,b)=>b.bedrooms-a.bedrooms||b.suites-a.suites)
+    return result
+  }, [bedrooms, furnishedFilter, petsFilter, featureFilters, searchSort, includeCondo, items, maxRent, minRent, query, typeFilter])
 
   const neighborhoodRanking = useMemo(() => {
     const counts = new Map<string, number>()
@@ -247,6 +255,18 @@ export function PublicSitePage({ organizationId, slug }: Props) {
 
   const featured = items[0] ?? null
   const highlights = items.slice(0, 4)
+  const similarProperties = useMemo(() => {
+    if(!selected) return []
+    return items.filter(item=>item.slug!==selected.slug).map(item=>{
+      let score=0
+      if(item.address.neighborhood&&item.address.neighborhood===selected.address.neighborhood)score+=5
+      if(item.property_type===selected.property_type)score+=3
+      score+=Math.max(0,3-Math.abs(item.bedrooms-selected.bedrooms))
+      const base=Number(selected.rent_amount??0), value=Number(item.rent_amount??0)
+      if(base>0&&value>0)score+=Math.max(0,3-Math.abs(value-base)/Math.max(base,1)*6)
+      return {item,score}
+    }).sort((a,b)=>b.score-a.score).slice(0,4).map(entry=>entry.item)
+  },[items,selected])
 
   if (loading) return <main className="public-site public-site-state"><div className="public-brand-mark"><House size={20}/></div><strong>Carregando imóveis...</strong></main>
   if (error || !profile) return <main className="public-site public-site-state"><div className="public-brand-mark"><Building2 size={20}/></div><strong>Site indisponível</strong><span>{error || 'O site público ainda não está habilitado.'}</span></main>
@@ -291,7 +311,8 @@ export function PublicSitePage({ organizationId, slug }: Props) {
     <footer className="public-footer"><div>{brand}</div><div><strong>Catálogo conectado ao Imob ERP</strong><span>Informações sujeitas a confirmação e disponibilidade.</span></div></footer>
   </main>
 
-  function clearFilters() { setQuery(''); setTypeFilter('all'); setMinRent(0); setMaxRent(0); setIncludeCondo(false); setBedrooms(0) }
+  function clearFilters() { setQuery(''); setTypeFilter('all'); setMinRent(0); setMaxRent(0); setIncludeCondo(false); setBedrooms(0); setFurnishedFilter(false); setPetsFilter(false); setFeatureFilters([]); setSearchSort('relevance') }
+  function togglePublicFeature(key:string){setFeatureFilters(current=>current.includes(key)?current.filter(item=>item!==key):[...current,key])}
   function searchSubmit(event: FormEvent) { event.preventDefault(); setSearchOpen(true) }
   function pickNeighborhood(name: string) { setQuery(name); setSearchOpen(true) }
   function openAllProperties() { clearFilters(); setSearchOpen(true) }
