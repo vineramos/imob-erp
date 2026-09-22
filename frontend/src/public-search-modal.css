@@ -1125,3 +1125,112 @@
     overflow: visible !important;
   }
 }
+
+
+/* Public search v8.8 — unified rent amount card */
+.public-site-premium .public-rent-range-editor {
+  min-height: 58px !important;
+  padding: 7px 10px 6px !important;
+  display: grid !important;
+  grid-template-rows: auto 28px 13px !important;
+  align-content: center !important;
+  gap: 3px !important;
+  overflow: hidden !important;
+  box-sizing: border-box !important;
+}
+
+.public-site-premium .public-rent-combined {
+  min-width: 0;
+  height: 28px;
+  display: grid;
+  grid-template-columns: minmax(0,1fr) 1px minmax(0,1fr);
+  align-items: center;
+  gap: 0;
+  border: 1px solid color-mix(in srgb,var(--site-line) 94%,transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb,var(--site-surface) 97%,var(--site-primary-soft));
+  overflow: hidden;
+}
+
+.public-site-premium .public-rent-inline-field {
+  min-width: 0;
+  height: 100%;
+  display: flex !important;
+  align-items: center !important;
+  gap: 4px !important;
+  margin: 0 !important;
+  padding: 0 9px !important;
+  border: 0 !important;
+  background: transparent !important;
+  overflow: hidden !important;
+}
+
+.public-site-premium .public-rent-inline-field em {
+  flex: 0 0 auto;
+  color: #8f959e;
+  font-size: 7px;
+  font-style: normal;
+  font-weight: 750;
+}
+
+.public-site-premium .public-rent-inline-field b {
+  flex: 0 0 auto;
+  color: var(--site-muted);
+  font-size: 8px;
+  font-weight: 700;
+}
+
+.public-site-premium .public-rent-inline-field input {
+  min-width: 0;
+  width: 100%;
+  height: 26px;
+  padding: 0 !important;
+  border: 0 !important;
+  outline: 0 !important;
+  background: transparent !important;
+  color: var(--site-ink);
+  font: 700 10px/26px var(--site-body-font);
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
+.public-site-premium .public-rent-inline-field input::-webkit-outer-spin-button,
+.public-site-premium .public-rent-inline-field input::-webkit-inner-spin-button {
+  margin: 0;
+  -webkit-appearance: none;
+}
+
+.public-site-premium .public-rent-inline-field input::placeholder {
+  color: #a7acb4;
+  font-weight: 600;
+}
+
+.public-site-premium .public-rent-divider {
+  width: 1px;
+  height: 15px;
+  background: var(--site-line);
+}
+
+.public-site-premium .public-rent-combined:focus-within {
+  border-color: color-mix(in srgb,var(--site-primary) 45%,var(--site-line));
+  box-shadow: 0 0 0 2px color-mix(in srgb,var(--site-primary) 9%,transparent);
+}
+
+.public-site-premium .public-search-premium > .public-rent-range-editor {
+  height: 68px !important;
+  min-height: 68px !important;
+  padding: 7px 10px 6px !important;
+  grid-template-rows: auto 28px 13px !important;
+}
+
+.public-site-premium .public-search-modal .public-rent-range-editor {
+  min-height: 58px !important;
+}
+
+@media (max-width:720px){
+  .public-site-premium .public-rent-range-editor,
+  .public-site-premium .public-search-premium > .public-rent-range-editor {
+    height: auto !important;
+    min-height: 72px !important;
+  }
+}
