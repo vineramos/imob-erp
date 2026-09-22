@@ -156,6 +156,7 @@ export function PublicSitePage({ organizationId, slug }: Props) {
   const [profile, setProfile] = useState<PublicSiteProfile | null>(null)
   const [items, setItems] = useState<PublicProperty[]>([])
   const [selected, setSelected] = useState<PublicProperty | null>(null)
+  const [similarProperties, setSimilarProperties] = useState<PublicProperty[]>([])
   const [query, setQuery] = useState('')
   const [typeFilter, setTypeFilter] = useState<PropertyTypeFilter>('all')
   const [minRent, setMinRent] = useState(0)
@@ -176,13 +177,14 @@ export function PublicSitePage({ organizationId, slug }: Props) {
     setLoading(true); setError('')
     Promise.all([
       publicApiRequest<PublicSiteProfile>(`/public/sites/${organizationId}`),
-      publicApiRequest<PublicProperty[]>(`/public/sites/${organizationId}/properties`),
+      slug ? publicApiRequest<PublicProperty>(`/public/sites/${organizationId}/properties/${slug}`).then((item) => [item]) : publicApiRequest<PublicProperty[]>(`/public/sites/${organizationId}/properties`),
+      slug ? publicApiRequest<PublicProperty[]>(`/public/sites/${organizationId}/properties/${slug}/similar`).catch(() => []) : Promise.resolve([] as PublicProperty[]),
     ])
-      .then(([loadedProfile, loadedItems]) => {
+      .then(([loadedProfile, loadedItems, similarItems]) => {
         if (!active) return
         const rentals = loadedItems.filter((item) => item.purpose === 'rent')
-        setProfile(loadedProfile); setItems(rentals); const current=slug?rentals.find(item=>item.slug===slug)??null:null; setSelected(current)
-        if (slug && !current) setError('Este imóvel não está disponível para locação.')
+        setProfile(loadedProfile); setItems(rentals); setSelected(slug ? rentals[0] ?? null : null); setSimilarProperties(similarItems.filter((item) => item.purpose === 'rent'))
+        if (slug && !rentals.length) setError('Este imóvel não está disponível para locação.')
       })
       .catch((cause) => { if (active) setError(cause instanceof ApiError ? cause.detail : 'Não foi possível carregar os imóveis.') })
       .finally(() => { if (active) setLoading(false) })
@@ -255,19 +257,6 @@ export function PublicSitePage({ organizationId, slug }: Props) {
 
   const featured = items[0] ?? null
   const highlights = items.slice(0, 4)
-  const similarProperties = useMemo(() => {
-    if(!selected) return []
-    return items.filter(item=>item.slug!==selected.slug).map(item=>{
-      let score=0
-      if(item.address.neighborhood&&item.address.neighborhood===selected.address.neighborhood)score+=5
-      if(item.property_type===selected.property_type)score+=3
-      score+=Math.max(0,3-Math.abs(item.bedrooms-selected.bedrooms))
-      const base=Number(selected.rent_amount??0), value=Number(item.rent_amount??0)
-      if(base>0&&value>0)score+=Math.max(0,3-Math.abs(value-base)/Math.max(base,1)*6)
-      return {item,score}
-    }).sort((a,b)=>b.score-a.score).slice(0,4).map(entry=>entry.item)
-  },[items,selected])
-
   if (loading) return <main className="public-site public-site-state"><div className="public-brand-mark"><House size={20}/></div><strong>Carregando imóveis...</strong></main>
   if (error || !profile) return <main className="public-site public-site-state"><div className="public-brand-mark"><Building2 size={20}/></div><strong>Site indisponível</strong><span>{error || 'O site público ainda não está habilitado.'}</span></main>
 
