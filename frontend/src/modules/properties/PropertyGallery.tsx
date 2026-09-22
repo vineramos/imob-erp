@@ -31,6 +31,8 @@ export function PropertyGallery({ propertyId, canManage, onChanged, variant = 'p
   const [deleteTarget, setDeleteTarget] = useState<PropertyPhoto | null>(null)
   const [viewerOpen, setViewerOpen] = useState(false)
   const [managerOpen, setManagerOpen] = useState(false)
+  const [draggedId, setDraggedId] = useState<string | null>(null)
+  const [dragOverId, setDragOverId] = useState<string | null>(null)
   const [overviewMount, setOverviewMount] = useState<HTMLElement | null>(null)
   const urlsRef = useRef<string[]>([])
 
@@ -119,6 +121,22 @@ export function PropertyGallery({ propertyId, canManage, onChanged, variant = 'p
     finally { setBusy(false) }
   }
 
+  async function persistOrder(ids: string[]) {
+    if (!canManage || busy) return
+    setBusy(true); setError('')
+    try {
+      await apiRequest(`/properties/${propertyId}/photos/reorder`, { method: 'POST', body: JSON.stringify({ photo_ids: ids }) })
+      await refreshAfterMutation()
+    } catch (cause) {
+      setError(cause instanceof ApiError ? cause.detail : 'Não foi possível reordenar as fotos.')
+      await load()
+    } finally {
+      setBusy(false)
+      setDraggedId(null)
+      setDragOverId(null)
+    }
+  }
+
   async function move(direction: -1 | 1) {
     if (!selected || !canManage) return
     const index = photos.findIndex((photo) => photo.id === selected.id)
@@ -126,12 +144,20 @@ export function PropertyGallery({ propertyId, canManage, onChanged, variant = 'p
     if (index < 0 || target < 0 || target >= photos.length) return
     const ids = photos.map((photo) => photo.id)
     ;[ids[index], ids[target]] = [ids[target], ids[index]]
-    setBusy(true); setError('')
-    try {
-      await apiRequest(`/properties/${propertyId}/photos/reorder`, { method: 'POST', body: JSON.stringify({ photo_ids: ids }) })
-      await refreshAfterMutation()
-    } catch (cause) { setError(cause instanceof ApiError ? cause.detail : 'Não foi possível reordenar as fotos.') }
-    finally { setBusy(false) }
+    await persistOrder(ids)
+  }
+
+  function reorderByDrag(sourceId: string, targetId: string) {
+    if (!canManage || busy || sourceId === targetId) return
+    const sourceIndex = photos.findIndex((photo) => photo.id === sourceId)
+    const targetIndex = photos.findIndex((photo) => photo.id === targetId)
+    if (sourceIndex < 0 || targetIndex < 0) return
+    const reordered = [...photos]
+    const [moved] = reordered.splice(sourceIndex, 1)
+    reordered.splice(targetIndex, 0, moved)
+    setPhotos(reordered.map((photo, index) => ({ ...photo, position: index })))
+    setSelectedId(sourceId)
+    void persistOrder(reordered.map((photo) => photo.id))
   }
 
   async function remove(photo: PropertyPhoto) {
@@ -168,8 +194,12 @@ export function PropertyGallery({ propertyId, canManage, onChanged, variant = 'p
       {!selected ? <><div className="property-gallery-empty"><Camera size={31}/><strong>Nenhuma foto cadastrada</strong><span>Adicione fotos comerciais do imóvel. Elas ficam separadas das imagens das vistorias.</span>{heroContent}{canManage && <label className="button primary property-gallery-empty-action"><ImagePlus size={14}/> Selecionar fotos<input type="file" multiple accept="image/jpeg,image/png,image/webp" disabled={busy} onChange={upload}/></label>}</div>{variant === 'hero' && heroActions}</> : <>
         <div className="property-gallery-main"><img src={selected.objectUrl} alt={selected.caption || selected.filename}/><button className="property-gallery-expand" type="button" onClick={() => setViewerOpen(true)} aria-label="Ampliar foto selecionada"><Camera size={15}/> Ver todas</button>{selected.is_cover && <span className="property-gallery-cover"><Star size={12} fill="currentColor"/> Foto de capa</span>}{heroContent}</div>
         {variant === 'hero' && <div className="property-gallery-hero-toolbar"><span><Camera size={14}/>{photos.findIndex((photo) => photo.id === selected.id) + 1} de {photos.length} fotos</span><div><button type="button" onClick={() => setViewerOpen(true)}><Camera size={14}/> Visualizar todas</button>{canManage && <button type="button" aria-expanded={managerOpen} onClick={() => setManagerOpen(value => !value)}><Settings2 size={14}/>{managerOpen ? 'Concluir edição' : 'Gerenciar fotos'}</button>}{canManage && managerOpen && <label className={`property-gallery-add ${busy ? 'disabled' : ''}`}><ImagePlus size={14}/> Adicionar<input type="file" multiple accept="image/jpeg,image/png,image/webp" disabled={busy} onChange={upload}/></label>}</div></div>}
-        <div className="property-gallery-thumbs" aria-label="Fotos do imóvel">{photos.map((photo) => <button type="button" className={photo.id === selected.id ? 'active' : ''} key={photo.id} onClick={() => setSelectedId(photo.id)}><img src={photo.objectUrl} alt={photo.caption || photo.filename}/>{photo.is_cover && <Star size={11} fill="currentColor"/>}</button>)}</div>
-        {canManage && (variant !== 'hero' || managerOpen) && <div className="property-gallery-editor"><div className="property-gallery-actions"><button className="button secondary compact-button" type="button" disabled={busy || photos[0]?.id === selected.id} onClick={() => void move(-1)}><ChevronLeft size={14}/> Anterior</button><button className="button secondary compact-button" type="button" disabled={busy || photos[photos.length - 1]?.id === selected.id} onClick={() => void move(1)}>Próxima <ChevronRight size={14}/></button><button className="button secondary compact-button" type="button" disabled={busy || selected.is_cover} onClick={() => void setCover(selected)}><Star size={14}/> Definir capa</button><button className="button secondary compact-button property-gallery-delete" type="button" disabled={busy} onClick={() => setDeleteTarget(selected)}><Trash2 size={14}/> Excluir</button></div><label className="property-gallery-caption"><span>Legenda</span><div><input maxLength={300} value={caption} onChange={(event) => setCaption(event.target.value)} placeholder="Ex.: Sala integrada com ampla iluminação natural"/><button className="button secondary compact-button" type="button" disabled={busy || caption.trim() === (selected.caption ?? '')} onClick={() => void saveCaption()}>Salvar</button></div></label></div>}
+        <div className={`property-gallery-thumbs ${canManage && managerOpen ? 'is-reorderable' : ''}`} aria-label="Fotos do imóvel">{photos.map((photo, index) => <button type="button" className={[
+          photo.id === selected.id ? 'active' : '',
+          photo.id === draggedId ? 'is-dragging' : '',
+          photo.id === dragOverId ? 'is-drag-over' : '',
+        ].filter(Boolean).join(' ')} key={photo.id} onClick={() => setSelectedId(photo.id)} draggable={canManage && managerOpen && !busy} onDragStart={(event) => { if (!canManage || !managerOpen || busy) return; setDraggedId(photo.id); event.dataTransfer.effectAllowed='move'; event.dataTransfer.setData('text/plain',photo.id) }} onDragEnter={(event) => { if (!draggedId || photo.id===draggedId) return; event.preventDefault(); setDragOverId(photo.id) }} onDragOver={(event) => { if (!draggedId) return; event.preventDefault(); event.dataTransfer.dropEffect='move' }} onDrop={(event) => { event.preventDefault(); const sourceId=event.dataTransfer.getData('text/plain')||draggedId; if (sourceId) reorderByDrag(sourceId,photo.id) }} onDragEnd={() => { setDraggedId(null); setDragOverId(null) }} title={canManage && managerOpen ? `Foto ${index+1}: arraste para mudar a ordem` : undefined}><img src={photo.objectUrl} alt={photo.caption || photo.filename}/>{canManage && managerOpen && <span className="property-gallery-order-index">{index+1}</span>}{photo.is_cover && <Star size={11} fill="currentColor"/>}</button>)}</div>
+        {canManage && (variant !== 'hero' || managerOpen) && <div className="property-gallery-editor">{variant === 'hero' && managerOpen && <div className="property-gallery-reorder-hint"><strong>Ordenar fotos</strong><span>Arraste as miniaturas para definir a sequência exibida no sistema e no site. Os botões Anterior/Próxima continuam disponíveis como alternativa.</span></div>}<div className="property-gallery-actions"><button className="button secondary compact-button" type="button" disabled={busy || photos[0]?.id === selected.id} onClick={() => void move(-1)}><ChevronLeft size={14}/> Anterior</button><button className="button secondary compact-button" type="button" disabled={busy || photos[photos.length - 1]?.id === selected.id} onClick={() => void move(1)}>Próxima <ChevronRight size={14}/></button><button className="button secondary compact-button" type="button" disabled={busy || selected.is_cover} onClick={() => void setCover(selected)}><Star size={14}/> Definir capa</button><button className="button secondary compact-button property-gallery-delete" type="button" disabled={busy} onClick={() => setDeleteTarget(selected)}><Trash2 size={14}/> Excluir</button></div><label className="property-gallery-caption"><span>Legenda</span><div><input maxLength={300} value={caption} onChange={(event) => setCaption(event.target.value)} placeholder="Ex.: Sala integrada com ampla iluminação natural"/><button className="button secondary compact-button" type="button" disabled={busy || caption.trim() === (selected.caption ?? '')} onClick={() => void saveCaption()}>Salvar</button></div></label></div>}
         {variant === 'hero' && heroActions}
       </>}
     </article>
