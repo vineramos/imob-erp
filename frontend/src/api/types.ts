@@ -187,6 +187,7 @@ export type PersonCreate = {
 }
 
 export type PropertyOwner = { person_id: string; name: string; ownership_percent: number }
+export type PropertyResponsibleBroker = { person_id: string; name: string; email: string | null; phone: string | null }
 
 export type PropertyFeatures = {
   property: string[]
@@ -222,6 +223,7 @@ export type Property = {
   publication_enabled: boolean
   published_at?: string | null
   owners: PropertyOwner[]
+  responsible_broker: PropertyResponsibleBroker | null
   created_at: string
   updated_at: string
 }
