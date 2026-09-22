@@ -64,6 +64,7 @@ class Property(Base):
     parking_spaces: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     furnished: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     pets_allowed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    features: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, nullable=False)
     public_title: Mapped[str | None] = mapped_column(String(180))
     public_description: Mapped[str | None] = mapped_column(Text)
     public_slug: Mapped[str | None] = mapped_column(String(180), unique=True, index=True)
