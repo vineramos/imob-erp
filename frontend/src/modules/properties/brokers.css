@@ -326,3 +326,26 @@
   .broker-profile-header>.button{grid-column:1/-1}
   .broker-kpi-grid{grid-template-columns:1fr 1fr}
 }
+
+
+/* Brokers v9.1 — operational commercial tabs */
+.broker-commercial-list{display:grid;gap:6px}
+.broker-commercial-list article{
+  padding:10px 11px;
+  display:grid;
+  grid-template-columns:minmax(0,1fr) minmax(170px,.55fr);
+  gap:12px;
+  align-items:center;
+  border:1px solid var(--border);
+  border-radius:8px;
+  background:var(--surface);
+}
+.broker-commercial-list article>div{min-width:0;display:grid;gap:2px}
+.broker-commercial-list article>div:last-child{justify-items:end;text-align:right}
+.broker-commercial-list span{font-size:7.5px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.025em}
+.broker-commercial-list strong{font-size:9.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
+.broker-commercial-list small{font-size:8px;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
+@media(max-width:680px){
+  .broker-commercial-list article{grid-template-columns:1fr}
+  .broker-commercial-list article>div:last-child{justify-items:start;text-align:left}
+}
