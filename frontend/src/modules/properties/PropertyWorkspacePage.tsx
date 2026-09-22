@@ -1,4 +1,4 @@
-import { Building2, CircleDollarSign, ExternalLink, Home, MapPin, Plus, RefreshCw, Search, Trash2, X } from 'lucide-react'
+import { ArrowUpDown, Building2, CircleDollarSign, ExternalLink, Home, ListFilter, MapPin, Plus, RefreshCw, Search, Trash2, X } from 'lucide-react'
 import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react'
 import { ApiError, apiRequest } from '../../api/client'
 import type { AdministrationContract, Address, Person, Property, PropertyCreate, PublicationReadiness } from '../../api/types'
@@ -28,6 +28,7 @@ type CommercialProfile={property_id:string;status:'draft'|'available'|'inactive'
 type Me={organization_id:string}
 type CommercialDraft={status:'draft'|'available'|'inactive';public_title:string;public_description:string;rent_amount:string;condo_amount:string;iptu_amount:string}
 type Props={permissions:string[]}
+type PropertySort='recent'|'price_asc'|'price_desc'|'bedrooms_desc'|'neighborhood'
 
 function money(value:number|null|undefined){if(value==null)return'—';return Number(value).toLocaleString('pt-BR',{style:'currency',currency:'BRL'})}
 function addressLine(address:Address|Record<string,string>){return [address.street,address.number,address.neighborhood,address.city].filter(Boolean).join(', ')||'Endereço não informado'}
@@ -41,6 +42,8 @@ export function PropertyWorkspacePage({permissions}:Props){
   const granted=useMemo(()=>new Set(permissions),[permissions]);const canCreate=granted.has('properties.create'),canEdit=granted.has('properties.edit'),canPublish=granted.has('properties.publish'),canContracts=granted.has('contracts.view'),canInspections=granted.has('inspections.view')
   const [items,setItems]=useState<Property[]>([]),[people,setPeople]=useState<Person[]>([]),[organizationId,setOrganizationId]=useState('')
   const [query,setQuery]=useState(''),[selectedId,setSelectedId]=useState<string|null>(null),[detailTab,setDetailTab]=useState<DetailTab>('overview')
+  const [filtersOpen,setFiltersOpen]=useState(false),[statusFilter,setStatusFilter]=useState('all'),[typeFilter,setTypeFilter]=useState('all'),[purposeFilter,setPurposeFilter]=useState('all'),[publicationFilter,setPublicationFilter]=useState('all')
+  const [bedroomsFilter,setBedroomsFilter]=useState(0),[furnishedOnly,setFurnishedOnly]=useState(false),[petsOnly,setPetsOnly]=useState(false),[featureFilters,setFeatureFilters]=useState<string[]>([]),[propertySort,setPropertySort]=useState<PropertySort>('recent')
   const [loading,setLoading]=useState(true),[detailLoading,setDetailLoading]=useState(false),[saving,setSaving]=useState(false),[commercialSaving,setCommercialSaving]=useState(false)
   const [pageError,setPageError]=useState(''),[modalError,setModalError]=useState(''),[success,setSuccess]=useState('')
   const [showForm,setShowForm]=useState(false),[editingId,setEditingId]=useState<string|null>(null),[form,setForm]=useState<PropertyCreate>(emptyPropertyForm)
