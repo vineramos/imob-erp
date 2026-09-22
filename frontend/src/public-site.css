@@ -409,3 +409,79 @@
   .public-property-feature-meta { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .public-property-feature-meta > span { border-bottom: 1px solid #eee9e3; }
 }
+
+
+/* Public search v8.2 — structured filters */
+.public-search-modal-filters {
+  align-items: end;
+}
+.public-search-quick-filters {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+.public-search-quick-filters button,
+.public-search-feature-filters button {
+  min-height: 30px;
+  padding: 6px 10px;
+  border: 1px solid #ded8cf;
+  border-radius: 999px;
+  background: #fff;
+  color: #4f5661;
+  font-size: 8.5px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: border-color .14s ease, background .14s ease, color .14s ease;
+}
+.public-search-quick-filters button:hover,
+.public-search-feature-filters button:hover {
+  border-color: color-mix(in srgb,var(--site-primary) 34%,#ded8cf);
+}
+.public-search-quick-filters button.active,
+.public-search-feature-filters button.active {
+  border-color: color-mix(in srgb,var(--site-primary) 56%,#ded8cf);
+  background: var(--site-primary-soft);
+  color: var(--site-primary-strong);
+}
+.public-search-feature-filters {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 8px;
+}
+.public-search-feature-filters > span {
+  color: #7b746c;
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.public-search-feature-filters > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* Similar properties */
+.public-similar-properties {
+  padding: 34px max(32px,4.2vw) 8px;
+  background: #fbfaf8;
+  border-top: 1px solid #eee9e3;
+}
+.public-similar-properties .public-section-title {
+  margin-bottom: 16px;
+}
+.public-similar-properties .public-property-grid {
+  grid-template-columns: repeat(4,minmax(0,1fr));
+}
+@media (max-width: 1180px) {
+  .public-similar-properties .public-property-grid { grid-template-columns: repeat(3,minmax(0,1fr)); }
+}
+@media (max-width: 880px) {
+  .public-similar-properties { padding-inline: 20px; }
+  .public-similar-properties .public-property-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+}
+@media (max-width: 560px) {
+  .public-similar-properties { padding-inline: 18px; }
+  .public-similar-properties .public-property-grid { grid-template-columns: 1fr; }
+}
