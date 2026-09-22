@@ -996,3 +996,41 @@
   vertical-align: middle !important;
   box-sizing: border-box !important;
 }
+
+
+/* Property portfolio v8.4.3 — clickable summary filters */
+.property-portfolio-stats button {
+  min-height: 27px;
+  padding: 0 9px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: color-mix(in srgb,var(--surface) 82%,var(--surface-soft));
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 8.5px;
+  cursor: pointer;
+  transition: border-color .14s ease, background .14s ease, color .14s ease, transform .14s ease;
+}
+
+.property-portfolio-stats button:hover {
+  border-color: color-mix(in srgb,#b88a35 35%,var(--border));
+  background: color-mix(in srgb,#b88a35 5%,var(--surface));
+  color: var(--text);
+  transform: translateY(-1px);
+}
+
+.property-portfolio-stats button.active {
+  border-color: #c6aa67;
+  background: #fbf6e9;
+  color: #725a21;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb,#c6aa67 14%,transparent);
+}
+
+.property-portfolio-stats button strong {
+  color: inherit;
+  font-size: 9.5px;
+  font-weight: 780;
+}
