@@ -102,3 +102,29 @@ def test_public_site_interest_enters_crm_and_preserves_public_privacy(client, id
         client.post(f"/api/public/sites/{organization_id}/properties/{slug}/inquiries", json=payload),
         404,
     )
+
+
+
+def test_public_similar_properties_returns_only_other_published_inventory(client, identity):
+    owner = create_person(
+        client,
+        name="Proprietário Similar",
+        document="72727272727",
+        email="owner.similar@imob.invalid",
+        role_keys=["owner"],
+    )
+    first = create_property(client, owner["id"])
+    second = create_property(client, owner["id"])
+    first_publication = publish_property(client, first["id"])
+    publish_property(client, second["id"])
+
+    organization_id = identity["organization_id"]
+    similar = assert_response(
+        client.get(
+            f"/api/public/sites/{organization_id}/properties/{first_publication['public_slug']}/similar"
+        )
+    ).json()
+
+    assert 1 <= len(similar) <= 4
+    assert all(item["slug"] != first_publication["public_slug"] for item in similar)
+    assert any(item["code"] == second["code"] for item in similar)
