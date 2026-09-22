@@ -1,6 +1,6 @@
-import { ArrowUpDown, Building2, CircleDollarSign, ExternalLink, Home, ListFilter, MapPin, Plus, RefreshCw, Search, Trash2, X } from 'lucide-react'
-import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react'
-import { ApiError, apiRequest } from '../../api/client'
+import { ArrowUpDown, Bath, BedDouble, Building2, Car, ChevronRight, CircleDollarSign, ExternalLink, Globe2, Home, ListFilter, MapPin, Maximize2, Plus, RefreshCw, Search, Trash2, UserRoundCheck, X } from 'lucide-react'
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { ApiError, apiBlobRequest, apiRequest } from '../../api/client'
 import type { AdministrationContract, Address, Person, Property, PropertyCreate, PublicationReadiness } from '../../api/types'
 import { PropertyDetailPage, type PropertyDetailTab } from './PropertyDetailPage'
 import './property-workspace.css'
@@ -29,6 +29,17 @@ type Me={organization_id:string}
 type CommercialDraft={status:'draft'|'available'|'inactive';public_title:string;public_description:string;rent_amount:string;condo_amount:string;iptu_amount:string}
 type Props={permissions:string[]}
 type PropertySort='recent'|'price_asc'|'price_desc'|'bedrooms_desc'|'neighborhood'
+
+type PropertyCoverPhoto={id:string;content_url:string;caption:string|null;filename:string;is_cover:boolean}
+
+function PropertyListThumbnail({propertyId,title}:{propertyId:string;title:string}){
+  const rootRef=useRef<HTMLDivElement|null>(null)
+  const [visible,setVisible]=useState(false)
+  const [src,setSrc]=useState<string|null>(null)
+  useEffect(()=>{const node=rootRef.current;if(!node)return;const observer=new IntersectionObserver(entries=>{if(entries.some(entry=>entry.isIntersecting)){setVisible(true);observer.disconnect()}},{rootMargin:'180px'});observer.observe(node);return()=>observer.disconnect()},[])
+  useEffect(()=>{if(!visible||src)return;let active=true;let objectUrl='';void apiRequest<PropertyCoverPhoto|null>(`/properties/${propertyId}/photos/cover`).then(async photo=>{if(!photo)return;const blob=await apiBlobRequest(photo.content_url);if(!active)return;objectUrl=URL.createObjectURL(blob);setSrc(objectUrl)}).catch(()=>undefined);return()=>{active=false;if(objectUrl)URL.revokeObjectURL(objectUrl)}},[propertyId,src,visible])
+  return <div ref={rootRef} className="property-list-card-media">{src?<img src={src} alt={title}/>:<div className="property-list-card-media-fallback"><Building2 size={24}/><span>Sem foto de capa</span></div>}</div>
+}
 
 function money(value:number|null|undefined){if(value==null)return'—';return Number(value).toLocaleString('pt-BR',{style:'currency',currency:'BRL'})}
 function addressLine(address:Address|Record<string,string>){return [address.street,address.number,address.neighborhood,address.city].filter(Boolean).join(', ')||'Endereço não informado'}
