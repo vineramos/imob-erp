@@ -87,8 +87,10 @@ export function EntityDeepLink({ route }: Props) {
   if (!target) return null
 
   function closePanel() {
-    if (target.overlayBaseRoute) {
-      window.history.replaceState({}, '', target.overlayBaseRoute)
+    const currentTarget = target
+    if (!currentTarget) return
+    if (currentTarget.overlayBaseRoute) {
+      window.history.replaceState({}, '', currentTarget.overlayBaseRoute)
       window.dispatchEvent(new PopStateEvent('popstate'))
       return
     }
