@@ -52,7 +52,30 @@ export function PropertyWorkspacePage({permissions}:Props){
   const load=useCallback(async()=>{setLoading(true);setPageError('');try{const [properties,persons,me]=await Promise.all([apiRequest<Property[]>('/properties'),apiRequest<Person[]>('/people'),apiRequest<Me>('/me')]);setItems(properties);setPeople(persons);setOrganizationId(me.organization_id)}catch(cause){setPageError(cause instanceof ApiError?cause.detail:'Não foi possível carregar os imóveis.')}finally{setLoading(false)}},[])
   useEffect(()=>{void load()},[load])
   const selected=useMemo(()=>items.find(item=>item.id===selectedId)??null,[items,selectedId])
-  const filtered=useMemo(()=>{const term=query.trim().toLowerCase();if(!term)return items;return items.filter(item=>`${item.code} ${item.public_title??''} ${addressLine(item.address)} ${item.owners.map(owner=>owner.name).join(' ')}`.toLowerCase().includes(term))},[items,query])
+  const filtered=useMemo(()=>{
+    const term=query.trim().toLowerCase()
+    const result=items.filter(item=>{
+      if(statusFilter!=='all'&&item.status!==statusFilter)return false
+      if(typeFilter!=='all'&&item.property_type!==typeFilter)return false
+      if(purposeFilter!=='all'&&item.purpose!==purposeFilter)return false
+      if(publicationFilter==='published'&&!item.publication_enabled)return false
+      if(publicationFilter==='unpublished'&&item.publication_enabled)return false
+      if(bedroomsFilter>0&&item.bedrooms<bedroomsFilter)return false
+      if(furnishedOnly&&!item.furnished)return false
+      if(petsOnly&&!item.pets_allowed)return false
+      const featureSet=new Set([...(item.features?.property??[]),...(item.features?.condominium??[])])
+      if(featureFilters.some(feature=>!featureSet.has(feature)))return false
+      if(!term)return true
+      return (item.code+' '+(item.public_title??'')+' '+addressLine(item.address)+' '+item.owners.map(owner=>owner.name).join(' ')).toLowerCase().includes(term)
+    })
+    return [...result].sort((a,b)=>{
+      if(propertySort==='price_asc')return Number(a.rent_amount??Number.MAX_SAFE_INTEGER)-Number(b.rent_amount??Number.MAX_SAFE_INTEGER)
+      if(propertySort==='price_desc')return Number(b.rent_amount??-1)-Number(a.rent_amount??-1)
+      if(propertySort==='bedrooms_desc')return b.bedrooms-a.bedrooms||b.suites-a.suites
+      if(propertySort==='neighborhood')return String(a.address.neighborhood??'').localeCompare(String(b.address.neighborhood??''),'pt-BR')
+      return new Date(b.updated_at).getTime()-new Date(a.updated_at).getTime()
+    })
+  },[items,query,statusFilter,typeFilter,purposeFilter,publicationFilter,bedroomsFilter,furnishedOnly,petsOnly,featureFilters,propertySort])
   const ownerTotal=useMemo(()=>form.owners.reduce((total,owner)=>total+Number(owner.ownership_percent||0),0),[form.owners])
   const loadDetail=useCallback(async(propertyId:string)=>{setDetailLoading(true);setPageError('');try{const [profileResult,readinessResult]=await Promise.allSettled([apiRequest<CommercialProfile>(`/properties/${propertyId}/commercial-profile`),apiRequest<PublicationReadiness>(`/properties/${propertyId}/publication-readiness`)]);if(profileResult.status==='fulfilled'){setCommercialProfile(profileResult.value);setCommercialDraft(draftFrom(profileResult.value))}if(readinessResult.status==='fulfilled')setReadiness(readinessResult.value);if(canContracts){const [adminResult,leaseResult]=await Promise.allSettled([apiRequest<AdministrationContract[]>('/administration-contracts'),apiRequest<Lease[]>('/lease-contracts')]);setAdminContracts(adminResult.status==='fulfilled'?adminResult.value.filter(item=>item.property_id===propertyId):[]);setLeases(leaseResult.status==='fulfilled'?leaseResult.value.filter(item=>item.property_id===propertyId):[])}if(canInspections){const result=await apiRequest<Inspection[]>('/inspections').catch(()=>[]);setInspections(result.filter(item=>item.property_id===propertyId))}}finally{setDetailLoading(false)}},[canContracts,canInspections])
   useEffect(()=>{if(selectedId)void loadDetail(selectedId)},[selectedId,loadDetail])
@@ -69,7 +92,9 @@ export function PropertyWorkspacePage({permissions}:Props){
   async function saveCommercial(){if(!selected||!commercialDraft||!canEdit)return;setCommercialSaving(true);setPageError('');setSuccess('');try{const saved=await apiRequest<CommercialProfile>(`/properties/${selected.id}/commercial-profile`,{method:'PUT',body:JSON.stringify({status:commercialDraft.status,public_title:commercialDraft.public_title,public_description:commercialDraft.public_description,rent_amount:decimal(commercialDraft.rent_amount),condo_amount:decimal(commercialDraft.condo_amount),iptu_amount:decimal(commercialDraft.iptu_amount)})});setCommercialProfile(saved);setCommercialDraft(draftFrom(saved));setCommercialEditing(false);setItems(current=>current.map(item=>item.id===selected.id?{...item,status:saved.status,public_title:saved.public_title,rent_amount:saved.rent_amount,condo_amount:saved.condo_amount,iptu_amount:saved.iptu_amount,publication_enabled:saved.publication_enabled}:item));setReadiness(await apiRequest<PublicationReadiness>(`/properties/${selected.id}/publication-readiness`));setSuccess('Perfil comercial atualizado. O checklist de publicação foi recalculado.')}catch(cause){setPageError(cause instanceof ApiError?cause.detail:'Não foi possível atualizar o perfil comercial.')}finally{setCommercialSaving(false)}}
   async function togglePublication(enabled:boolean){if(!selected||!canPublish)return;let reason:string|null=null;if(!enabled){reason=window.prompt('Informe o motivo para retirar o imóvel do site:');if(!reason?.trim())return}setSaving(true);setPageError('');setSuccess('');try{const result=await apiRequest<PublicationReadiness>(`/properties/${selected.id}/publication`,{method:'POST',body:JSON.stringify({enabled,reason})});setReadiness(result);setItems(current=>current.map(item=>item.id===selected.id?{...item,publication_enabled:result.publication_enabled,public_slug:result.public_slug}:item));setCommercialProfile(current=>current?{...current,publication_enabled:result.publication_enabled}:current);setSuccess(enabled?'Imóvel publicado no site próprio.':'Imóvel retirado do site próprio.')}catch(cause){setPageError(cause instanceof ApiError?cause.detail:'Não foi possível alterar a publicação.')}finally{setSaving(false)}}
   function openSite(slug?:string|null){if(!organizationId)return;window.open(slug?`/site/${organizationId}/imoveis/${slug}`:`/site/${organizationId}`,'_blank','noopener,noreferrer')}
-  function openDetail(item:Property){setSelectedId(item.id);setDetailTab('overview');setQuery('');setSuccess('');setPageError('')}
+  function clearPropertyFilters(){setQuery('');setStatusFilter('all');setTypeFilter('all');setPurposeFilter('all');setPublicationFilter('all');setBedroomsFilter(0);setFurnishedOnly(false);setPetsOnly(false);setFeatureFilters([]);setPropertySort('recent')}
+  function toggleFeatureFilter(key:string){setFeatureFilters(current=>current.includes(key)?current.filter(item=>item!==key):[...current,key])}
+  function openDetail(item:Property){setSelectedId(item.id);setDetailTab('overview');setSuccess('');setPageError('')}
   function backToList(){setSelectedId(null);setDetailTab('overview');setSuccess('');setPageError('')}
   if(selected){
     return <PropertyDetailPage
