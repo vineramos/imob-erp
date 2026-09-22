@@ -70,3 +70,111 @@
     font-size: 10px !important;
   }
 }
+
+
+/* Hero rent filter — isolated from modal and generic hero label rules */
+.public-site-premium .public-search-premium .public-hero-rent-filter {
+  min-width: 0;
+  height: 68px;
+  padding: 8px 10px;
+  display: grid;
+  grid-template-rows: auto 32px;
+  align-content: center;
+  gap: 5px;
+  border: 1px solid var(--site-line);
+  border-radius: 10px;
+  background: var(--site-surface);
+  color: var(--site-ink);
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.public-site-premium .public-search-premium .public-hero-rent-title {
+  display: block;
+  min-width: 0;
+  color: var(--site-muted);
+  font-size: 8px;
+  font-weight: 650;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.public-site-premium .public-search-premium .public-hero-rent-fields {
+  min-width: 0;
+  height: 32px;
+  display: grid;
+  grid-template-columns: minmax(0,1fr) 1px minmax(0,1fr);
+  align-items: center;
+  border: 1px solid color-mix(in srgb,var(--site-line) 95%,transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb,var(--site-surface) 97%,var(--site-primary-soft));
+  overflow: hidden;
+}
+
+.public-site-premium .public-search-premium .public-hero-rent-field {
+  min-width: 0;
+  height: 100%;
+  padding: 0 10px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow: hidden;
+}
+
+.public-site-premium .public-search-premium .public-hero-rent-field > span {
+  flex: 0 0 auto;
+  width: auto !important;
+  min-width: auto !important;
+  display: inline-block !important;
+  color: #8f959e !important;
+  font-size: 8px !important;
+  font-weight: 750 !important;
+  line-height: 1 !important;
+  white-space: nowrap !important;
+  overflow: visible !important;
+  text-overflow: clip !important;
+}
+
+.public-site-premium .public-search-premium .public-hero-rent-field > input {
+  min-width: 0;
+  width: 100%;
+  height: 28px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--site-ink);
+  font: 700 10px/28px var(--site-body-font);
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
+.public-site-premium .public-search-premium .public-hero-rent-field > input::-webkit-outer-spin-button,
+.public-site-premium .public-search-premium .public-hero-rent-field > input::-webkit-inner-spin-button {
+  margin: 0;
+  -webkit-appearance: none;
+}
+
+.public-site-premium .public-search-premium .public-hero-rent-field > input::placeholder {
+  color: #a7acb4;
+  font-weight: 600;
+}
+
+.public-site-premium .public-search-premium .public-hero-rent-divider {
+  width: 1px;
+  height: 18px;
+  background: var(--site-line);
+}
+
+.public-site-premium .public-search-premium .public-hero-rent-fields:focus-within {
+  border-color: color-mix(in srgb,var(--site-primary) 45%,var(--site-line));
+  box-shadow: 0 0 0 2px color-mix(in srgb,var(--site-primary) 9%,transparent);
+}
+
+@media (max-width: 720px) {
+  .public-site-premium .public-search-premium .public-hero-rent-filter {
+    height: auto;
+    min-height: 68px;
+  }
+}
