@@ -15,6 +15,7 @@ from app.domains.foundation.models import Organization, OrganizationSettings
 from app.domains.portfolio.models import Property, PropertyOwner, PropertyPhoto
 from app.domains.portfolio.schemas import (
     PublicPropertyResponse,
+    PropertyFeatures,
     PublicationChecklistItem,
     PublicationReadinessResponse,
     PublicationUpdate,
@@ -409,7 +410,7 @@ def _public_response(item: Property, organization_id: UUID, cover_photo_id: UUID
         parking_spaces=item.parking_spaces,
         furnished=item.furnished,
         pets_allowed=item.pets_allowed,
-        features=dict(item.features or {}),
+        features=PropertyFeatures.model_validate(item.features or {}).model_dump(),
         title=item.public_title or f"Imóvel {item.internal_number:06d}",
         description=item.public_description or "",
         published_at=item.published_at,
