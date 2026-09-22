@@ -982,3 +982,17 @@
     grid-row:3 !important;
   }
 }
+
+
+/* Property portfolio v8.4.2 — center status badge text */
+.property-list-card-v83 .property-list-card-kicker .status-badge {
+  min-height: 20px !important;
+  height: 20px !important;
+  padding: 0 7px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  line-height: 1 !important;
+  vertical-align: middle !important;
+  box-sizing: border-box !important;
+}
