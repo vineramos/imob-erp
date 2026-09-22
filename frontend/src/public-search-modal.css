@@ -1265,3 +1265,22 @@
   height: 28px;
   line-height: 28px;
 }
+
+
+/* Public search v8.10 — match hero rent card height to neighboring filters */
+.public-site-premium .public-search-premium > .public-rent-range-editor {
+  height: 68px !important;
+  min-height: 68px !important;
+  padding: 8px 10px !important;
+  grid-template-rows: auto 30px !important;
+  align-content: center !important;
+  gap: 5px !important;
+}
+
+.public-site-premium .public-search-premium > .public-rent-range-editor .public-rent-range-label {
+  line-height: 1 !important;
+}
+
+.public-site-premium .public-search-premium > .public-rent-range-editor .public-rent-combined {
+  height: 30px !important;
+}
