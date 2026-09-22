@@ -420,3 +420,177 @@
   .crm-workflow-grid{grid-template-columns:1fr!important}
   .crm-workflow-notes{grid-column:auto!important}
 }
+
+
+/* CRM modal v8.5 — align with the approved canonical ERP dialogs */
+.commercial-funnel-modal{
+  width:min(920px,calc(100vw - 42px))!important;
+  height:auto!important;
+  max-height:calc(100dvh - var(--imob-topbar-height,66px) - 42px)!important;
+  border-radius:14px!important;
+  box-shadow:0 24px 70px rgba(15,23,42,.18)!important;
+  background:var(--surface)!important;
+}
+.commercial-funnel-modal>.portfolio-modal-header{
+  padding:17px 20px 14px!important;
+  border-bottom:1px solid var(--border)!important;
+}
+.commercial-funnel-modal>.portfolio-modal-header h2{
+  margin:4px 0 0!important;
+  font-size:18px!important;
+}
+.commercial-funnel-modal>.portfolio-modal-header p{
+  margin:4px 0 0!important;
+  font-size:9px!important;
+}
+.commercial-funnel-modal>.commercial-funnel-body{
+  padding:14px 18px 18px!important;
+  gap:10px!important;
+  background:color-mix(in srgb,var(--surface-muted) 76%,var(--surface))!important;
+}
+.commercial-funnel-modal .funnel-summary-grid{
+  gap:8px!important;
+}
+.commercial-funnel-modal .funnel-summary-card{
+  min-height:0!important;
+  padding:10px 11px!important;
+  gap:2px!important;
+  border-radius:9px!important;
+  background:var(--surface)!important;
+  box-shadow:none!important;
+}
+.commercial-funnel-modal .funnel-summary-card>span{
+  font-size:7.5px!important;
+}
+.commercial-funnel-modal .funnel-summary-card strong{
+  font-size:11px!important;
+}
+.commercial-funnel-modal .funnel-summary-card small{
+  font-size:8px!important;
+}
+
+.commercial-funnel-modal .canonical-modal-section{
+  padding:12px!important;
+  border:1px solid var(--border)!important;
+  border-radius:10px!important;
+  background:var(--surface)!important;
+  box-shadow:none!important;
+}
+.commercial-funnel-modal .funnel-section{
+  padding:12px!important;
+}
+.commercial-funnel-modal .funnel-section-heading{
+  min-height:28px;
+}
+.commercial-funnel-modal .funnel-section-heading h3{
+  font-size:11px!important;
+}
+.commercial-funnel-modal .funnel-section-heading .eyebrow{
+  font-size:7px!important;
+}
+.commercial-funnel-modal .funnel-section-heading>span{
+  min-width:22px!important;
+  height:22px!important;
+  font-size:8px!important;
+}
+.commercial-funnel-modal .funnel-empty-copy{
+  margin:6px 0 0!important;
+  font-size:8.5px!important;
+}
+
+.commercial-funnel-modal .crm-workflow-section{
+  gap:9px!important;
+}
+.commercial-funnel-modal .crm-workflow-grid{
+  gap:8px!important;
+}
+.commercial-funnel-modal .field{
+  gap:4px!important;
+}
+.commercial-funnel-modal .field>span{
+  font-size:7.5px!important;
+  font-weight:760!important;
+  text-transform:uppercase;
+  letter-spacing:.025em;
+  color:var(--text-muted);
+}
+.commercial-funnel-modal .crm-workflow-grid input,
+.commercial-funnel-modal .crm-workflow-grid select{
+  height:34px!important;
+  padding:0 9px!important;
+  border-radius:8px!important;
+  font-size:9.5px!important;
+}
+.commercial-funnel-modal .funnel-inline-actions{
+  margin-top:1px;
+}
+.commercial-funnel-modal .funnel-actions{
+  gap:6px!important;
+}
+.commercial-funnel-modal .funnel-actions .button,
+.commercial-funnel-modal .funnel-inline-actions .button{
+  min-height:32px!important;
+  padding:0 10px!important;
+  font-size:9px!important;
+  border-radius:8px!important;
+}
+
+.commercial-funnel-modal .funnel-timeline,
+.commercial-funnel-modal .funnel-proposals{
+  margin-top:7px!important;
+  gap:6px!important;
+}
+.commercial-funnel-modal .funnel-timeline>article,
+.commercial-funnel-modal .funnel-proposals>article{
+  padding:9px 10px!important;
+  border-radius:8px!important;
+}
+.commercial-funnel-modal .funnel-timeline strong,
+.commercial-funnel-modal .funnel-proposals strong{
+  font-size:9.5px!important;
+}
+.commercial-funnel-modal .funnel-timeline span,
+.commercial-funnel-modal .funnel-proposals span,
+.commercial-funnel-modal .funnel-timeline small,
+.commercial-funnel-modal .funnel-proposals small{
+  font-size:8px!important;
+}
+
+.commercial-funnel-modal .crm-timeline-section{
+  gap:6px!important;
+}
+.commercial-funnel-modal .crm-timeline{
+  margin-top:0!important;
+}
+.commercial-funnel-modal .crm-timeline article{
+  grid-template-columns:11px minmax(0,1fr)!important;
+  gap:8px!important;
+  padding:5px 0!important;
+}
+.commercial-funnel-modal .crm-timeline:before{
+  left:5px!important;
+}
+.commercial-funnel-modal .crm-timeline article>i{
+  width:9px!important;
+  height:9px!important;
+  margin-top:2px!important;
+}
+.commercial-funnel-modal .crm-timeline strong{
+  font-size:9px!important;
+}
+.commercial-funnel-modal .crm-timeline span{
+  font-size:8px!important;
+}
+.commercial-funnel-modal .crm-timeline small{
+  font-size:7.5px!important;
+}
+
+@media(max-width:760px){
+  .commercial-funnel-modal{
+    width:calc(100vw - 20px)!important;
+    max-height:calc(100dvh - var(--imob-topbar-height,66px) - 24px)!important;
+  }
+  .commercial-funnel-modal>.commercial-funnel-body{
+    padding:12px 12px 16px!important;
+  }
+}
