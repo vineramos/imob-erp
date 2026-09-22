@@ -213,3 +213,59 @@
 .property-gallery--hero .property-gallery-thumbs{padding-bottom:10px}
 @media(max-width:900px){.property-hero-copy>div:nth-child(2){max-width:72%}.property-hero-price{width:30%;right:24px;bottom:28px}.property-hero-copy{padding:28px 26px 30px}.property-hero-specs{max-width:66%}}
 @media(max-width:680px){.property-gallery--hero .property-gallery-main{height:500px}.property-gallery--hero .property-gallery-main:after{background:linear-gradient(180deg,rgba(5,13,23,.2),rgba(5,13,23,.78))}.property-hero-copy{inset:0;width:100%;padding:24px 20px}.property-hero-copy>div:nth-child(2){max-width:100%}.property-hero-copy h1{font-size:30px}.property-hero-specs{max-width:100%;margin-top:17px}.property-hero-price{position:static;width:100%;margin-top:18px;padding:13px 15px;background:rgba(7,16,27,.56)}.property-hero-price small{display:none}}
+
+
+/* Reordenação visual das fotos */
+.property-gallery-thumbs.is-reorderable button {
+  cursor: grab;
+  position: relative;
+  transition: transform .14s ease, opacity .14s ease, border-color .14s ease, box-shadow .14s ease;
+}
+.property-gallery-thumbs.is-reorderable button:active { cursor: grabbing; }
+.property-gallery-thumbs.is-reorderable button.is-dragging {
+  opacity: .42;
+  transform: scale(.96);
+}
+.property-gallery-thumbs.is-reorderable button.is-drag-over {
+  border-color: color-mix(in srgb, var(--brand-primary) 70%, var(--border));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand-primary) 12%, transparent);
+  transform: translateY(-2px);
+}
+.property-gallery-order-index {
+  position: absolute;
+  left: 4px;
+  top: 4px;
+  z-index: 2;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: rgba(7,16,27,.78);
+  color: #fff;
+  font-size: 8px;
+  font-weight: 800;
+  line-height: 1;
+  pointer-events: none;
+  backdrop-filter: blur(5px);
+}
+.property-gallery-reorder-hint {
+  margin: 0 0 10px;
+  padding: 9px 10px;
+  display: grid;
+  gap: 2px;
+  border: 1px dashed color-mix(in srgb, var(--brand-primary) 24%, var(--border));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--brand-primary) 3%, var(--surface));
+}
+.property-gallery-reorder-hint strong {
+  font-size: 9.5px;
+  color: var(--text);
+}
+.property-gallery-reorder-hint span {
+  font-size: 8.5px;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
