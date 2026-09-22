@@ -62,6 +62,15 @@ STATUS_LABELS = {
     "missed": "Não cumprido",
 }
 
+ROLE_LABELS = {
+    "owner": "Proprietário",
+    "tenant": "Locatário",
+    "guarantor": "Fiador",
+    "broker": "Corretor",
+    "supplier": "Fornecedor",
+    "referrer": "Indicador",
+}
+
 VALUE_LABELS = {
     "apartment": "Apartamento",
     "house": "Casa",
@@ -105,6 +114,26 @@ def _address(address: dict[str, Any] | None) -> str:
     value = address or {}
     parts = [value.get("street"), value.get("number"), value.get("neighborhood"), value.get("city"), value.get("state")]
     return ", ".join(str(part).strip() for part in parts if str(part or "").strip()) or "Endereço não informado"
+
+
+def _document(value: str | None) -> str:
+    digits = "".join(char for char in str(value or "") if char.isdigit())
+    if len(digits) == 11:
+        return f"{digits[:3]}.{digits[3:6]}.{digits[6:9]}-{digits[9:]}"
+    if len(digits) == 14:
+        return f"{digits[:2]}.{digits[2:5]}.{digits[5:8]}/{digits[8:12]}-{digits[12:]}"
+    return str(value or "").strip() or "—"
+
+
+def _phone(value: str | None) -> str:
+    digits = "".join(char for char in str(value or "") if char.isdigit())
+    if digits.startswith("55") and len(digits) in (12, 13):
+        digits = digits[2:]
+    if len(digits) == 11:
+        return f"({digits[:2]}) {digits[2:7]}-{digits[7:]}"
+    if len(digits) == 10:
+        return f"({digits[:2]}) {digits[2:6]}-{digits[6:]}"
+    return str(value or "").strip() or "—"
 
 
 def _money(value: Decimal | float | int | None) -> str:
@@ -177,18 +206,22 @@ def resolve_deep_link(
         )
         if item is None:
             _not_found()
-        roles = ", ".join(sorted(role.role_key for role in item.roles if role.is_active)) or "Sem papel operacional"
+        roles = ", ".join(
+            ROLE_LABELS.get(role.role_key, role.role_key.replace("_", " ").title())
+            for role in sorted((role for role in item.roles if role.is_active), key=lambda role: role.role_key)
+        ) or "Sem papel operacional"
+        formatted_document = _document(item.document_number)
         return _record(
             kind=kind,
             module="people",
             code="PESSOA",
             title=item.name,
             status_value="active" if item.is_active else "inactive",
-            subtitle=" · ".join(part for part in (item.document_number or "", item.email or "") if part) or roles,
+            subtitle=" · ".join(part for part in (formatted_document if formatted_document != "—" else "", item.email or "") if part) or roles,
             details=[
-                _detail("CPF/CNPJ", item.document_number),
+                _detail("CPF/CNPJ", formatted_document),
                 _detail("E-mail", item.email),
-                _detail("Telefone", item.phone),
+                _detail("Telefone", _phone(item.phone)),
                 _detail("Papéis", roles),
                 _detail("Endereço", _address(item.address)),
                 _detail("Cadastro", _date(item.created_at)),
