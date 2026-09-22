@@ -3,7 +3,7 @@ from decimal import Decimal
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
 
 
 class AddressPayload(BaseModel):
@@ -86,6 +86,12 @@ class PropertyCreate(BaseModel):
     publication_enabled: bool = False
     owners: list[PropertyOwnerPayload] = Field(default_factory=list, max_length=20)
 
+    @model_validator(mode="after")
+    def validate_suites_within_bedrooms(self):
+        if self.suites > self.bedrooms:
+            raise ValueError("O número de suítes não pode ser maior que o total de quartos.")
+        return self
+
 
 class PropertyUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -106,6 +112,12 @@ class PropertyUpdate(BaseModel):
     pets_allowed: bool = False
     public_title: str | None = Field(default=None, max_length=180)
     owners: list[PropertyOwnerPayload] = Field(default_factory=list, max_length=20)
+
+    @model_validator(mode="after")
+    def validate_suites_within_bedrooms(self):
+        if self.suites > self.bedrooms:
+            raise ValueError("O número de suítes não pode ser maior que o total de quartos.")
+        return self
 
 
 class PropertyResponse(BaseModel):
