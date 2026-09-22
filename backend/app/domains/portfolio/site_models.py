@@ -118,3 +118,22 @@ class CommercialProposal(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )
+
+
+class CommercialActivity(Base):
+    __tablename__ = "commercial_activities"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    inquiry_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("public_site_inquiries.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    activity_type: Mapped[str] = mapped_column(String(40), nullable=False, default="note", index=True)
+    title: Mapped[str] = mapped_column(String(180), nullable=False)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("app_users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False, index=True)
