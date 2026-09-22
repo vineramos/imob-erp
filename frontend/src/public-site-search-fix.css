@@ -1,7 +1,7 @@
 /* Ajuste defensivo dos filtros da busca principal do site público.
  * Mantém rótulo e valor selecionado legíveis dentro dos campos compactos.
  */
-.public-site-premium .public-search-premium label:not(.public-search-main) {
+.public-site-premium .public-search-premium label:not(.public-search-main):not(.public-rent-inline-field) {
   display: grid !important;
   grid-template-columns: minmax(0, 1fr) !important;
   grid-template-rows: auto auto !important;
@@ -13,7 +13,7 @@
   overflow: hidden !important;
 }
 
-.public-site-premium .public-search-premium label:not(.public-search-main) > span {
+.public-site-premium .public-search-premium label:not(.public-search-main):not(.public-rent-inline-field) > span {
   display: block !important;
   flex: none !important;
   width: 100% !important;
@@ -27,7 +27,7 @@
   text-overflow: ellipsis !important;
 }
 
-.public-site-premium .public-search-premium label:not(.public-search-main) > select {
+.public-site-premium .public-search-premium label:not(.public-search-main):not(.public-rent-inline-field) > select {
   display: block !important;
   width: 100% !important;
   min-width: 0 !important;
@@ -62,11 +62,11 @@
 }
 
 @media (max-width: 900px) {
-  .public-site-premium .public-search-premium label:not(.public-search-main) > span {
+  .public-site-premium .public-search-premium label:not(.public-search-main):not(.public-rent-inline-field) > span {
     font-size: 8px !important;
   }
 
-  .public-site-premium .public-search-premium label:not(.public-search-main) > select {
+  .public-site-premium .public-search-premium label:not(.public-search-main):not(.public-rent-inline-field) > select {
     font-size: 10px !important;
   }
 }
