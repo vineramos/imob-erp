@@ -318,3 +318,94 @@
     height: 300px;
   }
 }
+
+
+/* Structured characteristics on public property */
+.public-property-features {
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid #eee9e3;
+}
+.public-property-features-heading h2 {
+  margin: 5px 0 0;
+  font-family: var(--site-heading-font);
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -.015em;
+}
+.public-property-feature-columns {
+  margin-top: 16px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+.public-property-feature-columns article {
+  padding: 16px;
+  border: 1px solid #e7e1d9;
+  border-radius: 10px;
+  background: #fffdf9;
+}
+.public-property-feature-columns h3 {
+  margin: 0 0 11px;
+  color: var(--site-ink);
+  font-family: var(--site-heading-font);
+  font-size: 14px;
+  font-weight: 600;
+}
+.public-property-feature-columns article > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+.public-property-feature-columns article > div > span {
+  min-height: 30px;
+  padding: 6px 9px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid #e3ddd4;
+  border-radius: 999px;
+  background: #fff;
+  color: var(--site-ink);
+  font-size: 9px;
+  font-weight: 650;
+}
+.public-property-feature-columns svg {
+  color: var(--site-primary);
+}
+.public-property-feature-meta {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  border: 1px solid #e7e1d9;
+  border-radius: 10px;
+  overflow: hidden;
+}
+.public-property-feature-meta > span {
+  min-height: 62px;
+  padding: 11px 13px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  background: #fff;
+  border-right: 1px solid #eee9e3;
+}
+.public-property-feature-meta > span:last-child { border-right: 0; }
+.public-property-feature-meta small {
+  color: var(--site-muted);
+  font-size: 8px;
+}
+.public-property-feature-meta strong {
+  color: var(--site-ink);
+  font-size: 11px;
+}
+@media (max-width: 880px) {
+  .public-property-feature-meta { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .public-property-feature-meta > span:nth-child(3n) { border-right: 0; }
+}
+@media (max-width: 560px) {
+  .public-property-feature-columns { grid-template-columns: 1fr; }
+  .public-property-feature-meta { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .public-property-feature-meta > span { border-bottom: 1px solid #eee9e3; }
+}
