@@ -146,3 +146,35 @@
     grid-template-columns: 1fr;
   }
 }
+
+
+/* People workspace v8.2 */
+.people-toolbar-v82 {
+  display: grid;
+  grid-template-columns: auto minmax(240px,1fr) 150px 170px 170px;
+  gap: 8px;
+  align-items: center;
+}
+.people-toolbar-v82 > select {
+  min-height: 38px;
+  padding: 0 9px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 9.5px;
+}
+@media(max-width:1180px){
+  .people-toolbar-v82 { grid-template-columns:1fr 1fr 1fr; }
+  .people-toolbar-v82 .people-status-tabs { grid-column:1/-1; }
+  .people-toolbar-v82 .portfolio-search { grid-column:span 2; }
+}
+@media(max-width:760px){
+  .people-toolbar-v82 { grid-template-columns:1fr 1fr; }
+  .people-toolbar-v82 .portfolio-search { grid-column:1/-1; }
+}
+@media(max-width:520px){
+  .people-toolbar-v82 { grid-template-columns:1fr; }
+  .people-toolbar-v82 .people-status-tabs,
+  .people-toolbar-v82 .portfolio-search { grid-column:auto; }
+}
