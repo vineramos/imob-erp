@@ -546,3 +546,187 @@
     justify-content: center;
   }
 }
+
+
+/* Correção da ordenação e galeria ampliada */
+.property-overview-gallery-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+.property-overview-gallery-actions button {
+  min-height: 30px;
+  padding: 0 9px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: #fff;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 8.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.property-overview-gallery-actions button:hover,
+.property-overview-gallery-actions button.active {
+  border-color: #ccb07d;
+  background: #fffaf2;
+  color: var(--text);
+}
+.property-overview-gallery-thumbs.is-reorderable button {
+  cursor: grab;
+  position: relative;
+}
+.property-overview-gallery-thumbs.is-reorderable button:active { cursor: grabbing; }
+.property-overview-gallery-thumbs button.is-dragging {
+  opacity: .38;
+  transform: scale(.95);
+}
+.property-overview-gallery-thumbs button.is-drag-over {
+  border-color: #b18436;
+  box-shadow: 0 0 0 3px rgba(177,132,54,.12);
+  transform: translateY(-2px);
+}
+.property-overview-reorder-bar {
+  margin-top: 8px;
+  padding: 8px 9px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border: 1px dashed color-mix(in srgb, var(--brand-primary) 22%, var(--border));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--brand-primary) 3%, var(--surface));
+  color: var(--text-muted);
+  font-size: 8.5px;
+}
+.property-overview-reorder-bar > div {
+  display: flex;
+  gap: 5px;
+}
+.property-overview-reorder-bar button {
+  min-height: 27px;
+  padding: 0 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--text);
+  font: inherit;
+  font-size: 8px;
+  cursor: pointer;
+}
+.property-overview-reorder-bar button:disabled {
+  opacity: .45;
+  cursor: default;
+}
+
+.property-gallery-viewer {
+  grid-template-rows: auto minmax(0,1fr) auto;
+}
+.property-gallery-viewer-stage {
+  position: relative;
+  overflow: hidden;
+}
+.property-gallery-viewer-nav {
+  position: absolute;
+  top: 50%;
+  z-index: 3;
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid rgba(255,255,255,.45);
+  border-radius: 999px;
+  background: rgba(255,255,255,.92);
+  color: #152235;
+  box-shadow: 0 4px 16px rgba(15,23,42,.14);
+  cursor: pointer;
+  transform: translateY(-50%);
+}
+.property-gallery-viewer-nav:hover {
+  background: #fff;
+}
+.property-gallery-viewer-nav.prev { left: 16px; }
+.property-gallery-viewer-nav.next { right: 16px; }
+
+.property-gallery-viewer-thumbs {
+  display: flex;
+  gap: 7px;
+  overflow-x: auto;
+  padding: 10px 12px 12px;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+  scrollbar-width: thin;
+}
+.property-gallery-viewer-thumbs button {
+  position: relative;
+  width: 76px;
+  height: 52px;
+  flex: 0 0 76px;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: #edf1f5;
+  opacity: .7;
+  cursor: pointer;
+}
+.property-gallery-viewer-thumbs button:hover,
+.property-gallery-viewer-thumbs button.active {
+  opacity: 1;
+  border-color: #b18436;
+  box-shadow: 0 0 0 2px rgba(177,132,54,.12);
+}
+.property-gallery-viewer-thumbs img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+}
+.property-gallery-viewer-thumbs span {
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: rgba(7,16,27,.74);
+  color: #fff;
+  font-size: 7.5px;
+  font-weight: 800;
+}
+
+@media (max-width: 680px) {
+  .property-overview-gallery-actions {
+    width: 100%;
+  }
+  .property-overview-gallery-actions button {
+    flex: 1 1 0;
+    justify-content: center;
+  }
+  .property-overview-reorder-bar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .property-gallery-viewer-nav {
+    width: 38px;
+    height: 38px;
+  }
+  .property-gallery-viewer-nav.prev { left: 8px; }
+  .property-gallery-viewer-nav.next { right: 8px; }
+  .property-gallery-viewer-thumbs button {
+    width: 62px;
+    height: 44px;
+    flex-basis: 62px;
+  }
+}
