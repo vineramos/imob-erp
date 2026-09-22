@@ -926,3 +926,104 @@
     font-size: 8px;
   }
 }
+
+
+/* Public search v8.5 — hero-safe rent card + semantic differential groups */
+.public-site-premium .public-search-premium .public-rent-range-editor.compact {
+  height: 68px !important;
+  min-height: 68px !important;
+  padding: 6px 10px 5px !important;
+  display: grid !important;
+  grid-template-rows: auto 24px 13px !important;
+  align-content: center !important;
+  row-gap: 2px !important;
+  overflow: hidden !important;
+  box-sizing: border-box !important;
+}
+
+.public-site-premium .public-search-premium .public-rent-range-editor.compact .public-rent-range-label {
+  font-size: 7.5px;
+  line-height: 1;
+}
+
+.public-site-premium .public-search-premium .public-rent-range-editor.compact .public-rent-amount-row {
+  grid-template-columns: minmax(0,1fr) auto minmax(0,1fr);
+  gap: 5px;
+}
+
+.public-site-premium .public-search-premium .public-rent-range-editor.compact .public-rent-amount-field > small {
+  display: none;
+}
+
+.public-site-premium .public-search-premium .public-rent-range-editor.compact .public-rent-amount-field > span {
+  height: 24px;
+  min-height: 24px;
+  padding: 0 7px;
+}
+
+.public-site-premium .public-search-premium .public-rent-range-editor.compact .public-rent-amount-field input {
+  height: 22px;
+  min-height: 22px;
+  font-size: 9px;
+  line-height: 22px;
+}
+
+.public-site-premium .public-search-premium .public-rent-range-editor.compact .public-rent-separator {
+  padding-bottom: 7px;
+}
+
+.public-site-premium .public-search-premium .public-rent-range-editor.compact .public-rent-condo-toggle {
+  width: auto !important;
+  max-width: 100% !important;
+  height: 13px !important;
+  min-height: 13px !important;
+  overflow: hidden !important;
+}
+
+.public-site-premium .public-search-premium .public-rent-range-editor.compact .public-rent-condo-toggle > span:last-child {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 6.7px !important;
+}
+
+.public-site-premium .public-search-feature-filters {
+  gap: 9px;
+}
+
+.public-site-premium .public-search-feature-row {
+  display: grid;
+  grid-template-columns: 88px minmax(0,1fr);
+  align-items: start;
+  gap: 10px;
+}
+
+.public-site-premium .public-search-feature-row > strong {
+  padding-top: 7px;
+  color: var(--site-muted);
+  font-size: 8px;
+  font-weight: 750;
+  line-height: 1.2;
+}
+
+.public-site-premium .public-search-feature-row > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+@media(max-width:720px){
+  .public-site-premium .public-search-premium .public-rent-range-editor.compact {
+    height: auto !important;
+    min-height: 72px !important;
+  }
+
+  .public-site-premium .public-search-feature-row {
+    grid-template-columns: 1fr;
+    gap: 5px;
+  }
+
+  .public-site-premium .public-search-feature-row > strong {
+    padding-top: 0;
+  }
+}
