@@ -907,3 +907,72 @@
 @media (max-width: 760px) {
   .property-detail-v81 .property-feature-groups { grid-template-columns: 1fr; }
 }
+
+
+/* Property owner links — show all owners and their participation. */
+.property-detail-v81 .property-owner-summary {
+  align-items: start;
+}
+
+.property-detail-v81 .property-owner-list {
+  margin-top: 5px;
+  display: grid;
+  gap: 5px;
+}
+
+.property-detail-v81 .property-person-link {
+  width: 100%;
+  min-width: 0;
+  padding: 6px 7px;
+  display: grid;
+  grid-template-columns: minmax(0,1fr) auto auto;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background .14s ease, border-color .14s ease, transform .14s ease;
+}
+
+.property-detail-v81 .property-person-link:hover {
+  border-color: color-mix(in srgb,#b88a35 24%,var(--border));
+  background: color-mix(in srgb,#b88a35 5%,var(--surface));
+  transform: translateX(1px);
+}
+
+.property-detail-v81 .property-person-link strong {
+  margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+  font-size: 10px;
+  font-weight: 720;
+}
+
+.property-detail-v81 .property-person-link b {
+  padding: 3px 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb,#b88a35 10%,transparent);
+  color: #8a6425;
+  font-size: 8px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.property-detail-v81 .property-person-link svg {
+  color: #7b8795;
+}
+
+@media(max-width:520px){
+  .property-detail-v81 .property-person-link {
+    grid-template-columns:minmax(0,1fr) auto;
+  }
+  .property-detail-v81 .property-person-link svg {
+    display:none;
+  }
+}
