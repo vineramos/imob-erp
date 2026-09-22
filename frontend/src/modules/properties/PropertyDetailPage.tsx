@@ -1,5 +1,5 @@
 import {
-  ArrowLeft, Bath, BedDouble, CalendarPlus, Car, CheckCircle2,
+  ArrowLeft, BedDouble, CalendarPlus, Car, CheckCircle2,
   CircleAlert, CircleDollarSign, ClipboardCheck, ExternalLink, FileText,
   Globe2, History, Home, MapPin, Maximize2, Pencil, RefreshCw,
   Share2, UserRound,
