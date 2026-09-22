@@ -1,9 +1,9 @@
-import { ArrowRight, Copy, LoaderCircle, X } from 'lucide-react'
+import { ArrowRight, Copy, LoaderCircle, UserRound, X } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { ApiError, apiRequest } from '../api/client'
 import './entity-deep-link.css'
 
-type DeepLinkTarget = { kind: string; id: string }
+type DeepLinkTarget = { kind: string; id: string; overlayBaseRoute?: string }
 type DeepLinkDetail = { label: string; value: string }
 type DeepLinkRecord = {
   kind: string
@@ -32,7 +32,15 @@ const patterns: Array<[RegExp, string]> = [
 ]
 
 function parseTarget(route: string): DeepLinkTarget | null {
-  const path = route.split('?')[0].split('#')[0]
+  const [pathAndQuery] = route.split('#')
+  const [path, rawQuery = ''] = pathAndQuery.split('?')
+  const params = new URLSearchParams(rawQuery)
+  const personId = params.get('person')
+  if (personId) {
+    params.delete('person')
+    const baseQuery = params.toString()
+    return { kind:'person', id:personId, overlayBaseRoute: path + (baseQuery ? `?${baseQuery}` : '') }
+  }
   for (const [pattern, kind] of patterns) {
     const match = path.match(pattern)
     if (match) return { kind, id: decodeURIComponent(match[1]) }
@@ -79,12 +87,23 @@ export function EntityDeepLink({ route }: Props) {
   if (!target) return null
 
   function closePanel() {
+    if (target.overlayBaseRoute) {
+      window.history.replaceState({}, '', target.overlayBaseRoute)
+      window.dispatchEvent(new PopStateEvent('popstate'))
+      return
+    }
     if (record) {
       window.history.replaceState({}, '', record.root_route)
       window.dispatchEvent(new PopStateEvent('popstate'))
       return
     }
     window.history.back()
+  }
+
+  function openFullModule() {
+    if (!record) return
+    window.history.pushState({}, '', record.root_route)
+    window.dispatchEvent(new PopStateEvent('popstate'))
   }
 
   async function copyLink() {
@@ -98,12 +117,15 @@ export function EntityDeepLink({ route }: Props) {
   }
 
   return <div className="entity-deep-link-layer" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) closePanel() }}>
-    <aside className="entity-deep-link panel" role="dialog" aria-modal="true" aria-label="Detalhes do registro">
+    <aside className={`entity-deep-link panel ${record?.kind==='person'?'entity-deep-link-person':''}`} role="dialog" aria-modal="true" aria-label="Detalhes do registro">
       <header className="entity-deep-link-header">
-        <div>
-          <span className="eyebrow">{record ? `Registro vinculado · ${record.module_label}` : 'Abrindo registro'}</span>
-          <h2>{record?.title || 'Carregando...'}</h2>
-          {record?.subtitle && <p>{record.subtitle}</p>}
+        <div className="entity-deep-link-identity">
+          {record?.kind==='person'&&<div className="entity-deep-link-avatar" aria-hidden="true"><UserRound size={18}/></div>}
+          <div>
+            <span className="eyebrow">{record ? `Registro vinculado · ${record.module_label}` : 'Abrindo registro'}</span>
+            <h2>{record?.title || 'Carregando...'}</h2>
+            {record?.subtitle && <p>{record.subtitle}</p>}
+          </div>
         </div>
         <button className="entity-deep-link-close" type="button" onClick={closePanel} aria-label="Fechar detalhe"><X size={18}/></button>
       </header>
@@ -117,14 +139,16 @@ export function EntityDeepLink({ route }: Props) {
           {record.status_label && <i className={`status-badge ${statusClass(record.status)}`}>{record.status_label}</i>}
         </div>
         <div className="entity-deep-link-details">
-          {record.details.map((detail, index) => <div className="entity-deep-link-detail" key={`${detail.label}-${index}`}>
+          {record.details.map((detail, index) => <div className={`entity-deep-link-detail ${detail.label==='Papéis'?'entity-deep-link-detail-tags':''}`} key={`${detail.label}-${index}`}>
             <span>{detail.label}</span>
-            <strong>{detail.value}</strong>
+            {detail.label==='Papéis'
+              ? <div className="entity-deep-link-tags">{detail.value.split(',').map(value=><i key={value.trim()}>{value.trim()}</i>)}</div>
+              : <strong>{detail.value}</strong>}
           </div>)}
         </div>
         <footer className="entity-deep-link-actions">
           <button className="button secondary" type="button" onClick={() => void copyLink()}><Copy size={14}/>{copied ? 'Link copiado' : 'Copiar link'}</button>
-          <button className="button primary" type="button" onClick={closePanel}>Abrir módulo completo <ArrowRight size={14}/></button>
+          <button className="button primary" type="button" onClick={openFullModule}>Abrir módulo completo <ArrowRight size={14}/></button>
         </footer>
       </>}
     </aside>
