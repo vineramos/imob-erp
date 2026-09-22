@@ -60,8 +60,7 @@ export function PublicPropertyGallery({ organizationId, item }: { organizationId
   if (!selected) return <div className="public-detail-visual public-detail-photo-fallback"><Camera size={28}/><span>{propertyType(item.property_type)}</span><strong>{item.title}</strong></div>
 
   return <div className="public-detail-gallery">
-    <div className="public-detail-gallery-main"><img src={mediaUrl(selected.content_url)} alt={selected.caption || item.title}/>{photos.length > 1 && <><button type="button" className="previous" aria-label="Foto anterior" onClick={() => shift(-1)}><ChevronLeft size={19}/></button><button type="button" className="next" aria-label="Próxima foto" onClick={() => shift(1)}><ChevronRight size={19}/></button></>}<span>{index + 1} / {photos.length}</span></div>
+    <div className="public-detail-gallery-main"><img src={mediaUrl(selected.content_url)} alt={selected.caption || item.title}/>{photos.length > 1 && <><button type="button" className="previous" aria-label="Foto anterior" onClick={() => shift(-1)}><ChevronLeft size={19}/></button><button type="button" className="next" aria-label="Próxima foto" onClick={() => shift(1)}><ChevronRight size={19}/></button></>}<span className="public-detail-gallery-counter">{index + 1} / {photos.length}</span>{selected.caption && <div className="public-detail-gallery-overlay-caption">{selected.caption}</div>}</div>
     {photos.length > 1 && <div className="public-detail-gallery-thumbs">{photos.map((photo) => <button type="button" className={photo.id === selected.id ? 'active' : ''} key={photo.id} onClick={() => setSelectedId(photo.id)}><img loading="lazy" src={mediaUrl(photo.content_url)} alt={photo.caption || item.title}/></button>)}</div>}
-    {selected.caption && <small className="public-detail-gallery-caption">{selected.caption}</small>}
   </div>
 }
