@@ -60,6 +60,12 @@ class PropertyOwnerPayload(BaseModel):
     ownership_percent: Decimal = Field(default=Decimal("100"), gt=0, le=100)
 
 
+class PropertyResponsibleBrokerUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    broker_person_id: UUID | None = None
+
+
 PropertyFeatureKey = Literal[
     "balcony", "barbecue", "air_conditioning", "planned_kitchen", "closet", "lavabo",
     "office", "laundry", "heating", "garden", "private_pool", "service_area"
@@ -168,6 +174,7 @@ class PropertyResponse(BaseModel):
     publication_enabled: bool
     published_at: datetime | None = None
     owners: list[dict]
+    responsible_broker: dict | None = None
     created_at: datetime
     updated_at: datetime
 
