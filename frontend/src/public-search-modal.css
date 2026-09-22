@@ -1027,3 +1027,50 @@
     padding-top: 0;
   }
 }
+
+
+/* Public search v8.6 — rent labels inline */
+.public-site-premium .public-rent-amount-field {
+  display: block !important;
+}
+
+.public-site-premium .public-rent-amount-field > span {
+  height: 27px;
+  min-height: 27px;
+  padding: 0 8px;
+  gap: 5px;
+}
+
+.public-site-premium .public-rent-amount-field em {
+  flex: 0 0 auto;
+  color: #8e949d;
+  font-size: 7px;
+  font-style: normal;
+  font-weight: 750;
+  line-height: 1;
+}
+
+.public-site-premium .public-rent-amount-field b {
+  flex: 0 0 auto;
+}
+
+.public-site-premium .public-rent-amount-field input {
+  height: 25px;
+  min-height: 25px;
+  line-height: 25px;
+}
+
+.public-site-premium .public-search-premium .public-rent-range-editor.compact {
+  grid-template-rows: auto 27px 13px !important;
+}
+
+.public-site-premium .public-search-premium .public-rent-range-editor.compact .public-rent-amount-field > span {
+  height: 27px;
+  min-height: 27px;
+}
+
+.public-site-premium .public-search-premium .public-rent-range-editor.compact .public-rent-amount-field input {
+  height: 25px;
+  min-height: 25px;
+  line-height: 25px;
+}
