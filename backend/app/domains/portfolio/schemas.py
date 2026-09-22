@@ -60,6 +60,28 @@ class PropertyOwnerPayload(BaseModel):
     ownership_percent: Decimal = Field(default=Decimal("100"), gt=0, le=100)
 
 
+PropertyFeatureKey = Literal[
+    "balcony", "barbecue", "air_conditioning", "planned_kitchen", "closet", "lavabo",
+    "office", "laundry", "heating", "garden", "private_pool", "service_area"
+]
+CondominiumFeatureKey = Literal[
+    "elevator", "doorman_24h", "pool", "gym", "party_room", "playground",
+    "gourmet_space", "security", "bike_rack", "coworking"
+]
+SolarOrientation = Literal["", "north", "south", "east", "west", "northeast", "northwest", "southeast", "southwest"]
+
+
+class PropertyFeatures(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    property: list[PropertyFeatureKey] = Field(default_factory=list, max_length=20)
+    condominium: list[CondominiumFeatureKey] = Field(default_factory=list, max_length=20)
+    floor: int | None = Field(default=None, ge=0, le=300)
+    total_floors: int | None = Field(default=None, ge=0, le=300)
+    elevators: int | None = Field(default=None, ge=0, le=50)
+    solar_orientation: SolarOrientation = ""
+    year_built: int | None = Field(default=None, ge=1800, le=2200)
+
 PropertyType = Literal["apartment", "house", "commercial", "land", "studio", "other"]
 PropertyStatus = Literal["draft", "available", "reserved", "leased", "inactive"]
 
@@ -81,6 +103,7 @@ class PropertyCreate(BaseModel):
     parking_spaces: int = Field(default=0, ge=0, le=30)
     furnished: bool = False
     pets_allowed: bool = False
+    features: PropertyFeatures = Field(default_factory=PropertyFeatures)
     public_title: str | None = Field(default=None, max_length=180)
     public_description: str | None = Field(default=None, max_length=5000)
     publication_enabled: bool = False
@@ -110,6 +133,7 @@ class PropertyUpdate(BaseModel):
     parking_spaces: int = Field(default=0, ge=0, le=30)
     furnished: bool = False
     pets_allowed: bool = False
+    features: PropertyFeatures = Field(default_factory=PropertyFeatures)
     public_title: str | None = Field(default=None, max_length=180)
     owners: list[PropertyOwnerPayload] = Field(default_factory=list, max_length=20)
 
@@ -138,6 +162,7 @@ class PropertyResponse(BaseModel):
     parking_spaces: int
     furnished: bool
     pets_allowed: bool
+    features: dict
     public_title: str | None = None
     public_slug: str | None = None
     publication_enabled: bool
@@ -187,6 +212,7 @@ class PublicPropertyResponse(BaseModel):
     parking_spaces: int
     furnished: bool
     pets_allowed: bool
+    features: dict
     title: str
     description: str
     published_at: datetime | None = None
