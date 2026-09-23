@@ -52,6 +52,8 @@ class PersonResponse(BaseModel):
     notes: str | None = None
     billing_legal_name: str | None = None
     billing_document_number: str | None = None
+    photo_content_url: str | None = None
+    photo_updated_at: datetime | None = None
     is_active: bool
     role_keys: list[str]
     created_at: datetime
