@@ -104,6 +104,11 @@ def test_lease_charge_composition_generates_only_scheduled_items_and_third_party
     dashboard = assert_response(client.get(f"/api/finance/dashboard?competence={start.isoformat()}")).json()
     assert decimal(dashboard["agency_revenue_amount"]) == Decimal("2210.00")
 
+    repasses = assert_response(client.get(f"/api/finance/repasses?competence={start.isoformat()}")).json()
+    assert any(row["charge_id"] == charge["id"] and row["lease_code"] == created["code"] for row in repasses)
+    assert all(row["competence"] == start.isoformat() for row in repasses)
+
+
     assert SessionLocal is not None
     with SessionLocal() as db:
         titles = db.query(FinancialTitle).filter(FinancialTitle.source_id == UUID(charge["id"])).all()

@@ -3,7 +3,7 @@ from decimal import Decimal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
-from sqlalchemy import select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.database import get_db
@@ -75,9 +75,19 @@ def _charge_code(item: RentCharge) -> str:
     return f"COB-{item.internal_number:06d}"
 
 
-def _lease_code(db: Session, lease_id: UUID) -> str:
+def _lease_code(db: Session, lease_id: UUID, *, lease_codes: dict[UUID, str] | None = None) -> str:
+    if lease_codes is not None:
+        return lease_codes.get(lease_id, "LOC-—")
     lease = db.get(LeaseContract, lease_id)
     return f"LOC-{lease.internal_number:06d}" if lease else "LOC-—"
+
+
+def _preload_lease_codes(db: Session, lease_ids: set[UUID]) -> dict[UUID, str]:
+    """Load contract terms and codes in one query for finance list responses."""
+    if not lease_ids:
+        return {}
+    leases = db.scalars(select(LeaseContract).where(LeaseContract.id.in_(lease_ids))).all()
+    return {lease.id: f"LOC-{lease.internal_number:06d}" for lease in leases}
 
 
 def _property_code(item: RentCharge) -> str:
@@ -88,14 +98,17 @@ def _charge_agency_retention(item: RentCharge) -> Decimal:
     return money(sum((charge_item_agency_retention(row) for row in list(item.charge_items or [])), Decimal("0.00")))
 
 
-def _repasse_response(db: Session, item: OwnerRepasse, charge: RentCharge | None = None) -> RepasseResponse:
+def _repasse_response(
+    db: Session, item: OwnerRepasse, charge: RentCharge | None = None,
+    *, lease_codes: dict[UUID, str] | None = None,
+) -> RepasseResponse:
     charge = charge or db.get(RentCharge, item.charge_id)
     return RepasseResponse(
         id=item.id,
         charge_id=item.charge_id,
         charge_code=_charge_code(charge) if charge else "COB-—",
         lease_contract_id=item.lease_contract_id,
-        lease_code=_lease_code(db, item.lease_contract_id),
+        lease_code=_lease_code(db, item.lease_contract_id, lease_codes=lease_codes),
         property_id=item.property_id,
         property_code=_property_code(charge) if charge else "—",
         competence=charge.competence if charge else item.due_date.replace(day=1),
@@ -110,7 +123,10 @@ def _repasse_response(db: Session, item: OwnerRepasse, charge: RentCharge | None
     )
 
 
-def _settlement_response(db: Session, item: FinancialSettlement, charge: RentCharge) -> SettlementResponse:
+def _settlement_response(
+    db: Session, item: FinancialSettlement, charge: RentCharge,
+    *, lease_codes: dict[UUID, str] | None = None,
+) -> SettlementResponse:
     return SettlementResponse(
         id=item.id,
         administration_contract_id=item.administration_contract_id,
@@ -122,11 +138,14 @@ def _settlement_response(db: Session, item: FinancialSettlement, charge: RentCha
         owner_entitlement_amount=item.owner_entitlement_amount,
         third_party_amount=item.third_party_amount,
         calculated_at=item.calculated_at,
-        repasses=[_repasse_response(db, repasse, charge) for repasse in item.repasses],
+        repasses=[_repasse_response(db, repasse, charge, lease_codes=lease_codes) for repasse in item.repasses],
     )
 
 
-def _charge_response(db: Session, item: RentCharge, *, today: date | None = None) -> ChargeResponse:
+def _charge_response(
+    db: Session, item: RentCharge, *, today: date | None = None,
+    lease_codes: dict[UUID, str] | None = None,
+) -> ChargeResponse:
     today = today or date.today()
     breakdown = charge_late_breakdown(db, item, as_of=today)
     overdue_days = max(0, (today - item.due_date).days) if item.status not in {"paid", "cancelled"} else 0
@@ -135,7 +154,7 @@ def _charge_response(db: Session, item: RentCharge, *, today: date | None = None
         id=item.id,
         code=_charge_code(item),
         lease_contract_id=item.lease_contract_id,
-        lease_code=_lease_code(db, item.lease_contract_id),
+        lease_code=_lease_code(db, item.lease_contract_id, lease_codes=lease_codes),
         property_id=item.property_id,
         property_code=_property_code(item),
         property_address=dict((item.property_snapshot or {}).get("address") or {}),
@@ -162,7 +181,7 @@ def _charge_response(db: Session, item: RentCharge, *, today: date | None = None
         paid_amount=item.paid_amount,
         payment_method=item.payment_method,
         payment_reference=item.payment_reference,
-        settlement=_settlement_response(db, item.settlement, item) if item.settlement else None,
+        settlement=_settlement_response(db, item.settlement, item, lease_codes=lease_codes) if item.settlement else None,
         created_at=item.created_at,
     )
 
@@ -175,17 +194,40 @@ def finance_dashboard(
 ) -> FinanceDashboardResponse:
     competence = (competence or date.today()).replace(day=1)
     changed = refresh_overdue(db, context.user.organization_id)
-    charges = db.scalars(_query_charges().where(RentCharge.organization_id == context.user.organization_id)).unique().all()
+    # All-time open debt plus payments from the selected competence only.
+    # Do not fetch archived paid/cancelled charges or related repasse collections.
+    charges = db.scalars(
+        select(RentCharge)
+        .options(selectinload(RentCharge.settlement))
+        .where(
+            RentCharge.organization_id == context.user.organization_id,
+            or_(
+                RentCharge.status.in_(("generated", "sent", "overdue")),
+                and_(RentCharge.status == "paid", RentCharge.competence == competence),
+            ),
+        )
+    ).all()
     if changed:
         db.commit()
     open_items = [item for item in charges if item.status in {"generated", "sent", "overdue"}]
     overdue = [item for item in open_items if item.status == "overdue"]
-    critical = [item for item in overdue if _charge_response(db, item).critical_overdue]
-    paid_competence = [item for item in charges if item.status == "paid" and item.competence == competence]
-    settlements = [item.settlement for item in paid_competence if item.settlement]
-    all_pending_repasses = db.scalars(
-        select(OwnerRepasse).where(OwnerRepasse.organization_id == context.user.organization_id, OwnerRepasse.status == "pending")
-    ).all()
+    today = date.today()
+    critical = [
+        item for item in overdue
+        if (today - item.due_date).days >= int(
+            (item.admin_terms_snapshot or {}).get("delinquency_critical_day") or 5
+        )
+    ]
+    paid_competence = [item for item in charges if item.status == "paid"]
+    # Avoid a separate contract lookup for every open charge.
+    _preload_lease_codes(db, {item.lease_contract_id for item in open_items})
+    pending_count, pending_amount = db.execute(
+        select(func.count(OwnerRepasse.id), func.coalesce(func.sum(OwnerRepasse.amount), 0))
+        .where(
+            OwnerRepasse.organization_id == context.user.organization_id,
+            OwnerRepasse.status == "pending",
+        )
+    ).one()
     return FinanceDashboardResponse(
         competence=competence,
         open_amount=sum((amount_due(db, item) for item in open_items), Decimal("0.00")),
@@ -196,11 +238,11 @@ def finance_dashboard(
             (money(item.settlement.agency_fee_withheld) + _charge_agency_retention(item) for item in paid_competence if item.settlement),
             Decimal("0.00"),
         ),
-        pending_repasse_amount=sum((money(item.amount) for item in all_pending_repasses), Decimal("0.00")),
+        pending_repasse_amount=money(pending_amount),
         charges_open=len(open_items),
         charges_overdue=len(overdue),
         charges_critical=len(critical),
-        repasses_pending=len(all_pending_repasses),
+        repasses_pending=pending_count,
     )
 
 
@@ -226,7 +268,8 @@ def list_charges(
     items = db.scalars(stmt.order_by(RentCharge.due_date.desc(), RentCharge.internal_number.desc()).limit(500)).unique().all()
     if changed:
         db.commit()
-    return [_charge_response(db, item) for item in items]
+    lease_codes = _preload_lease_codes(db, {item.lease_contract_id for item in items})
+    return [_charge_response(db, item, lease_codes=lease_codes) for item in items]
 
 
 @router.post("/charges/generate", response_model=GenerateChargesResponse)
@@ -349,17 +392,30 @@ def list_repasses(
     context: UserContext = Depends(require_permission("finance.view")),
     db: Session = Depends(get_db),
 ) -> list[RepasseResponse]:
-    stmt = select(OwnerRepasse).where(OwnerRepasse.organization_id == context.user.organization_id)
+    # Apply competence before LIMIT so older-month repasses are not hidden
+    # by 500 newer records. The joined charges also avoid a second fetch.
+    stmt = (
+        select(OwnerRepasse, RentCharge)
+        .join(RentCharge, RentCharge.id == OwnerRepasse.charge_id)
+        .where(
+            OwnerRepasse.organization_id == context.user.organization_id,
+            RentCharge.organization_id == context.user.organization_id,
+        )
+    )
+    if competence:
+        stmt = stmt.where(RentCharge.competence == competence.replace(day=1))
     if repasse_status:
         stmt = stmt.where(OwnerRepasse.status == repasse_status)
     if owner_person_id:
         stmt = stmt.where(OwnerRepasse.owner_person_id == owner_person_id)
-    items = db.scalars(stmt.order_by(OwnerRepasse.due_date.desc()).limit(500)).all()
-    charges = {item.id: item for item in db.scalars(select(RentCharge).where(RentCharge.id.in_([repasse.charge_id for repasse in items]))).all()} if items else {}
-    if competence:
-        competence = competence.replace(day=1)
-        items = [item for item in items if charges.get(item.charge_id) and charges[item.charge_id].competence == competence]
-    return [_repasse_response(db, item, charges.get(item.charge_id)) for item in items]
+    rows = db.execute(
+        stmt.order_by(OwnerRepasse.due_date.desc(), OwnerRepasse.id).limit(500)
+    ).all()
+    lease_codes = _preload_lease_codes(db, {item.lease_contract_id for item, _ in rows})
+    return [
+        _repasse_response(db, item, charge, lease_codes=lease_codes)
+        for item, charge in rows
+    ]
 
 
 @router.post("/repasses/{repasse_id}/payment", response_model=RepasseResponse)
