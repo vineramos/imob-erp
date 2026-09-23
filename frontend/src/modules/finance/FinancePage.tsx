@@ -115,7 +115,7 @@ function FinanceDashboardPanel({onNavigate}:{onNavigate:(area:Area)=>void}){
             <div><span>Valor crítico</span><strong>{money(dashboard.critical_overdue_amount)}</strong></div>
             <div><span>Comissões pendentes</span><strong>{pendingCommissions.length}</strong></div>
           </div>
-          <div className="finance-core-detail-actions"><button className="button secondary" type="button" onClick={()=>onNavigate('ledger')}>Ver lançamentos</button><button className="button primary" type="button" onClick={()=>onNavigate('billing')}>Abrir cobranças</button></div>
+          <div className="finance-core-detail-actions"><button className="button secondary" type="button" onClick={()=>onNavigate('ledger')}>Ver lançamentos</button><button className="button primary" type="button" onClick={()=>onNavigate('billing')}>Abrir cobranças</button><button className="button secondary" type="button" onClick={()=>onNavigate('commissions')}>Ver comissões</button></div>
         </aside>
       </div>
     </>}

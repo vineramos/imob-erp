@@ -26,3 +26,37 @@
   .commission-batch-row{grid-template-columns:1fr}
   .commission-batch-actions{justify-content:flex-start}
 }
+
+/* Comissões: mesmo padrão master/detail do Financeiro */
+.commissions-workspace{max-width:none;width:100%;min-width:0}
+.commission-view-tabs{display:flex;gap:6px;padding-bottom:8px;overflow:auto;border-bottom:1px solid var(--border)}
+.commission-view-tabs button{border:1px solid var(--border);background:var(--surface);padding:9px 12px;border-radius:8px;font:inherit;font-size:10px;white-space:nowrap;cursor:pointer}
+.commission-view-tabs button.active{background:var(--primary-soft);border-color:var(--primary);color:var(--primary-strong)}
+.commission-view-tabs span{margin-left:5px;font-size:9px}
+.commission-master-detail{display:grid;grid-template-columns:350px minmax(0,1fr);gap:13px;min-width:0}
+.commission-directory{padding:12px;display:flex;flex-direction:column;gap:9px;min-width:0;min-height:540px}
+.commission-search{display:flex;align-items:center;gap:7px;padding:0 10px;min-height:40px;border:1px solid var(--border);border-radius:8px}
+.commission-search input{border:0;outline:0;min-width:0;width:100%;background:transparent;font:inherit;font-size:10px}
+.commission-directory>small{font-size:9px;color:var(--text-muted)}
+.commission-directory-list{display:grid;align-content:start;gap:6px;max-height:calc(100vh - 360px);overflow:auto}
+.commission-directory-item{display:grid;gap:7px;border:1px solid var(--border);border-radius:9px;background:var(--surface);padding:12px;min-width:0;text-align:left;font:inherit;cursor:pointer}
+.commission-directory-item.active{background:var(--primary-soft);border-color:var(--primary)}
+.commission-item-row{display:flex;align-items:center;justify-content:space-between;gap:7px}
+.commission-item-row strong{font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.commission-item-row b{font-size:14px}.commission-directory-item small{font-size:9px;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.commission-detail{padding:0;min-width:0;min-height:540px;overflow:hidden}
+.commission-detail-header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:17px;border-bottom:1px solid var(--border)}
+.commission-detail-header h2{font-size:19px;margin:4px 0}.commission-detail-header p{font-size:10px;color:var(--text-muted);margin:0}
+.commission-detail-strip{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border-bottom:1px solid var(--border)}
+.commission-detail-strip>div{display:grid;gap:5px;padding:13px;min-width:0;border-right:1px solid var(--border)}
+.commission-detail-strip span,.commission-detail-facts span{font-size:9px;color:var(--text-muted)}.commission-detail-strip strong{font-size:12px;overflow-wrap:anywhere}
+.commission-detail-body{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(225px,.8fr);gap:11px;padding:14px;background:var(--app-bg);min-height:330px;align-content:start}
+.commission-detail-card{padding:14px;min-width:0;border:1px solid var(--border);border-radius:9px;background:var(--surface)}
+.commission-detail-card h3{font-size:12px;margin:0 0 12px}.commission-detail-card p{font-size:10px;color:var(--text-muted)}
+.commission-detail-facts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+.commission-detail-facts>div{display:grid;gap:5px;border:1px solid var(--border);border-radius:8px;padding:11px;min-width:0}
+.commission-detail-facts strong{font-size:11px;overflow-wrap:anywhere}.commission-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.commission-empty{min-height:210px;display:grid;place-items:center;text-align:center;padding:20px;font-size:11px;color:var(--text-muted)}
+@media(max-width:1200px){.commission-master-detail{grid-template-columns:300px minmax(0,1fr)}.commission-detail-body{grid-template-columns:1fr}}
+@media(max-width:900px){.commission-master-detail{grid-template-columns:1fr}.commission-directory,.commission-detail{min-height:0}.commission-directory-list{max-height:330px}}
+@media(max-width:650px){.commission-detail-strip,.commission-detail-facts{grid-template-columns:1fr}}
