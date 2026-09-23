@@ -367,3 +367,16 @@
 .broker-file-button{position:relative;overflow:hidden;cursor:pointer}
 .broker-file-button input{position:absolute;inset:0;opacity:0;cursor:pointer}
 .broker-invoice-file{font-size:8px;color:var(--text-muted)}
+
+/* Broker profile photos */
+img.broker-directory-avatar,img.broker-profile-avatar{object-fit:cover;display:block}
+.broker-directory-avatar{overflow:hidden}
+.broker-profile-photo-wrap{position:relative;width:48px;height:48px;align-self:center}
+.broker-profile-photo-wrap .broker-profile-avatar{width:48px;height:48px;border-radius:12px;overflow:hidden}
+.broker-photo-upload,.broker-photo-remove{position:absolute;display:grid;place-items:center;border:1px solid var(--border);background:var(--surface);box-shadow:0 2px 8px rgba(15,23,42,.12);cursor:pointer;z-index:2}
+.broker-photo-upload{right:-5px;bottom:-4px;width:24px;height:24px;border-radius:999px;color:var(--brand-primary)}
+.broker-photo-upload:hover{background:var(--brand-primary-soft)}
+.broker-photo-upload input{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+.broker-photo-remove{right:-7px;top:-5px;width:20px;height:20px;border-radius:999px;color:#b42318}
+.broker-photo-remove:hover:not(:disabled){background:#fff3f2}
+.broker-photo-upload:has(input:disabled),.broker-photo-remove:disabled{opacity:.55;cursor:not-allowed}
