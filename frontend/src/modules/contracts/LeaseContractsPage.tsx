@@ -759,70 +759,115 @@ export function LeaseContractsPage({ permissions }: Props) {
 
     {loading
       ? <article className="panel settings-loading">Carregando locações...</article>
-      : <div className="portfolio-card-list contract-list lease-list">
-        {items.map((item) => {
-          const isExpanded = expanded === item.id
-          const documentCurrent = item.generated_document_version === item.current_version && Boolean(item.generated_document_hash)
-          return <article className="panel contract-card lease-card" key={item.id}>
-            <div className="contract-row">
-              <div className="contract-code"><FileSignature size={18}/><span>LOCAÇÃO</span><strong>{item.code}</strong><small>v{item.current_version}</small></div>
-              <div className="contract-property"><strong>Imóvel #{item.property_code}</strong><span>{addressLine(item.property_address)}</span><small>{item.tenants.map((tenant) => tenant.name).join(' / ')}</small></div>
-              <div className="contract-commercial"><span>Aluguel / vencimento</span><strong>{money(Number(item.rent_amount))} · dia {item.due_day}</strong><small>{item.adjustment_index} · {item.term_months} meses · garantia {guaranteeLabels[item.guarantee_type]}</small></div>
-              <div className="contract-state"><i className={`status-badge ${statusClass(item.status)}`}>{statusLabels[item.status]}</i><span>{signingLabel(item)}</span></div>
-            </div>
+      : <div className="contract-master-detail">
+        <aside className="panel contract-directory-v2">
+          <div className="contract-directory-top">
+            <label className="contract-directory-search"><Search size={14}/><input value={contractQuery} onChange={event=>setContractQuery(event.target.value)} placeholder="Buscar contrato, imóvel ou pessoa..."/></label>
+            <select value={contractStatus} onChange={event=>setContractStatus(event.target.value as 'all'|LeaseStatus)}>
+              <option value="all">Todos os status</option>
+              {Object.entries(statusLabels).map(([key,label])=><option key={key} value={key}>{label}</option>)}
+            </select>
+            <div className="contract-directory-count"><span>{filteredContracts.length} contrato(s)</span><small>{items.length} no total</small></div>
+          </div>
+          <div className="contract-directory-list">
+            {filteredContracts.map(item=><button type="button" key={item.id} className={'contract-directory-row '+(selectedLease?.id===item.id?'active':'')} onClick={()=>{setSelectedId(item.id);setDetailTab('overview')}}>
+              <span className="contract-directory-icon"><FileSignature size={15}/></span>
+              <span className="contract-directory-copy">
+                <span className="contract-directory-line"><strong>{item.code}</strong><i className={'status-badge '+statusClass(item.status)}>{statusLabels[item.status]}</i></span>
+                <b>Imóvel #{item.property_code}</b>
+                <small>{addressLine(item.property_address)}</small>
+                <em>{item.tenants.map(tenant=>tenant.name).join(' / ')||'Sem locatário'} · {money(Number(item.rent_amount))}</em>
+              </span>
+            </button>)}
+            {filteredContracts.length===0&&<div className="contract-directory-empty"><FileText size={22}/><strong>Nenhum contrato encontrado</strong><span>Ajuste a busca ou o filtro de status.</span></div>}
+          </div>
+        </aside>
 
-            <div className="contract-document-strip">
-              <div><FileText size={15}/><span>PDF</span><strong>{documentCurrent ? `v${item.generated_document_version} · ${item.generated_document_hash?.slice(0, 10)}…` : 'não gerado'}</strong></div>
-              <div><FileSignature size={15}/><span>Clicksign</span><strong>{item.signing_envelope_id ? `envelope ${item.signing_envelope_id.slice(0, 8)}…` : 'não enviado'}</strong></div>
-              <div><FileCheck2 size={15}/><span>Arquivo final</span><strong>{item.archive_status === 'archived' ? `${item.final_document_hash?.slice(0, 10)}…` : item.archive_status.replaceAll('_', ' ')}</strong></div>
-            </div>
-
-            <div className="contract-actions">
-              <button className="contract-history-toggle" type="button" onClick={() => { setExpanded(isExpanded ? null : item.id); setExpandedTab('details') }}><History size={14}/> Detalhes {isExpanded ? <ChevronUp size={13}/> : <ChevronDown size={13}/>}</button>
-              <div>
-                {(item.status === 'draft' || item.status === 'review') && canEdit && <button className="button secondary" type="button" onClick={() => void openEdit(item)}>Nova versão</button>}
-                {item.status === 'draft' && canEdit && <button className="button primary" disabled={saving} type="button" onClick={() => void workflow(item, 'submit_review')}><Send size={14}/> Revisão</button>}
-                {item.status === 'review' && canApprove && <button className="button primary" disabled={saving} type="button" onClick={() => void workflow(item, 'approve')}><CheckCircle2 size={14}/> Aprovar</button>}
-                {item.status === 'approved' && canSign && <button className="button primary" disabled={saving} type="button" onClick={() => void workflow(item, 'prepare_signature')}><FileSignature size={14}/> Preparar assinatura</button>}
-                {item.status === 'pending_signature' && item.signing_status === 'ready_for_document' && canSign && <button className="button primary" disabled={saving} type="button" onClick={() => void generateDocument(item)}><FileText size={14}/> Gerar PDF</button>}
-                {item.status === 'pending_signature' && item.signing_status === 'document_ready' && canSign && <button className="button primary" disabled={saving} type="button" onClick={() => void sendSignature(item)}><Send size={14}/> Enviar Clicksign</button>}
-                {item.status === 'pending_signature' && ['provider_closed_pending_archive', 'archive_failed'].includes(item.signing_status) && canSign && <button className="button primary" disabled={saving} type="button" onClick={() => void archiveFinal(item)}><FileCheck2 size={14}/> Arquivar final</button>}
-                {['review', 'approved', 'pending_signature'].includes(item.status) && canEdit && <button className="button secondary" type="button" onClick={() => void workflow(item, 'return_draft')}><RotateCcw size={14}/> Rascunho</button>}
-                {!['signed', 'cancelled'].includes(item.status) && canEdit && <button className="button ghost-danger" type="button" onClick={() => { setCancelTarget(item); setCancelReason('') }}>Cancelar</button>}
+        <main className="panel contract-detail-v2">
+          {!selectedLease?<div className="contract-detail-empty"><FileSignature size={28}/><strong>Selecione um contrato</strong><span>A ficha operacional aparecerá aqui.</span></div>:<>
+            <header className="contract-detail-header">
+              <div className="contract-detail-heading">
+                <span className="contract-detail-icon"><FileSignature size={20}/></span>
+                <div><span className="eyebrow">Contrato de locação · v{selectedLease.current_version}</span><div className="contract-title-row"><h2>{selectedLease.code}</h2><i className={'status-badge '+statusClass(selectedLease.status)}>{statusLabels[selectedLease.status]}</i></div><p>Imóvel #{selectedLease.property_code} · {addressLine(selectedLease.property_address)}</p></div>
               </div>
+              <div className="contract-detail-actions-v2">
+                {(selectedLease.status==='draft'||selectedLease.status==='review')&&canEdit&&<button className="button secondary" type="button" onClick={()=>void openEdit(selectedLease)}>Nova versão</button>}
+                {selectedLease.status==='draft'&&canEdit&&<button className="button primary" disabled={saving} type="button" onClick={()=>void workflow(selectedLease,'submit_review')}><Send size={14}/> Revisão</button>}
+                {selectedLease.status==='review'&&canApprove&&<button className="button primary" disabled={saving} type="button" onClick={()=>void workflow(selectedLease,'approve')}><CheckCircle2 size={14}/> Aprovar</button>}
+                {selectedLease.status==='approved'&&canSign&&<button className="button primary" disabled={saving} type="button" onClick={()=>void workflow(selectedLease,'prepare_signature')}><FileSignature size={14}/> Preparar assinatura</button>}
+                {selectedLease.status==='pending_signature'&&selectedLease.signing_status==='ready_for_document'&&canSign&&<button className="button primary" disabled={saving} type="button" onClick={()=>void generateDocument(selectedLease)}><FileText size={14}/> Gerar PDF</button>}
+                {selectedLease.status==='pending_signature'&&selectedLease.signing_status==='document_ready'&&canSign&&<button className="button primary" disabled={saving} type="button" onClick={()=>void sendSignature(selectedLease)}><Send size={14}/> Enviar Clicksign</button>}
+                {selectedLease.status==='pending_signature'&&['provider_closed_pending_archive','archive_failed'].includes(selectedLease.signing_status)&&canSign&&<button className="button primary" disabled={saving} type="button" onClick={()=>void archiveFinal(selectedLease)}><FileCheck2 size={14}/> Arquivar final</button>}
+              </div>
+            </header>
+
+            <div className="contract-essential-strip">
+              <div><span>Aluguel</span><strong>{money(Number(selectedLease.rent_amount))}</strong></div>
+              <div><span>Vencimento</span><strong>Dia {selectedLease.due_day}</strong></div>
+              <div><span>Vigência</span><strong>{dateLabel(selectedLease.start_date)} — {dateLabel(selectedLease.end_date)}</strong></div>
+              <div><span>Garantia</span><strong>{guaranteeLabels[selectedLease.guarantee_type]}</strong></div>
+              <div><span>Reajuste</span><strong>{selectedLease.adjustment_index} · {selectedLease.adjustment_period_months}m</strong></div>
             </div>
 
-            {isExpanded && <><div className="entity-document-tabs"><button type="button" className={expandedTab==='details'?'active':''} onClick={()=>setExpandedTab('details')}>Detalhes</button><button type="button" className={expandedTab==='lifecycle'?'active':''} onClick={()=>setExpandedTab('lifecycle')}>Ciclo da locação</button><button type="button" className={expandedTab==='documents'?'active':''} onClick={()=>setExpandedTab('documents')}>Documentos</button></div>{expandedTab==='details'&&<div className="contract-expanded lease-contract-expanded">
-              <div className="contract-version-panel">
-                <div className="panel-heading-row"><div><span className="eyebrow">Versões</span><h3>Histórico imutável</h3></div><CalendarClock size={17}/></div>
-                {item.versions.slice().reverse().map((version) => <div className="contract-version-row" key={version.version_number}><strong>v{version.version_number}</strong><span>{version.change_summary || 'Sem resumo'}</span><small>{new Date(version.created_at).toLocaleString('pt-BR')}</small></div>)}
-              </div>
-              <div className="contract-version-panel">
-                <div className="panel-heading-row"><div><span className="eyebrow">Documento</span><h3>PDF e hashes</h3></div><FileCheck2 size={17}/></div>
-                <div className="contract-document-detail"><span>Versão documental</span><strong>{item.generated_document_version ?? '—'}</strong></div>
-                <div className="contract-document-detail"><span>SHA-256 original</span><strong>{item.generated_document_hash ?? '—'}</strong></div>
-                <div className="contract-document-detail"><span>SHA-256 final</span><strong>{item.final_document_hash ?? '—'}</strong></div>
-                <div className="contract-document-detail"><span>Assinado em</span><strong>{item.signed_at ? new Date(item.signed_at).toLocaleString('pt-BR') : '—'}</strong></div>
-                <div className="contract-detail-actions">
-                  <button className="button secondary" type="button" onClick={() => void openPdf(item)}><FileText size={14}/> Prévia atual</button>
-                  {item.generated_document_reference && <button className="button secondary" type="button" onClick={() => void downloadStored(item, 'original')}><Download size={14}/> Original</button>}
-                  {item.archived_document_reference && <button className="button secondary" type="button" onClick={() => void downloadStored(item, 'final')}><Download size={14}/> Assinado</button>}
+            <nav className="contract-detail-tabs" aria-label="Seções do contrato">
+              <button className={detailTab==='overview'?'active':''} type="button" onClick={()=>setDetailTab('overview')}><Home size={13}/>Visão Geral</button>
+              <button className={detailTab==='parties'?'active':''} type="button" onClick={()=>setDetailTab('parties')}><Users size={13}/>Partes</button>
+              <button className={detailTab==='finance'?'active':''} type="button" onClick={()=>setDetailTab('finance')}><CircleDollarSign size={13}/>Financeiro</button>
+              <button className={detailTab==='signature'?'active':''} type="button" onClick={()=>setDetailTab('signature')}><FileSignature size={13}/>Assinatura</button>
+              <button className={detailTab==='documents'?'active':''} type="button" onClick={()=>setDetailTab('documents')}><FileText size={13}/>Documentos</button>
+              <button className={detailTab==='history'?'active':''} type="button" onClick={()=>setDetailTab('history')}><History size={13}/>Histórico</button>
+            </nav>
+
+            <div className="contract-detail-body">
+              {detailTab==='overview'&&<div className="contract-overview-v2">
+                <section className="contract-surface-v2 contract-overview-main">
+                  <div className="contract-section-heading"><div><span>Resumo operacional</span><h3>Condições principais</h3></div><ShieldCheck size={17}/></div>
+                  <div className="contract-facts-grid">
+                    <div><span>Imóvel</span><strong>#{selectedLease.property_code}</strong><small>{addressLine(selectedLease.property_address)}</small></div>
+                    <div><span>Locatário(s)</span><strong>{selectedLease.tenants.map(t=>t.name).join(' / ')||'Não informado'}</strong><small>{selectedLease.tenants.length} parte(s)</small></div>
+                    <div><span>Prazo</span><strong>{selectedLease.term_months} meses</strong><small>{dateLabel(selectedLease.start_date)} até {dateLabel(selectedLease.end_date)}</small></div>
+                    <div><span>Próximo reajuste</span><strong>{dateLabel(selectedLease.next_adjustment_date)}</strong><small>{selectedLease.adjustment_index} · a cada {selectedLease.adjustment_period_months} meses</small></div>
+                    <div><span>Contestação de vistoria</span><strong>{selectedLease.inspection_contest_days} dias</strong><small>prazo contratual</small></div>
+                    <div><span>Multa rescisória</span><strong>{percent(Number(selectedLease.termination_fine_months))} aluguel(is)</strong><small>conforme condições desta versão</small></div>
+                  </div>
+                </section>
+                <aside className="contract-surface-v2 contract-status-card">
+                  <div className="contract-section-heading"><div><span>Fluxo atual</span><h3>{statusLabels[selectedLease.status]}</h3></div></div>
+                  <div className="contract-flow-summary"><div><span>Assinatura</span><strong>{signingLabel(selectedLease)}</strong></div><div><span>PDF atual</span><strong>{selectedLease.generated_document_version===selectedLease.current_version?'Gerado':'Pendente'}</strong></div><div><span>Arquivo final</span><strong>{selectedLease.archive_status==='archived'?'Arquivado':'Pendente'}</strong></div></div>
+                  <LeaseLifecyclePanel lease={selectedLease} permissions={permissions} onChanged={()=>void load()}/>
+                </aside>
+                {selectedLease.notes&&<section className="contract-surface-v2 contract-notes-v2"><div className="contract-section-heading"><div><span>Observações</span><h3>Anotações contratuais</h3></div></div><p>{selectedLease.notes}</p></section>}
+              </div>}
+
+              {detailTab==='parties'&&<div className="contract-parties-v2">
+                <section className="contract-surface-v2"><div className="contract-section-heading"><div><span>Locatários</span><h3>Partes ocupantes</h3></div><Users size={17}/></div><div className="contract-party-list">{selectedLease.tenants.map(tenant=><article key={tenant.person_id}><span className="contract-party-avatar">{tenant.name.split(/\s+/).slice(0,2).map(v=>v[0]?.toUpperCase()).join('')}</span><div><strong>{tenant.name}</strong><small>{tenant.document_number||tenant.email||'Cadastro sem documento'}</small></div></article>)}</div></section>
+                <section className="contract-surface-v2"><div className="contract-section-heading"><div><span>Proprietários</span><h3>Titulares do imóvel</h3></div><Users size={17}/></div><div className="contract-party-list">{selectedLease.owners.map((owner,index)=><article key={owner.name+'-'+index}><span className="contract-party-avatar">{owner.name.split(/\s+/).slice(0,2).map(v=>v[0]?.toUpperCase()).join('')}</span><div><strong>{owner.name}</strong><small>{percent(Number(owner.ownership_percent))}% de participação{owner.email?' · '+owner.email:''}</small></div></article>)}</div></section>
+                <section className="contract-surface-v2 contract-parties-full"><div className="contract-section-heading"><div><span>Signatários</span><h3>Ordem de assinatura</h3></div><FileSignature size={17}/></div><div className="contract-signer-list-v2">{selectedLease.signers.length?selectedLease.signers.slice().sort((a,b)=>a.sign_order-b.sign_order).map((signer,index)=><article key={index}><b>{signer.sign_order}</b><div><strong>{signer.name}</strong><small>{signerRoleLabels[signer.role]} · {signer.email||'sem e-mail'}</small></div><span>{signer.communication}</span></article>):<div className="contract-empty-soft">Nenhum signatário definido nesta versão.</div>}</div></section>
+              </div>}
+
+              {detailTab==='finance'&&(granted.has('finance.view')?<div className="contract-finance-v2">
+                <div className="contract-kpis-v2">
+                  <article><span>Aluguel base</span><strong>{money(Number(selectedLease.rent_amount))}</strong><small>vencimento dia {selectedLease.due_day}</small></article>
+                  <article><span>Próximo reajuste</span><strong>{dateLabel(selectedLease.next_adjustment_date)}</strong><small>{selectedLease.adjustment_index}</small></article>
+                  <article><span>Cobranças</span><strong>{contractCharges.length}</strong><small>lançamentos vinculados</small></article>
+                  <article><span>Recebidas</span><strong>{contractCharges.filter(row=>row.status==='paid').length}</strong><small>liquidadas</small></article>
                 </div>
-              </div>
-              <div className="contract-version-panel">
-                <div className="panel-heading-row"><div><span className="eyebrow">Regras</span><h3>Resumo operacional</h3></div><ShieldCheck size={17}/></div>
-                <div className="contract-document-detail"><span>Início / término</span><strong>{dateLabel(item.start_date)} · {dateLabel(item.end_date)}</strong></div>
-                <div className="contract-document-detail"><span>Reajuste</span><strong>{item.adjustment_index} · próximo {dateLabel(item.next_adjustment_date)}</strong></div>
-                <div className="contract-document-detail"><span>Vistoria</span><strong>{item.inspection_contest_days} dias para contestação</strong></div>
-                <div className="contract-document-detail"><span>Composição mensal</span><strong>Versionada junto ao contrato e aplicada na geração financeira</strong></div>
-                <div className="contract-document-detail"><span>Signatários</span><strong>{item.signers.map((signer) => signer.name).join(' / ') || 'não definidos'}</strong></div>
-              </div>
-              <SignatureTimeline contractId={item.id} contractType="lease"/>
-            </div>}{expandedTab==='lifecycle'&&<LeaseLifecyclePanel lease={item} permissions={permissions} onChanged={()=>void load()}/>}
-              {expandedTab==='documents'&&<EntityDocumentsPanel entityType="lease_contract" entityId={item.id} entityLabel={item.code} permissions={permissions} compact/>}</>}
-          </article>
-        })}
-        {items.length === 0 && <article className="panel portfolio-empty"><FileText size={26}/><strong>Nenhum contrato de locação ainda.</strong><span>Crie a primeira minuta usando as regras-padrão da imobiliária.</span></article>}
+                <section className="contract-surface-v2"><div className="contract-section-heading"><div><span>Movimentação</span><h3>Cobranças deste contrato</h3></div><CircleDollarSign size={17}/></div>{chargesLoading?<div className="contract-empty-soft">Carregando cobranças...</div>:contractCharges.length?<div className="contract-charge-list">{contractCharges.map(row=><article key={row.id}><div><strong>{row.code}</strong><small>Competência {dateLabel(row.competence)} · venc. {dateLabel(row.due_date)}</small></div><div><strong>{money(Number(row.gross_amount))}</strong><i className={'status-badge '+(row.status==='paid'?'success':row.status==='overdue'?'danger':'neutral')}>{row.status==='paid'?'Pago':row.status==='overdue'?'Em atraso':row.status==='cancelled'?'Cancelado':'Em aberto'}</i></div></article>)}</div>:<div className="contract-empty-soft">Ainda não há cobranças geradas para este contrato.</div>}</section>
+              </div>:<div className="contract-empty-soft">Sem permissão para visualizar o financeiro do contrato.</div>)}
+
+              {detailTab==='signature'&&<div className="contract-signature-v2">
+                <section className="contract-surface-v2"><div className="contract-section-heading"><div><span>Assinatura eletrônica</span><h3>{signingLabel(selectedLease)}</h3></div><FileSignature size={17}/></div><div className="contract-document-summary-v2"><div><span>Provider</span><strong>{selectedLease.signing_provider}</strong></div><div><span>Envelope</span><strong>{selectedLease.signing_envelope_id||'—'}</strong></div><div><span>Assinado em</span><strong>{selectedLease.signed_at?new Date(selectedLease.signed_at).toLocaleString('pt-BR'):'—'}</strong></div><div><span>Arquivo final</span><strong>{selectedLease.archive_status==='archived'?'Arquivado':'Pendente'}</strong></div></div><SignatureTimeline contractId={selectedLease.id} contractType="lease"/></section>
+              </div>}
+
+              {detailTab==='documents'&&<div className="contract-documents-v2">
+                <section className="contract-surface-v2 contract-pdf-card"><div className="contract-section-heading"><div><span>Documento principal</span><h3>PDF e integridade</h3></div><FileCheck2 size={17}/></div><div className="contract-document-summary-v2"><div><span>Versão documental</span><strong>{selectedLease.generated_document_version??'—'}</strong></div><div><span>SHA-256 original</span><strong>{selectedLease.generated_document_hash?selectedLease.generated_document_hash.slice(0,18)+'…':'—'}</strong></div><div><span>SHA-256 final</span><strong>{selectedLease.final_document_hash?selectedLease.final_document_hash.slice(0,18)+'…':'—'}</strong></div></div><div className="contract-detail-actions"><button className="button secondary" type="button" onClick={()=>void openPdf(selectedLease)}><FileText size={14}/> Prévia atual</button>{selectedLease.generated_document_reference&&<button className="button secondary" type="button" onClick={()=>void downloadStored(selectedLease,'original')}><Download size={14}/> Original</button>}{selectedLease.archived_document_reference&&<button className="button secondary" type="button" onClick={()=>void downloadStored(selectedLease,'final')}><Download size={14}/> Assinado</button>}</div></section>
+                <EntityDocumentsPanel entityType="lease_contract" entityId={selectedLease.id} entityLabel={selectedLease.code} permissions={permissions} compact/>
+              </div>}
+
+              {detailTab==='history'&&<div className="contract-history-v2"><section className="contract-surface-v2"><div className="contract-section-heading"><div><span>Versionamento</span><h3>Histórico imutável</h3></div><History size={17}/></div><div className="contract-version-list-v2">{selectedLease.versions.slice().reverse().map(version=><article key={version.version_number}><b>v{version.version_number}</b><div><strong>{version.change_summary||'Versão contratual'}</strong><small>{new Date(version.created_at).toLocaleString('pt-BR')}</small></div></article>)}</div></section></div>}
+            </div>
+          </>}
+        </main>
       </div>}
 
     {cancelTarget && <div className="portfolio-modal-backdrop" onMouseDown={(event) => { if (event.currentTarget === event.target && !saving) { setCancelTarget(null); setCancelReason('') } }}><div className="panel portfolio-modal lease-cancel-modal" role="dialog" aria-modal="true" aria-labelledby="lease-cancel-title"><div className="portfolio-modal-header"><div><span className="eyebrow">Ação sensível</span><h2 id="lease-cancel-title">Cancelar {cancelTarget.code}</h2><p>O contrato ficará cancelado e o motivo será preservado na trilha de auditoria.</p></div></div><div className="lease-cancel-body"><label className="field"><span>Motivo do cancelamento</span><textarea autoFocus rows={4} value={cancelReason} onChange={(event) => setCancelReason(event.target.value)} placeholder="Descreva objetivamente o motivo..."/></label></div><div className="form-actions lease-cancel-actions"><button className="button secondary" type="button" disabled={saving} onClick={() => { setCancelTarget(null); setCancelReason('') }}>Voltar</button><button className="button ghost-danger" type="button" disabled={saving || cancelReason.trim().length < 3} onClick={() => void workflow(cancelTarget, 'cancel', cancelReason.trim())}>{saving ? 'Cancelando...' : 'Confirmar cancelamento'}</button></div></div></div>}
