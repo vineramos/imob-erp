@@ -68,6 +68,8 @@ def test_capture_advances_assigns_and_converts_into_available_property(client, i
             "person_id": owner["id"],
             "name": owner["name"],
             "ownership_percent": 100.0,
+            "photo_content_url": None,
+            "photo_updated_at": None,
         }
     ]
 
