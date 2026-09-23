@@ -23,6 +23,18 @@ import { SignatureTimeline } from './SignatureTimeline'
 import { LeaseLifecyclePanel } from './LeaseLifecyclePanel'
 import { EntityDocumentsPanel } from '../documents/EntityDocumentsPanel'
 
+function LeasePersonPhoto({person,className}:{person:Person;className:string}){
+  const [src,setSrc]=useState('')
+  useEffect(()=>{
+    let active=true,objectUrl=''
+    if(!person.photo_content_url){setSrc('');return()=>undefined}
+    void apiBlobRequest(person.photo_content_url).then(blob=>{if(!active)return;objectUrl=URL.createObjectURL(blob);setSrc(objectUrl)}).catch(()=>{if(active)setSrc('')})
+    return()=>{active=false;if(objectUrl)URL.revokeObjectURL(objectUrl)}
+  },[person.id,person.photo_content_url,person.photo_updated_at])
+  if(src)return <img className={className} src={src} alt={person.name}/>
+  return <span className={className}>{person.name.trim().split(/\s+/).slice(0,2).map(part=>part[0]?.toUpperCase()).join('')}</span>
+}
+
 type LeaseStatus = 'draft' | 'review' | 'approved' | 'pending_signature' | 'signed' | 'closed' | 'cancelled'
 type GuaranteeType = 'insurance' | 'deposit' | 'capitalization' | 'guarantor' | 'none'
 type LeaseWorkflowAction = 'submit_review' | 'approve' | 'prepare_signature' | 'return_draft' | 'cancel'
@@ -679,7 +691,7 @@ export function LeaseContractsPage({ permissions }: Props) {
         <div className="lease-tenant-grid">
           {tenantCandidates.map((person) => <label className={form.tenant_ids.includes(person.id) ? 'selected' : ''} key={person.id}>
             <input type="checkbox" checked={form.tenant_ids.includes(person.id)} onChange={() => toggleTenant(person.id)}/>
-            <Users size={15}/>
+            <LeasePersonPhoto person={person} className="lease-person-avatar"/>
             <span><strong>{person.name}</strong><small>{person.document_number || person.email || 'Cadastro sem documento'}</small></span>
           </label>)}
         </div>
@@ -694,7 +706,7 @@ export function LeaseContractsPage({ permissions }: Props) {
           ? <div className="contract-signers-empty">Signatários automáticos serão criados a partir das partes do contrato. E-mail será obrigatório antes do envio à Clicksign.</div>
           : form.signers.map((signer, index) => <div className="contract-signer-row" key={`${index}-${signer.email}`}>
             <label className="field"><span>Papel</span><select value={signer.role} onChange={(event) => updateSigner(index, { role: event.target.value as LeaseSignerRole })}>{Object.entries(signerRoleLabels).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
-            <label className="field signer-person-field"><span>Nome</span><input required autoComplete="off" value={signer.name} onFocus={() => setSignerLookupIndex(index)} onBlur={() => window.setTimeout(() => setSignerLookupIndex((current) => current === index ? null : current), 120)} onChange={(event) => { updateSigner(index, { name: event.target.value }); setSignerLookupIndex(index) }}/>{signerLookupIndex === index && <div className="signer-person-results">{signerMatches(signer).length ? signerMatches(signer).map((person) => <button type="button" key={person.id} onMouseDown={(event) => { event.preventDefault(); chooseSigner(index, person) }}><strong>{person.name}</strong><small>{person.document_number || person.email || 'Cadastro sem documento'}</small></button>) : <span>Nenhuma pessoa encontrada.</span>}</div>}</label>
+            <label className="field signer-person-field"><span>Nome</span><input required autoComplete="off" value={signer.name} onFocus={() => setSignerLookupIndex(index)} onBlur={() => window.setTimeout(() => setSignerLookupIndex((current) => current === index ? null : current), 120)} onChange={(event) => { updateSigner(index, { name: event.target.value }); setSignerLookupIndex(index) }}/>{signerLookupIndex === index && <div className="signer-person-results">{signerMatches(signer).length ? signerMatches(signer).map((person) => <button type="button" key={person.id} onMouseDown={(event) => { event.preventDefault(); chooseSigner(index, person) }}><LeasePersonPhoto person={person} className="lease-person-avatar"/><span><strong>{person.name}</strong><small>{person.document_number || person.email || 'Cadastro sem documento'}</small></span></button>) : <span>Nenhuma pessoa encontrada.</span>}</div>}</label>
             <label className="field"><span>E-mail</span><input required type="email" value={signer.email} onChange={(event) => updateSigner(index, { email: event.target.value })}/></label>
             <label className="field"><span>CPF/CNPJ</span><input value={signer.document_number ?? ''} onChange={(event) => updateSigner(index, { document_number: event.target.value || null })}/></label>
             <label className="field"><span>Comunicação</span><select value={signer.communication} onChange={(event) => updateSigner(index, { communication: event.target.value as LeaseSigner['communication'] })}><option value="email">E-mail</option><option value="sms">SMS</option><option value="whatsapp">WhatsApp</option><option value="none">Nenhuma</option></select></label>
