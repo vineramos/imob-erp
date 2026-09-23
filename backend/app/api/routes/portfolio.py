@@ -22,6 +22,7 @@ from app.domains.portfolio.schemas import (
     PersonUpdate,
     PropertyCreate,
     PropertyFeatures,
+    PropertyAdditionalChargesUpdate,
     PropertyResponse,
     PropertyResponsibleBrokerUpdate,
     PropertyUpdate,
@@ -68,6 +69,7 @@ def _property_response(item: Property) -> PropertyResponse:
         rent_amount=item.rent_amount,
         condo_amount=item.condo_amount,
         iptu_amount=item.iptu_amount,
+        additional_charges=list(item.additional_charges or []),
         area_m2=item.area_m2,
         bedrooms=item.bedrooms,
         suites=item.suites,
@@ -442,6 +444,34 @@ def update_property(
     item = db.scalar(
         select(Property).options(selectinload(Property.owners).selectinload(PropertyOwner.person), selectinload(Property.responsible_broker)).where(Property.id == item.id)
     )
+    return _property_response(item)
+
+
+@router.put("/properties/{property_id}/additional-charges", response_model=PropertyResponse)
+def update_property_additional_charges(
+    property_id: UUID,
+    payload: PropertyAdditionalChargesUpdate,
+    request: Request,
+    context: UserContext = Depends(require_permission("properties.edit")),
+    db: Session = Depends(get_db),
+) -> PropertyResponse:
+    item = db.scalar(select(Property).options(
+        selectinload(Property.owners).selectinload(PropertyOwner.person),
+        selectinload(Property.responsible_broker),
+    ).where(Property.id == property_id, Property.organization_id == context.user.organization_id))
+    if item is None:
+        raise HTTPException(404, "Imóvel não encontrado.")
+    before = list(item.additional_charges or [])
+    item.additional_charges = [charge.model_dump(mode="json") for charge in payload.charges]
+    ip, agent = _request_metadata(request)
+    write_audit(
+        db, context=context, action="properties.additional_charges.updated",
+        module="properties", entity_type="property", entity_id=str(item.id),
+        before_data={"charges": before}, after_data={"charges": item.additional_charges},
+        ip_address=ip, user_agent=agent,
+    )
+    db.commit()
+    db.refresh(item)
     return _property_response(item)
 
 

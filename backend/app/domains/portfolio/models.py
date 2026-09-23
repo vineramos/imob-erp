@@ -64,6 +64,7 @@ class Property(Base):
     rent_amount: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
     condo_amount: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
     iptu_amount: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
+    additional_charges: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, default=list, nullable=False)
     area_m2: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
     bedrooms: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     suites: Mapped[int] = mapped_column(Integer, default=0, nullable=False)

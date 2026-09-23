@@ -66,6 +66,22 @@ class PropertyOwnerPayload(BaseModel):
     ownership_percent: Decimal = Field(default=Decimal("100"), gt=0, le=100)
 
 
+class PropertyAdditionalChargesUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    charges: list[LeaseMonthlyChargePayload] = Field(default_factory=list, max_length=20)
+
+    @model_validator(mode="after")
+    def validate_templates(self):
+        keys = [charge.key for charge in self.charges]
+        if len(keys) != len(set(keys)):
+            raise ValueError("Não repita a mesma chave de encargo.")
+        if any(charge.kind not in {"fire_insurance", "guarantee_insurance", "other"} for charge in self.charges):
+            raise ValueError("Somente seguros ou outros encargos adicionais são permitidos.")
+        if any(charge.key in {"rent", "condo", "iptu"} for charge in self.charges):
+            raise ValueError("Aluguel, condomínio e IPTU já possuem campos próprios.")
+        return self
+
+
 class PropertyResponsibleBrokerUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -167,6 +183,7 @@ class PropertyResponse(BaseModel):
     rent_amount: Decimal | None = None
     condo_amount: Decimal | None = None
     iptu_amount: Decimal | None = None
+    additional_charges: list[dict] = Field(default_factory=list)
     area_m2: Decimal | None = None
     bedrooms: int
     suites: int
@@ -280,4 +297,5 @@ class EconomicIndexSyncResponse(BaseModel):
     imported: int
     latest_competence: date | None = None
     next_retry_at: datetime | None = None
-    message: str
+    message: strfrom app.domains.leases.schemas import LeaseMonthlyChargePayload
+

@@ -150,7 +150,7 @@ def suggested_monthly_charge_rules(property_item: Property, terms: dict) -> list
         "agency_retention_type": "none",
         "agency_retention_value": "0.00",
     }
-    return [
+    defaults = [
         {
             **base,
             "key": "iptu",
@@ -212,6 +212,10 @@ def suggested_monthly_charge_rules(property_item: Property, terms: dict) -> list
             "end_date": None,
         },
     ]
+
+    extras = [dict(charge) for charge in property_item.additional_charges or [] if isinstance(charge, dict)]
+    extra_kinds = {row.get("kind") for row in extras}
+    return [*[row for row in defaults if row["kind"] not in extra_kinds], *extras]
 
 
 def _parse_date(value) -> date | None:
