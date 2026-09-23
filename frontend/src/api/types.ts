@@ -170,6 +170,8 @@ export type Person = {
   phone: string | null
   address: Address
   notes: string | null
+  billing_legal_name: string | null
+  billing_document_number: string | null
   is_active: boolean
   role_keys: string[]
   created_at: string
@@ -183,6 +185,8 @@ export type PersonCreate = {
   phone?: string | null
   address: Address
   notes?: string | null
+  billing_legal_name?: string | null
+  billing_document_number?: string | null
   role_keys: Array<'owner' | 'tenant' | 'guarantor' | 'broker' | 'supplier' | 'referrer'>
 }
 
