@@ -21,3 +21,11 @@
 
 @media(max-width:1100px){.contract-expanded-three{grid-template-columns:1fr}.lease-card-main{grid-template-columns:1fr 1fr}.lease-tenant-grid{grid-template-columns:repeat(2,1fr)}.lease-late-payment-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.lease-monthly-table{overflow-x:auto}.lease-monthly-table-head,.lease-monthly-row{min-width:1020px}.lease-monthly-heading{align-items:stretch}.lease-monthly-total{min-width:210px}}
 @media(max-width:700px){.contracts-hub-tabs{margin:10px;display:grid;justify-self:stretch}.contracts-hub-tabs button{min-width:0}.contract-document-strip,.lease-card-main,.lease-tenant-grid,.lease-late-payment-grid{grid-template-columns:1fr}.lease-card-detail{display:grid;gap:7px}.lease-monthly-heading,.lease-monthly-footer{display:grid}.lease-monthly-total{min-width:0}.lease-monthly-footer .button{justify-self:start}.lease-contract-expanded .contract-version-row,.lease-contract-expanded .contract-document-detail{grid-template-columns:1fr}.lease-contract-expanded .contract-version-row>small{white-space:normal}}
+
+/* Person photos in lease party selectors */
+.lease-person-avatar{width:30px;height:30px;border-radius:8px;display:grid;place-items:center;overflow:hidden;object-fit:cover;background:var(--surface-muted);color:var(--brand-primary);font-size:7px;font-weight:800;flex:0 0 auto}
+img.lease-person-avatar{display:block;object-fit:cover}
+.lease-tenant-grid label{grid-template-columns:auto 30px minmax(0,1fr)}
+.signer-person-results button{display:grid;grid-template-columns:30px minmax(0,1fr);gap:8px;align-items:center}
+.signer-person-results button>span{min-width:0;display:grid;gap:2px}
+.signer-person-results button strong,.signer-person-results button small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
