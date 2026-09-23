@@ -273,3 +273,17 @@
 .client-profile-contact{row-gap:4px;column-gap:10px}
 @media(max-width:1050px){.client-activity-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:560px){.client-activity-grid{grid-template-columns:1fr}}
+
+/* Fotos de clientes */
+img.client-directory-avatar,img.client-profile-avatar{object-fit:cover;display:block}
+.client-directory-avatar{overflow:hidden}
+.client-profile-photo-wrap{position:relative;width:52px;height:52px;align-self:center}
+.client-profile-photo-wrap .client-profile-avatar{width:52px;height:52px;border-radius:14px;overflow:hidden}
+.client-photo-upload,.client-photo-remove{position:absolute;display:grid;place-items:center;border:1px solid var(--border);background:var(--surface);color:var(--brand-primary);box-shadow:0 2px 8px rgba(15,23,42,.12);cursor:pointer}
+.client-photo-upload{right:-5px;bottom:-4px;width:25px;height:25px;border-radius:999px}
+.client-photo-upload:hover{background:var(--brand-primary-soft)}
+.client-photo-upload input{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+.client-photo-remove{right:-7px;top:-5px;width:21px;height:21px;border-radius:999px;color:#b42318}
+.client-photo-remove:hover:not(:disabled){background:#fff3f2}
+.client-photo-upload:has(input:disabled),.client-photo-remove:disabled{opacity:.55;cursor:not-allowed}
+@media(max-width:600px){.client-profile-photo-wrap{width:46px;height:46px}.client-profile-photo-wrap .client-profile-avatar{width:46px;height:46px}}
