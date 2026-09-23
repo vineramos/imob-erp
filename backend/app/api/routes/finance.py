@@ -209,6 +209,7 @@ def list_charges(
     competence: date | None = Query(default=None),
     charge_status: str | None = Query(default=None, alias="status"),
     property_id: UUID | None = Query(default=None),
+    lease_contract_id: UUID | None = Query(default=None),
     context: UserContext = Depends(require_permission("finance.view")),
     db: Session = Depends(get_db),
 ) -> list[ChargeResponse]:
@@ -220,6 +221,8 @@ def list_charges(
         stmt = stmt.where(RentCharge.status == charge_status)
     if property_id:
         stmt = stmt.where(RentCharge.property_id == property_id)
+    if lease_contract_id:
+        stmt = stmt.where(RentCharge.lease_contract_id == lease_contract_id)
     items = db.scalars(stmt.order_by(RentCharge.due_date.desc(), RentCharge.internal_number.desc()).limit(500)).unique().all()
     if changed:
         db.commit()
