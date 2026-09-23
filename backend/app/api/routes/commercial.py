@@ -214,7 +214,7 @@ def _funnel(db: Session, inquiry: PublicSiteInquiry) -> dict:
     return {
         "inquiry": {"id": inquiry.id, "property_id": inquiry.property_id, "property_code": inquiry.property_code, "property_title": inquiry.property_title, "name": inquiry.name, "email": inquiry.email, "phone": inquiry.phone, "preferred_contact": inquiry.preferred_contact, "message": inquiry.message, "status": inquiry.status, "source": inquiry.source, "responsible_user_id": inquiry.responsible_user_id, "next_action_title": inquiry.next_action_title, "next_action_at": inquiry.next_action_at, "next_action_notes": inquiry.next_action_notes, "created_at": inquiry.created_at, "updated_at": inquiry.updated_at},
         "responsible": {"id": responsible.id, "name": responsible.name, "email": responsible.email} if responsible else None,
-        "person": {"id": person.id, "name": person.name, "document_number": person.document_number, "email": person.email, "phone": person.phone} if person else None,
+        "person": {"id": person.id, "name": person.name, "document_number": person.document_number, "email": person.email, "phone": person.phone, "photo_content_url": f"/people/{person.id}/photo/content" if person.photo_storage_reference else None, "photo_updated_at": person.photo_updated_at} if person else None,
         "property_status": prop.status if prop else None,
         "property_publication_enabled": bool(prop.publication_enabled) if prop else False,
         "suggested_rent_amount": prop.rent_amount if prop else None,
