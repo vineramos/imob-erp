@@ -6,6 +6,7 @@ import { FinanceBankSetupPanel } from './FinanceBankSetupPanel'
 import { FinanceBankingPanel } from './FinanceBankingPanel'
 import { FinanceBillingPanel } from './FinanceBillingPanel'
 import { FinanceReceivablesPanel } from './FinanceReceivablesPanel'
+import { FinanceRepassesPanel } from './FinanceRepassesPanel'
 import { FinanceClassificationsPanel } from './FinanceClassificationsPanel'
 import { FinanceCommissionsPanel } from './FinanceCommissionsPanel'
 import { FinanceCorePanel } from './FinanceCorePanel'
@@ -18,7 +19,7 @@ import { FinanceReportsPanel } from './FinanceReportsPanel'
 import { FinanceTreasuryPanel } from './FinanceTreasuryPanel'
 import { MaintenanceFinancePanel } from './MaintenanceFinancePanel'
 
-type Area = 'overview'|'ledger'|'cycle'|'billing'|'billing-batches'|'delinquency'|'treasury'|'banking'|'bank-setup'|'bank-control'|'inter'|'reports'|'commissions'|'classifications'|'portals'|'rent'|'maintenance'
+type Area = 'overview'|'ledger'|'cycle'|'billing'|'billing-batches'|'repasses'|'delinquency'|'treasury'|'banking'|'bank-setup'|'bank-control'|'inter'|'reports'|'commissions'|'classifications'|'portals'|'rent'|'maintenance'
 type Dashboard = {
   competence:string
   open_amount:number
@@ -67,7 +68,7 @@ function FinanceDashboardPanel({onNavigate}:{onNavigate:(area:Area)=>void}){
 
   const alerts=dashboard?[
     dashboard.charges_critical>0?{key:'critical',title:`${dashboard.charges_critical} cobrança(s) em atraso crítico`,detail:`${money(dashboard.critical_overdue_amount)} exigem atuação prioritária.`,target:'delinquency' as Area,tone:'danger'}:null,
-    dashboard.repasses_pending>0?{key:'repasses',title:`${dashboard.repasses_pending} repasse(s) pendente(s)`,detail:`${money(dashboard.pending_repasse_amount)} aguardam processamento ou baixa.`,target:'rent' as Area,tone:'warning'}:null,
+    dashboard.repasses_pending>0?{key:'repasses',title:`${dashboard.repasses_pending} repasse(s) pendente(s)`,detail:`${money(dashboard.pending_repasse_amount)} aguardam processamento ou baixa.`,target:'repasses' as Area,tone:'warning'}:null,
     pendingCommissions.length>0?{key:'commissions',title:`${pendingCommissions.length} comissão(ões) pendente(s)`,detail:`${money(pendingCommissionAmount)} ainda não concluídos no fluxo financeiro.`,target:'commissions' as Area,tone:'warning'}:null,
   ].filter(Boolean) as {key:string;title:string;detail:string;target:Area;tone:string}[]:[]
 
@@ -129,6 +130,7 @@ export function FinancePage({permissions}:{permissions:string[]}){
     <button type="button" className={area==='cycle'?'active':''} onClick={()=>setArea('cycle')}><TrendingUp size={15}/> Ciclo mensal</button>
     <button type="button" className={area==='billing'?'active':''} onClick={()=>setArea('billing')}><Send size={15}/> Contas a receber</button>
     <button type="button" className={area==='billing-batches'?'active':''} onClick={()=>setArea('billing-batches')}><ReceiptText size={15}/> Emissão em lote</button>
+    <button type="button" className={area==='repasses'?'active':''} onClick={()=>setArea('repasses')}><Landmark size={15}/> Repasses</button>
     <button type="button" className={area==='delinquency'?'active':''} onClick={()=>setArea('delinquency')}><AlertTriangle size={15}/> Inadimplência</button>
     <button type="button" className={area==='treasury'?'active':''} onClick={()=>setArea('treasury')}><TrendingUp size={15}/> Tesouraria</button>
     <button type="button" className={area==='banking'?'active':''} onClick={()=>setArea('banking')}><WalletCards size={15}/> Bancos</button>
@@ -142,5 +144,5 @@ export function FinancePage({permissions}:{permissions:string[]}){
     <button type="button" className={area==='rent'?'active':''} onClick={()=>setArea('rent')}><Landmark size={15}/> Locações</button>
     <button type="button" className={area==='maintenance'?'active':''} onClick={()=>setArea('maintenance')}><ReceiptText size={15}/> Manutenções</button>
   </div></div>
-  {area==='overview'?<FinanceDashboardPanel onNavigate={setArea}/>:area==='ledger'?<FinanceCorePanel permissions={permissions} onNavigateSource={source=>setArea(source==='maintenance'?'maintenance':'rent')}/>:area==='cycle'?<FinanceMonthlyCyclePanel permissions={permissions} onNavigateArea={target=>setArea(target)}/>:area==='billing'?<FinanceReceivablesPanel permissions={permissions}/>:area==='billing-batches'?<FinanceBillingPanel permissions={permissions}/>:area==='delinquency'?<FinanceDelinquencyPanel permissions={permissions}/>:area==='treasury'?<FinanceTreasuryPanel permissions={permissions}/>:area==='banking'?<FinanceBankingPanel permissions={permissions}/>:area==='bank-setup'?<FinanceBankSetupPanel permissions={permissions}/>:area==='bank-control'?<FinanceBankControlPanel permissions={permissions}/>:area==='inter'?<FinanceInterPanel permissions={permissions}/>:area==='reports'?<FinanceReportsPanel permissions={permissions}/>:area==='commissions'?<FinanceCommissionsPanel permissions={permissions}/>:area==='classifications'?<FinanceClassificationsPanel permissions={permissions}/>:area==='portals'?<FinancePortalsPanel permissions={permissions}/>:area==='rent'?<FinanceRentPage permissions={permissions}/>:<MaintenanceFinancePanel permissions={permissions}/>}</>
+  {area==='overview'?<FinanceDashboardPanel onNavigate={setArea}/>:area==='ledger'?<FinanceCorePanel permissions={permissions} onNavigateSource={source=>setArea(source==='maintenance'?'maintenance':'rent')}/>:area==='cycle'?<FinanceMonthlyCyclePanel permissions={permissions} onNavigateArea={target=>setArea(target)}/>:area==='billing'?<FinanceReceivablesPanel permissions={permissions}/>:area==='billing-batches'?<FinanceBillingPanel permissions={permissions}/>:area==='repasses'?<FinanceRepassesPanel permissions={permissions}/>:area==='delinquency'?<FinanceDelinquencyPanel permissions={permissions}/>:area==='treasury'?<FinanceTreasuryPanel permissions={permissions}/>:area==='banking'?<FinanceBankingPanel permissions={permissions}/>:area==='bank-setup'?<FinanceBankSetupPanel permissions={permissions}/>:area==='bank-control'?<FinanceBankControlPanel permissions={permissions}/>:area==='inter'?<FinanceInterPanel permissions={permissions}/>:area==='reports'?<FinanceReportsPanel permissions={permissions}/>:area==='commissions'?<FinanceCommissionsPanel permissions={permissions}/>:area==='classifications'?<FinanceClassificationsPanel permissions={permissions}/>:area==='portals'?<FinancePortalsPanel permissions={permissions}/>:area==='rent'?<FinanceRentPage permissions={permissions}/>:<MaintenanceFinancePanel permissions={permissions}/>}</>
 }
