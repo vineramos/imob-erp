@@ -12,6 +12,25 @@ def test_public_site_interest_enters_crm_and_preserves_public_privacy(client, id
         role_keys=["owner"],
     )
     property_item = create_property(client, owner["id"])
+    assert_response(client.put(
+        f"/api/properties/{property_item['id']}/additional-charges",
+        json={"charges": [
+            {
+                "key": "fire_site", "kind": "fire_insurance", "label": "Seguro incêndio",
+                "amount": "60.00", "active": True, "payer": "tenant",
+                "beneficiary": "third_party", "beneficiary_name": "Seguradora",
+                "frequency": "monthly", "include_in_invoice": True,
+                "agency_retention_type": "none", "agency_retention_value": "0",
+            },
+            {
+                "key": "owner_private", "kind": "other", "label": "Encargo interno",
+                "amount": "99.00", "active": True, "payer": "owner",
+                "beneficiary": "agency", "beneficiary_name": "Imobiliária",
+                "frequency": "monthly", "include_in_invoice": True,
+                "agency_retention_type": "none", "agency_retention_value": "0",
+            },
+        ]},
+    ))
     publication = publish_property(client, property_item["id"])
     organization_id = identity["organization_id"]
     slug = publication["public_slug"]
@@ -22,6 +41,9 @@ def test_public_site_interest_enters_crm_and_preserves_public_privacy(client, id
     assert published["cover_photo_url"]
     assert published["address"]["street"] == ""
     assert published["address"]["number"] == ""
+    assert published["additional_charges"] == [{"label": "Seguro incêndio", "amount": "60.00", "frequency": "monthly"}]
+    assert "beneficiary" not in published["additional_charges"][0]
+    assert "agency_retention_value" not in published["additional_charges"][0]
 
     cover = assert_response(client.get(f"/api{published['cover_photo_url']}"))
     assert cover.content == b"imagem-de-teste"

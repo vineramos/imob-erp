@@ -393,6 +393,19 @@ def _cover_photo_map(db: Session, items: list[Property]) -> dict[UUID, UUID]:
     return result
 
 
+def _public_charge_rows(item: Property) -> list[dict]:
+    # Expose only tenant-facing active charges that are included in billing.
+    # Beneficiary, retention and internal routing remain private ERP data.
+    return [
+        {"label": str(row.get("label") or "Encargo"), "amount": row.get("amount") or 0, "frequency": row.get("frequency") or "monthly"}
+        for row in (item.additional_charges or [])
+        if isinstance(row, dict)
+        and row.get("active", True)
+        and row.get("include_in_invoice", True)
+        and row.get("payer", "tenant") == "tenant"
+    ]
+
+
 def _public_response(item: Property, organization_id: UUID, cover_photo_id: UUID | None = None) -> PublicPropertySiteResponse:
     slug = item.public_slug or f"imovel-{item.internal_number:06d}"
     cover_photo_url = (
@@ -409,6 +422,7 @@ def _public_response(item: Property, organization_id: UUID, cover_photo_id: UUID
         rent_amount=item.rent_amount,
         condo_amount=item.condo_amount,
         iptu_amount=item.iptu_amount,
+        additional_charges=_public_charge_rows(item),
         area_m2=item.area_m2,
         bedrooms=item.bedrooms,
         suites=item.suites,

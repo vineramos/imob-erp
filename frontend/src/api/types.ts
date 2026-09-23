@@ -284,6 +284,7 @@ export type PublicProperty = {
   rent_amount: number | null
   condo_amount: number | null
   iptu_amount: number | null
+  additional_charges: Array<{label:string;amount:number;frequency:'monthly'|'annual'|'one_time'}>
   area_m2: number | null
   bedrooms: number
   suites: number

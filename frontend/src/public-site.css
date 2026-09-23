@@ -485,3 +485,8 @@
   .public-similar-properties { padding-inline: 18px; }
   .public-similar-properties .public-property-grid { grid-template-columns: 1fr; }
 }
+
+/* Variable tenant-facing charges can extend the public cost grid. */
+.public-costs{grid-template-columns:repeat(auto-fit,minmax(92px,1fr))}
+.public-search-result-costs{flex-wrap:wrap}
+.public-search-result-costs span{white-space:nowrap}

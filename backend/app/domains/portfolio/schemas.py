@@ -227,6 +227,12 @@ class PublicationUpdate(BaseModel):
     reason: str | None = Field(default=None, max_length=1000)
 
 
+class PublicPropertyChargeResponse(BaseModel):
+    label: str
+    amount: Decimal
+    frequency: Literal["monthly", "annual", "one_time"]
+
+
 class PublicPropertyResponse(BaseModel):
     code: str
     slug: str
@@ -236,6 +242,7 @@ class PublicPropertyResponse(BaseModel):
     rent_amount: Decimal | None = None
     condo_amount: Decimal | None = None
     iptu_amount: Decimal | None = None
+    additional_charges: list[PublicPropertyChargeResponse] = Field(default_factory=list)
     area_m2: Decimal | None = None
     bedrooms: int
     suites: int
