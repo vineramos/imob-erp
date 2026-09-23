@@ -500,12 +500,17 @@ def update_property_responsible_broker(
     )
     db.commit()
 
+    # O relacionamento pode permanecer carregado no identity map da sessão com o
+    # corretor anterior. Recarregamos explicitamente para que a resposta PATCH já
+    # reflita a inclusão/remoção sem depender de um refresh completo no frontend.
+    db.expire(item, ["responsible_broker"])
     item = db.scalar(
         select(Property)
         .options(
             selectinload(Property.owners).selectinload(PropertyOwner.person),
             selectinload(Property.responsible_broker),
         )
+        .execution_options(populate_existing=True)
         .where(Property.id == item.id)
     )
     return _property_response(item)
