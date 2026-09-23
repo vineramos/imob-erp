@@ -9,6 +9,7 @@ import {
   CircleDollarSign,
   FilePlus2,
   RefreshCw,
+  Search,
   ShieldCheck,
   WalletCards,
   X,
@@ -99,6 +100,8 @@ export function FinanceCorePanel({permissions,onNavigateSource}:Props){
   const [error,setError]=useState('')
   const [success,setSuccess]=useState('')
   const [filter,setFilter]=useState<Filter>('all')
+  const [query,setQuery]=useState('')
+  const [selectedKey,setSelectedKey]=useState<string|null>(null)
   const [createOpen,setCreateOpen]=useState(false)
   const [settleTarget,setSettleTarget]=useState<CoreItem|null>(null)
 
@@ -132,12 +135,18 @@ export function FinanceCorePanel({permissions,onNavigateSource}:Props){
   useEffect(()=>{void load()},[load])
 
   const items=useMemo(()=>{
-    if(filter==='overdue')return overdueItems
-    const all=overview?.items||[]
-    if(filter==='all')return all
-    if(filter==='third_party'||filter==='operating')return all.filter(item=>item.fund_scope===filter)
-    return all.filter(item=>item.direction===filter)
-  },[overview,overdueItems,filter])
+    const base=filter==='overdue'
+      ? overdueItems
+      : (()=>{const all=overview?.items||[];if(filter==='all')return all;if(filter==='third_party'||filter==='operating')return all.filter(item=>item.fund_scope===filter);return all.filter(item=>item.direction===filter)})()
+    const term=query.trim().toLocaleLowerCase('pt-BR')
+    if(!term)return base
+    return base.filter(item=>[item.code,item.description,item.counterparty_name,item.category,sourceLabels[item.source_type]||item.source_type].join(' ').toLocaleLowerCase('pt-BR').includes(term))
+  },[overview,overdueItems,filter,query])
+  useEffect(()=>{
+    if(items.length===0){setSelectedKey(null);return}
+    if(!selectedKey||!items.some(item=>`${item.source_type}:${item.id}`===selectedKey))setSelectedKey(`${items[0].source_type}:${items[0].id}`)
+  },[items,selectedKey])
+  const selectedItem=useMemo(()=>items.find(item=>`${item.source_type}:${item.id}`===selectedKey)??null,[items,selectedKey])
 
   const overdueReceivable=useMemo(()=>overdueItems.filter(item=>item.direction==='receivable').reduce((total,item)=>total+item.remaining_amount,0),[overdueItems])
   const overduePayable=useMemo(()=>overdueItems.filter(item=>item.direction==='payable').reduce((total,item)=>total+item.remaining_amount,0),[overdueItems])
@@ -195,20 +204,30 @@ export function FinanceCorePanel({permissions,onNavigateSource}:Props){
 
     {error&&<div className="form-alert danger-alert">{error}</div>}{success&&<div className="form-alert success-alert">{success}</div>}
 
-    <div className="panel finance-core-toolbar"><div className="finance-filter">
-      <button className={filter==='all'?'active':''} onClick={()=>setFilter('all')}>Todos</button><button className={filter==='receivable'?'active':''} onClick={()=>setFilter('receivable')}>A receber</button><button className={filter==='payable'?'active':''} onClick={()=>setFilter('payable')}>A pagar</button><button className={filter==='overdue'?'active':''} onClick={()=>setFilter('overdue')}>Vencidos <span>{overdueItems.length}</span></button><button className={filter==='third_party'?'active':''} onClick={()=>setFilter('third_party')}>Terceiros</button><button className={filter==='operating'?'active':''} onClick={()=>setFilter('operating')}>Operacional</button>
-    </div><span>{items.length} lançamento(s) · {manualOpen} manual(is) pendente(s)</span></div>
+    <div className="panel finance-core-toolbar">
+      <div className="finance-core-toolbar-main"><div className="finance-filter">
+        <button className={filter==='all'?'active':''} onClick={()=>setFilter('all')}>Todos</button><button className={filter==='receivable'?'active':''} onClick={()=>setFilter('receivable')}>A receber</button><button className={filter==='payable'?'active':''} onClick={()=>setFilter('payable')}>A pagar</button><button className={filter==='overdue'?'active':''} onClick={()=>setFilter('overdue')}>Vencidos <span>{overdueItems.length}</span></button><button className={filter==='third_party'?'active':''} onClick={()=>setFilter('third_party')}>Terceiros</button><button className={filter==='operating'?'active':''} onClick={()=>setFilter('operating')}>Operacional</button>
+      </div><label className="finance-core-search"><Search size={13}/><input value={query} onChange={event=>setQuery(event.target.value)} placeholder="Buscar lançamento..."/></label></div>
+      <span>{items.length} lançamento(s) · {manualOpen} manual(is) pendente(s)</span>
+    </div>
 
-    {loading?<article className="panel settings-loading">Carregando financeiro...</article>:<div className="finance-core-list">
-      {items.map(item=><article className={`panel finance-core-row ${item.overdue?'overdue':''}`} key={`${item.source_type}-${item.id}`}>
-        <div className={`finance-core-direction ${item.direction}`} title={item.direction==='receivable'?'Entrada':'Saída'}>{item.direction==='receivable'?<ArrowDownCircle size={18}/>:<ArrowUpCircle size={18}/>}</div>
-        <div className="finance-core-main"><div className="finance-core-code-line"><strong>{item.code}</strong><span>{sourceLabels[item.source_type]||item.source_type}</span><i className={`status-badge ${item.status==='settled'?'success':item.overdue?'danger':item.status==='cancelled'?'neutral':'warning'}`}>{statusLabels[item.status]||item.status}</i></div><h3>{item.description}</h3><p>{item.counterparty_name} · {item.category}</p></div>
-        <div className="finance-core-meta"><span>Vencimento</span><strong>{dateLabel(item.due_date)}</strong><small>{item.overdue?'Vencido':'Competência '+item.competence.slice(0,7).split('-').reverse().join('/')}</small></div>
-        <div className="finance-core-scope"><span>Natureza do recurso</span><strong>{item.fund_scope==='third_party'?'Terceiros':'Operacional'}</strong><small>{item.manual?'Lançamento manual':'Origem automática'}</small></div>
-        <div className="finance-core-value"><span>{item.direction==='receivable'?'A receber':'A pagar'}</span><strong>{money(item.amount)}</strong>{item.settled_amount>0&&<small>{money(item.settled_amount)} liquidado</small>}</div>
-        <div className="finance-core-row-actions">{canNavigateSource(item)&&<button className="button secondary compact" type="button" onClick={()=>openSource(item)}>Ver origem</button>}{canSettle(item)&&<button className="button primary compact" type="button" onClick={()=>{setSettleTarget(item);setSettleAt(localDateTime());setSettleMethod('pix');setSettleReference('')}}><CheckCircle2 size={13}/> Liquidar</button>}</div>
-      </article>)}
-      {items.length===0&&<article className="panel finance-empty"><CircleDollarSign size={28}/><strong>{filter==='overdue'?'Nenhum título vencido em aberto.':'Nenhum lançamento nesta competência.'}</strong><span>{filter==='overdue'?'A consulta de vencidos considera todas as competências.':'As cobranças de locação e os lançamentos de manutenção aparecerão aqui automaticamente.'}</span></article>}
+    {loading?<article className="panel settings-loading">Carregando financeiro...</article>:<div className="finance-core-master-detail">
+      <div className="finance-core-list">
+        {items.map(item=>{const key=`${item.source_type}:${item.id}`;return <button type="button" className={`panel finance-core-row ${item.overdue?'overdue':''} ${selectedKey===key?'active':''}`} key={key} onClick={()=>setSelectedKey(key)}>
+          <div className={`finance-core-direction ${item.direction}`} title={item.direction==='receivable'?'Entrada':'Saída'}>{item.direction==='receivable'?<ArrowDownCircle size={18}/>:<ArrowUpCircle size={18}/>}</div>
+          <div className="finance-core-main"><div className="finance-core-code-line"><strong>{item.code}</strong><span>{sourceLabels[item.source_type]||item.source_type}</span><i className={`status-badge ${item.status==='settled'?'success':item.overdue?'danger':item.status==='cancelled'?'neutral':'warning'}`}>{statusLabels[item.status]||item.status}</i></div><h3>{item.description}</h3><p>{item.counterparty_name} · venc. {dateLabel(item.due_date)}</p></div>
+          <div className="finance-core-value"><span>{item.direction==='receivable'?'A receber':'A pagar'}</span><strong>{money(item.remaining_amount||item.amount)}</strong>{item.settled_amount>0&&<small>{money(item.settled_amount)} liquidado</small>}</div>
+        </button>})}
+        {items.length===0&&<article className="panel finance-empty"><CircleDollarSign size={28}/><strong>{filter==='overdue'?'Nenhum título vencido em aberto.':'Nenhum lançamento nesta competência.'}</strong><span>{filter==='overdue'?'A consulta de vencidos considera todas as competências.':'As cobranças de locação e os lançamentos de manutenção aparecerão aqui automaticamente.'}</span></article>}
+      </div>
+      <aside className="panel finance-core-detail">
+        {selectedItem?<><div className="finance-core-detail-head"><div><span className="eyebrow">{sourceLabels[selectedItem.source_type]||selectedItem.source_type}</span><h2>{selectedItem.description}</h2><p>{selectedItem.code} · {selectedItem.counterparty_name}</p></div><i className={`status-badge ${selectedItem.status==='settled'?'success':selectedItem.overdue?'danger':selectedItem.status==='cancelled'?'neutral':'warning'}`}>{statusLabels[selectedItem.status]||selectedItem.status}</i></div>
+          <div className="finance-core-detail-amount"><span>Saldo atual</span><strong>{money(selectedItem.remaining_amount)}</strong><small>Valor original {money(selectedItem.amount)}</small></div>
+          <div className="finance-core-detail-grid"><div><span>Vencimento</span><strong>{dateLabel(selectedItem.due_date)}</strong></div><div><span>Competência</span><strong>{selectedItem.competence.slice(0,7).split('-').reverse().join('/')}</strong></div><div><span>Natureza</span><strong>{selectedItem.fund_scope==='third_party'?'Terceiros':'Operacional'}</strong></div><div><span>Categoria</span><strong>{selectedItem.category}</strong></div><div><span>Liquidação</span><strong>{selectedItem.settled_at?dateLabel(selectedItem.settled_at):'Pendente'}</strong></div><div><span>Origem</span><strong>{selectedItem.manual?'Manual':'Automática'}</strong></div></div>
+          {selectedItem.overdue&&<div className="finance-core-alert"><AlertTriangle size={15}/><div><strong>Lançamento vencido</strong><span>Saldo em aberto de {money(selectedItem.remaining_amount)}.</span></div></div>}
+          <div className="finance-core-detail-actions">{canNavigateSource(selectedItem)&&<button className="button secondary" type="button" onClick={()=>openSource(selectedItem)}>Ver origem</button>}{canSettle(selectedItem)&&<button className="button primary" type="button" onClick={()=>{setSettleTarget(selectedItem);setSettleAt(localDateTime());setSettleMethod('pix');setSettleReference('')}}><CheckCircle2 size={13}/> Liquidar</button>}</div>
+        </>:<div className="finance-core-detail-empty"><CircleDollarSign size={26}/><strong>Selecione um lançamento</strong><span>Os detalhes operacionais aparecerão aqui.</span></div>}
+      </aside>
     </div>}
 
     {createOpen&&<div className="finance-modal-backdrop" onMouseDown={event=>{if(event.currentTarget===event.target)setCreateOpen(false)}}><form className="panel finance-modal finance-core-modal" onSubmit={createTitle}>
