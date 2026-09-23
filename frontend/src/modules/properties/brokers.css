@@ -349,3 +349,21 @@
   .broker-commercial-list article{grid-template-columns:1fr}
   .broker-commercial-list article>div:last-child{justify-items:start;text-align:left}
 }
+
+
+/* Brokers v9.2 — commission payment workflow */
+.broker-commission-batches{display:grid;gap:8px}
+.broker-commission-batches>article{padding:12px;border:1px solid var(--border);border-radius:9px;background:var(--surface);display:grid;gap:9px}
+.broker-commission-head{display:flex;justify-content:space-between;gap:12px;align-items:start}
+.broker-commission-head>div{display:grid;gap:3px}
+.broker-commission-head span{font-size:8px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.03em}
+.broker-commission-head strong{font-size:11px}
+.broker-commission-head>strong{font-size:14px}
+.broker-commission-meta{display:flex;flex-wrap:wrap;gap:8px 16px;padding:8px 9px;border-radius:7px;background:var(--surface-muted)}
+.broker-commission-meta span{font-size:8px;color:var(--text-muted)}
+.broker-commission-meta b{color:var(--text);font-weight:750}
+.broker-commission-return{padding:8px 9px;border:1px solid color-mix(in srgb,var(--danger) 22%,var(--border));border-radius:7px;background:color-mix(in srgb,var(--danger) 7%,var(--surface));font-size:8.5px;color:var(--danger)}
+.broker-commission-actions{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+.broker-file-button{position:relative;overflow:hidden;cursor:pointer}
+.broker-file-button input{position:absolute;inset:0;opacity:0;cursor:pointer}
+.broker-invoice-file{font-size:8px;color:var(--text-muted)}
