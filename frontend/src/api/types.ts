@@ -172,6 +172,8 @@ export type Person = {
   notes: string | null
   billing_legal_name: string | null
   billing_document_number: string | null
+  photo_content_url: string | null
+  photo_updated_at: string | null
   is_active: boolean
   role_keys: string[]
   created_at: string
