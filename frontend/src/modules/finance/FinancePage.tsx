@@ -1,5 +1,6 @@
-import { AlertTriangle, BarChart3, CalendarDays, ChevronLeft, ChevronRight, CircleDollarSign, ExternalLink, Landmark, LayoutDashboard, ListTree, LockKeyhole, Percent, PlugZap, ReceiptText, RefreshCw, Send, ShieldCheck, Tags, TrendingUp, WalletCards } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { AlertTriangle, BarChart3, CalendarDays, ChevronDown, ChevronLeft, ChevronRight, CircleDollarSign, ExternalLink, Landmark, LayoutDashboard, ListTree, LockKeyhole, Percent, PlugZap, ReceiptText, RefreshCw, Send, ShieldCheck, Tags, TrendingUp, WalletCards } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import './finance-navigation.css'
 import { ApiError, apiRequest } from '../../api/client'
 import { FinanceBankControlPanel } from './FinanceBankControlPanel'
 import { FinanceBankSetupPanel } from './FinanceBankSetupPanel'
@@ -124,25 +125,49 @@ function FinanceDashboardPanel({onNavigate}:{onNavigate:(area:Area)=>void}){
 
 export function FinancePage({permissions}:{permissions:string[]}){
   const [area,setArea]=useState<Area>('overview')
-  return <><div className="workspace finance-area-switch"><div className="panel finance-tabs finance-root-tabs">
-    <button type="button" className={area==='overview'?'active':''} onClick={()=>setArea('overview')}><LayoutDashboard size={15}/> Visão geral</button>
-    <button type="button" className={area==='ledger'?'active':''} onClick={()=>setArea('ledger')}><ListTree size={15}/> Lançamentos</button>
-    <button type="button" className={area==='cycle'?'active':''} onClick={()=>setArea('cycle')}><TrendingUp size={15}/> Ciclo mensal</button>
-    <button type="button" className={area==='billing'?'active':''} onClick={()=>setArea('billing')}><Send size={15}/> Contas a receber</button>
-    <button type="button" className={area==='billing-batches'?'active':''} onClick={()=>setArea('billing-batches')}><ReceiptText size={15}/> Emissão em lote</button>
-    <button type="button" className={area==='repasses'?'active':''} onClick={()=>setArea('repasses')}><Landmark size={15}/> Repasses</button>
-    <button type="button" className={area==='delinquency'?'active':''} onClick={()=>setArea('delinquency')}><AlertTriangle size={15}/> Inadimplência</button>
-    <button type="button" className={area==='treasury'?'active':''} onClick={()=>setArea('treasury')}><TrendingUp size={15}/> Tesouraria</button>
-    <button type="button" className={area==='banking'?'active':''} onClick={()=>setArea('banking')}><WalletCards size={15}/> Bancos</button>
-    <button type="button" className={area==='bank-setup'?'active':''} onClick={()=>setArea('bank-setup')}><PlugZap size={15}/> Contas e APIs</button>
-    <button type="button" className={area==='bank-control'?'active':''} onClick={()=>setArea('bank-control')}><LockKeyhole size={15}/> Controle bancário</button>
-    <button type="button" className={area==='inter'?'active':''} onClick={()=>setArea('inter')}><ShieldCheck size={15}/> Banco Inter</button>
-    {permissions.includes('reports.view')&&<button type="button" className={area==='reports'?'active':''} onClick={()=>setArea('reports')}><BarChart3 size={15}/> Relatórios</button>}
-    <button type="button" className={area==='commissions'?'active':''} onClick={()=>setArea('commissions')}><Percent size={15}/> Comissões</button>
-    <button type="button" className={area==='classifications'?'active':''} onClick={()=>setArea('classifications')}><Tags size={15}/> Classificações</button>
-    <button type="button" className={area==='portals'?'active':''} onClick={()=>setArea('portals')}><ExternalLink size={15}/> Portais</button>
-    <button type="button" className={area==='rent'?'active':''} onClick={()=>setArea('rent')}><Landmark size={15}/> Locações</button>
-    <button type="button" className={area==='maintenance'?'active':''} onClick={()=>setArea('maintenance')}><ReceiptText size={15}/> Manutenções</button>
-  </div></div>
+  const moreRef=useRef<HTMLDetailsElement>(null)
+  const secondaryLabels:Partial<Record<Area,string>>={
+    'billing-batches':'Emissão em lote',treasury:'Tesouraria',banking:'Bancos','bank-setup':'Contas e APIs',
+    'bank-control':'Controle bancário',inter:'Banco Inter',reports:'Relatórios',
+    classifications:'Classificações',portals:'Portais',rent:'Locações',maintenance:'Manutenções'
+  }
+  const choose=(next:Area)=>{
+    setArea(next)
+    if(moreRef.current)moreRef.current.open=false
+  }
+  const secondaryActive=Object.prototype.hasOwnProperty.call(secondaryLabels,area)
+  return <><div className="workspace finance-area-switch finance-nav-workspace">
+    <nav className="panel finance-nav-shell" aria-label="Navegação do Financeiro">
+      <div className="finance-primary-tabs" role="group" aria-label="Áreas principais">
+        <button type="button" className={area==='overview'?'active':''} onClick={()=>choose('overview')}><LayoutDashboard size={15}/> Visão geral</button>
+        <button type="button" className={area==='ledger'?'active':''} onClick={()=>choose('ledger')}><ListTree size={15}/> Lançamentos</button>
+        <button type="button" className={area==='cycle'?'active':''} onClick={()=>choose('cycle')}><TrendingUp size={15}/> Ciclo mensal</button>
+        <button type="button" className={area==='billing'?'active':''} onClick={()=>choose('billing')}><Send size={15}/> Contas a receber</button>
+        <button type="button" className={area==='repasses'?'active':''} onClick={()=>choose('repasses')}><Landmark size={15}/> Repasses</button>
+        <button type="button" className={area==='delinquency'?'active':''} onClick={()=>choose('delinquency')}><AlertTriangle size={15}/> Inadimplência</button>
+        <button type="button" className={area==='commissions'?'active':''} onClick={()=>choose('commissions')}><Percent size={15}/> Comissões</button>
+      </div>
+      <details className={'finance-more'+(secondaryActive?' active':'')} ref={moreRef}>
+        <summary aria-label="Mais áreas do Financeiro">
+          {secondaryActive?secondaryLabels[area]:'Mais'} <ChevronDown size={14}/>
+        </summary>
+        <div className="finance-more-menu" role="group" aria-label="Outras áreas do Financeiro">
+          <span className="finance-more-heading">Operação complementar</span>
+          <button type="button" className={area==='billing-batches'?'active':''} onClick={()=>choose('billing-batches')}><ReceiptText size={15}/> Emissão em lote</button>
+          <button type="button" className={area==='treasury'?'active':''} onClick={()=>choose('treasury')}><TrendingUp size={15}/> Tesouraria</button>
+          <button type="button" className={area==='rent'?'active':''} onClick={()=>choose('rent')}><Landmark size={15}/> Locações</button>
+          <button type="button" className={area==='maintenance'?'active':''} onClick={()=>choose('maintenance')}><ReceiptText size={15}/> Manutenções</button>
+          {permissions.includes('reports.view')&&<button type="button" className={area==='reports'?'active':''} onClick={()=>choose('reports')}><BarChart3 size={15}/> Relatórios</button>}
+          <span className="finance-more-heading">Bancos e configurações</span>
+          <button type="button" className={area==='banking'?'active':''} onClick={()=>choose('banking')}><WalletCards size={15}/> Bancos</button>
+          <button type="button" className={area==='inter'?'active':''} onClick={()=>choose('inter')}><ShieldCheck size={15}/> Banco Inter</button>
+          <button type="button" className={area==='bank-setup'?'active':''} onClick={()=>choose('bank-setup')}><PlugZap size={15}/> Contas e APIs</button>
+          <button type="button" className={area==='bank-control'?'active':''} onClick={()=>choose('bank-control')}><LockKeyhole size={15}/> Controle bancário</button>
+          <button type="button" className={area==='classifications'?'active':''} onClick={()=>choose('classifications')}><Tags size={15}/> Classificações</button>
+          <button type="button" className={area==='portals'?'active':''} onClick={()=>choose('portals')}><ExternalLink size={15}/> Portais</button>
+        </div>
+      </details>
+    </nav>
+  </div>
   {area==='overview'?<FinanceDashboardPanel onNavigate={setArea}/>:area==='ledger'?<FinanceCorePanel permissions={permissions} onNavigateSource={source=>setArea(source==='maintenance'?'maintenance':'rent')}/>:area==='cycle'?<FinanceMonthlyCyclePanel permissions={permissions} onNavigateArea={target=>setArea(target)}/>:area==='billing'?<FinanceReceivablesPanel permissions={permissions}/>:area==='billing-batches'?<FinanceBillingPanel permissions={permissions}/>:area==='repasses'?<FinanceRepassesPanel permissions={permissions}/>:area==='delinquency'?<FinanceDelinquencyPanel permissions={permissions}/>:area==='treasury'?<FinanceTreasuryPanel permissions={permissions}/>:area==='banking'?<FinanceBankingPanel permissions={permissions}/>:area==='bank-setup'?<FinanceBankSetupPanel permissions={permissions}/>:area==='bank-control'?<FinanceBankControlPanel permissions={permissions}/>:area==='inter'?<FinanceInterPanel permissions={permissions}/>:area==='reports'?<FinanceReportsPanel permissions={permissions}/>:area==='commissions'?<FinanceCommissionsPanel permissions={permissions}/>:area==='classifications'?<FinanceClassificationsPanel permissions={permissions}/>:area==='portals'?<FinancePortalsPanel permissions={permissions}/>:area==='rent'?<FinanceRentPage permissions={permissions}/>:<MaintenanceFinancePanel permissions={permissions}/>}</>
 }
