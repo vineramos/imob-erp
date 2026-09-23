@@ -416,3 +416,18 @@ img.lease-person-avatar{display:block;object-fit:cover}
   .contracts-hub-tabs{display:grid}
   .contracts-hub .page-heading h1{font-size:21px}
 }
+
+
+/* Administração — ficha operacional consistente com Locação */
+.admin-master-detail{margin-top:2px}
+.admin-contract-detail .contract-detail-body{min-height:390px}
+.admin-contract-detail .contract-document-summary-v2 strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.admin-contract-finance-note{margin:12px 0 0;color:var(--text-muted);font-size:10px;line-height:1.5}
+.admin-document-link{display:inline-flex;align-items:center;gap:6px;margin-top:3px;width:max-content}
+.admin-master-detail .contract-directory-v2{min-height:500px}
+.admin-master-detail .contract-detail-actions-v2{max-width:48%}
+@media(max-width:1100px){
+  .admin-master-detail .contract-detail-actions-v2{max-width:none}
+  .admin-master-detail .contract-detail-header{align-items:flex-start;flex-wrap:wrap}
+}
+@media(max-width:900px){.admin-master-detail .contract-directory-v2{min-height:0}}
