@@ -177,17 +177,26 @@ export function PeopleWorkspacePage({ permissions }: { permissions: string[] }) 
             {clientTab==='overview'&&<div className="client-overview">
               <div className="client-kpi-grid">
                 <article><span>Imóveis vinculados</span><strong>{selectedProperties.length}</strong><small>{selectedProperties.filter(property=>property.status==='available').length} disponível(is)</small></article>
-                <article><span>Contratos</span><strong>{selectedLeases.length}</strong><small>{activeLeases.length} ativo(s)</small></article>
-                <article><span>Papéis</span><strong>{selected.role_keys.length}</strong><small>{selected.role_keys.map(roleLabel).join(' · ')||'Sem papel operacional'}</small></article>
-                <article><span>Status cadastral</span><strong>{selected.is_active?'Ativo':'Arquivado'}</strong><small>Desde {new Date(selected.created_at).toLocaleDateString('pt-BR')}</small></article>
+                <article><span>Contratos</span><strong>{activeLeases.length}</strong><small>{selectedLeases.length} no histórico</small></article>
+                <article><span>Relacionamentos</span><strong>{selected.role_keys.length}</strong><small>{selected.role_keys.map(roleLabel).join(' · ')||'Sem papel operacional'}</small></article>
+                <article><span>Status cadastral</span><strong>{selected.is_active?'Ativo':'Arquivado'}</strong><small>Cadastro desde {new Date(selected.created_at).toLocaleDateString('pt-BR')}</small></article>
               </div>
               <div className="client-overview-grid">
                 <article><span>Dados principais</span><strong>{selected.document_number||'Documento não informado'}</strong><small>{personTypeLabel(selected)}</small></article>
                 <article><span>Contato</span><strong>{selected.phone||'Telefone não informado'}</strong><small>{selected.email||'E-mail não informado'}</small></article>
                 <article><span>Endereço</span><strong>{[selected.address?.street,selected.address?.number].filter(Boolean).join(', ')||'Endereço não informado'}</strong><small>{[selected.address?.neighborhood,selected.address?.city,selected.address?.state].filter(Boolean).join(' · ')}</small></article>
-                <article><span>Relacionamentos</span><strong>{selected.role_keys.length?selected.role_keys.map(roleLabel).join(' · '):'Sem vínculos operacionais'}</strong><small>{selectedProperties.length} imóvel(is) · {selectedLeases.length} contrato(s)</small></article>
+                <article><span>Relacionamentos</span><strong>{selected.role_keys.length?selected.role_keys.map(roleLabel).join(' · '):'Sem vínculos operacionais'}</strong><small>{selected.role_keys.includes('owner')?'Proprietário de '+selectedProperties.length+' imóvel(is)':''}{selected.role_keys.includes('owner')&&selected.role_keys.includes('tenant')?' · ':''}{selected.role_keys.includes('tenant')?'Locatário em '+selectedLeases.filter(lease=>lease.tenants.some(tenant=>tenant.person_id===selected.id)&&!['cancelled','closed'].includes(lease.status)).length+' contrato(s)':''}</small></article>
               </div>
               <article className="client-notes-card"><span>Observações internas</span><p>{selected.notes||'Nenhuma observação cadastrada para este cliente.'}</p></article>
+              <section className="client-recent-activity">
+                <div className="client-tab-heading"><div><span className="eyebrow">Atividade recente</span><h3>Resumo operacional</h3></div></div>
+                <div className="client-activity-grid">
+                  <article><History size={14}/><div><span>Cadastro criado</span><strong>{new Date(selected.created_at).toLocaleString('pt-BR')}</strong></div></article>
+                  <article><Home size={14}/><div><span>Imóveis vinculados</span><strong>{selectedProperties.length?selectedProperties.length+' vínculo(s) ativo(s)':'Nenhum imóvel vinculado'}</strong></div></article>
+                  <article><FileText size={14}/><div><span>Contratos ativos</span><strong>{activeLeases.length?activeLeases.length+' contrato(s) em andamento':'Nenhum contrato ativo'}</strong></div></article>
+                  <article><Users size={14}/><div><span>Papéis atuais</span><strong>{selected.role_keys.map(roleLabel).join(' · ')||'Nenhum papel operacional'}</strong></div></article>
+                </div>
+              </section>
             </div>}
 
             {clientTab==='properties'&&<div className="client-tab-section"><div className="client-tab-heading"><div><span className="eyebrow">Patrimônio e vínculos</span><h3>Imóveis</h3></div><strong>{selectedProperties.length}</strong></div>{selectedProperties.length?<div className="client-entity-list">{selectedProperties.map(property=><article key={property.id}><div><span>{property.code}</span><strong>{property.public_title||propertyAddress(property)}</strong><small>{propertyAddress(property)}</small></div><div><strong>{money(property.rent_amount)}</strong><small>{property.status} · {property.publication_enabled?'Publicado':'Não publicado'}</small></div></article>)}</div>:<div className="client-tab-empty"><Home size={22}/>Nenhum imóvel vinculado a este cliente.</div>}</div>}
