@@ -1,4 +1,4 @@
-import { Archive, Building2, Camera, Check, CircleDollarSign, FileText, History, Home, Landmark, Mail, MapPin, Pencil, Phone, Plus, RotateCcw, Search, Trash2, UserRound, Users, X } from 'lucide-react'
+import { Archive, Building2, CalendarClock, Camera, Check, CircleDollarSign, FileText, History, Home, Landmark, Mail, MapPin, Pencil, Phone, Plus, RotateCcw, Search, TrendingUp, Trash2, UserRound, Users, WalletCards, X } from 'lucide-react'
 import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react'
 import { ApiError, apiBlobRequest, apiRequest } from '../../api/client'
 import type { Address, Person, PersonCreate, Property } from '../../api/types'
@@ -31,6 +31,22 @@ type ClientLease = {
   status:string; rent_amount:number; start_date:string; end_date:string
 }
 
+type ClientFinanceSummary = {
+  tenant:{total_charges:number;open_count:number;overdue_count:number;open_amount:number;overdue_amount:number;paid_amount:number}
+  owner:{property_count:number;total_repasses:number;pending_count:number;pending_amount:number;paid_amount:number}
+  charges:Array<{id:string;lease_contract_id:string;property_id:string;competence:string;due_date:string;status:string;gross_amount:number;paid_amount:number|null;paid_at:string|null;property_code:string}>
+  repasses:Array<{id:string;lease_contract_id:string;property_id:string;due_date:string;status:string;amount:number;paid_at:string|null}>
+}
+type ClientCommercialSummary = {
+  metrics:{leads:number;active:number;visits:number;proposals:number;won:number}
+  next_action:{title:string|null;at:string|null;notes:string|null;property_code:string}|null
+  inquiries:Array<{id:string;property_id:string|null;property_code:string;property_title:string;status:string;source:string;responsible_name:string|null;next_action_title:string|null;next_action_at:string|null;created_at:string;updated_at:string}>
+  visits:Array<{id:string;property_id:string|null;starts_at:string;status:string;notes:string|null}>
+  proposals:Array<{id:string;property_id:string|null;status:string;rent_amount:number;start_date:string;lease_contract_id:string|null;created_at:string}>
+  activities:Array<{id:string;title:string;notes:string|null;activity_type:string;created_at:string}>
+}
+type ClientHistoryEvent = {kind:string;title:string;detail:string|null;at:string}
+
 function bankHasData(value:BankForm){return Boolean(value.bank_name.trim()||value.bank_code.trim()||value.branch.trim()||value.account_number.trim()||value.account_digit.trim()||value.pix_key_type!=='none'||value.pix_key.trim()||value.account_holder_name.trim()||value.account_holder_document.trim())}
 function profileHasData(value:ProfileForm,personType:PersonCreate['person_type']){if(value.secondary_phone.trim())return true;if(personType==='company')return Boolean(value.trade_name.trim()||value.state_registration.trim()||value.municipal_registration.trim());return Boolean(value.identity_number.trim()||value.identity_issuer.trim()||value.birth_date||value.nationality.trim()||value.marital_status||value.occupation.trim())}
 function PersonPhoto({person,className}:{person:Person;className:string}){
@@ -55,6 +71,7 @@ export function PeopleWorkspacePage({ permissions }: { permissions: string[] }) 
   const [bank,setBank]=useState<BankForm>(emptyBank),[profile,setProfile]=useState<ProfileForm>(emptyProfile),[bankExists,setBankExists]=useState(false),[profileExists,setProfileExists]=useState(false)
   const [activeTab,setActiveTab]=useState<PersonTab>('main'),[detailsLoading,setDetailsLoading]=useState(false)
   const [selectedId,setSelectedId]=useState<string|null>(null),[clientTab,setClientTab]=useState<ClientTab>('overview'),[photoSaving,setPhotoSaving]=useState(false)
+  const [financeSummary,setFinanceSummary]=useState<ClientFinanceSummary|null>(null),[commercialSummary,setCommercialSummary]=useState<ClientCommercialSummary|null>(null),[historyEvents,setHistoryEvents]=useState<ClientHistoryEvent[]>([]),[insightsLoading,setInsightsLoading]=useState(false),[insightsLoadedKey,setInsightsLoadedKey]=useState('')
   const [error,setError]=useState(''),[success,setSuccess]=useState('')
   const load=useCallback(async()=>{setLoading(true);setError('');try{const [active,archived,props,leaseItems]=await Promise.all([apiRequest<Person[]>('/people'),apiRequest<Person[]>('/people/archived'),apiRequest<Property[]>('/properties'),apiRequest<ClientLease[]>('/lease-contracts')]);setItems([...active,...archived].sort((a,b)=>a.name.localeCompare(b.name)));setProperties(props);setLeases(leaseItems)}catch(cause){setError(cause instanceof ApiError?cause.detail:'Não foi possível carregar os clientes.')}finally{setLoading(false)}},[])
   useEffect(()=>{void load()},[load])
@@ -64,6 +81,24 @@ export function PeopleWorkspacePage({ permissions }: { permissions: string[] }) 
   const filtered=useMemo(()=>{const active=view==='active';const term=query.trim().toLowerCase();const base=items.filter(person=>{if(person.is_active!==active)return false;if(roleFilter!=='all'&&!person.role_keys.includes(roleFilter))return false;if(personTypeFilter!=='all'&&person.person_type!==personTypeFilter)return false;if(!term)return true;return (person.name+' '+(person.document_number??'')+' '+(person.email??'')+' '+(person.phone??'')).toLowerCase().includes(term)});return [...base].sort((a,b)=>peopleSort==='recent'?new Date(b.created_at).getTime()-new Date(a.created_at).getTime():a.name.localeCompare(b.name,'pt-BR'))},[items,query,view,roleFilter,personTypeFilter,peopleSort])
   useEffect(()=>{if(filtered.length===0){setSelectedId(null);return}if(!selectedId||!filtered.some(person=>person.id===selectedId))setSelectedId(filtered[0].id)},[filtered,selectedId])
   const selected=useMemo(()=>items.find(person=>person.id===selectedId)??null,[items,selectedId])
+  useEffect(()=>{
+    if(!selected)return
+    const key=`${selected.id}:${clientTab}`
+    if(insightsLoadedKey===key)return
+    if(clientTab==='finance'){
+      if(!permissions.includes('finance.view'))return
+      setInsightsLoading(true)
+      void apiRequest<ClientFinanceSummary>(`/people/${selected.id}/finance-summary`).then(data=>{setFinanceSummary(data);setInsightsLoadedKey(key)}).catch(cause=>setError(cause instanceof ApiError?cause.detail:'Não foi possível carregar o financeiro do cliente.')).finally(()=>setInsightsLoading(false))
+    }else if(clientTab==='commercial'){
+      if(!permissions.includes('crm.view'))return
+      setInsightsLoading(true)
+      void apiRequest<ClientCommercialSummary>(`/people/${selected.id}/commercial-summary`).then(data=>{setCommercialSummary(data);setInsightsLoadedKey(key)}).catch(cause=>setError(cause instanceof ApiError?cause.detail:'Não foi possível carregar o relacionamento comercial.')).finally(()=>setInsightsLoading(false))
+    }else if(clientTab==='history'){
+      setInsightsLoading(true)
+      void apiRequest<ClientHistoryEvent[]>(`/people/${selected.id}/history`).then(data=>{setHistoryEvents(data);setInsightsLoadedKey(key)}).catch(cause=>setError(cause instanceof ApiError?cause.detail:'Não foi possível carregar o histórico do cliente.')).finally(()=>setInsightsLoading(false))
+    }
+  },[selected,clientTab,permissions,insightsLoadedKey])
+
   const selectedProperties=useMemo(()=>selected?properties.filter(property=>property.owners.some(owner=>owner.person_id===selected.id)):[],[properties,selected])
   const selectedLeases=useMemo(()=>selected?leases.filter(lease=>lease.tenants.some(tenant=>tenant.person_id===selected.id)||selectedProperties.some(property=>property.id===lease.property_id)):[],[leases,selected,selectedProperties])
   const activeLeases=selectedLeases.filter(lease=>!['cancelled','closed'].includes(lease.status))
@@ -168,7 +203,7 @@ export function PeopleWorkspacePage({ permissions }: { permissions: string[] }) 
           {filtered.map(person=>{
             const personProps=properties.filter(property=>property.owners.some(owner=>owner.person_id===person.id))
             const personLeases=leases.filter(lease=>lease.tenants.some(tenant=>tenant.person_id===person.id)||personProps.some(property=>property.id===lease.property_id))
-            return <button type="button" key={person.id} className={'client-directory-row '+(selectedId===person.id?'active':'')} onClick={()=>{setSelectedId(person.id);setClientTab('overview')}}>
+            return <button type="button" key={person.id} className={'client-directory-row '+(selectedId===person.id?'active':'')} onClick={()=>{setSelectedId(person.id);setClientTab('overview');setInsightsLoadedKey('');setFinanceSummary(null);setCommercialSummary(null);setHistoryEvents([])}}>
               <PersonPhoto person={person} className="client-directory-avatar"/>
               <span className="client-directory-copy"><strong>{person.name}</strong><small>{person.document_number||'Documento não informado'} · {person.phone||'Sem telefone'}</small><span className="client-directory-roles">{person.role_keys.slice(0,3).map(role=><i key={role}>{roleLabel(role)}</i>)}</span><em>{personProps.length} imóvel(is) · {personLeases.filter(lease=>!['cancelled','closed'].includes(lease.status)).length} contrato(s) ativo(s)</em></span>
             </button>
@@ -238,10 +273,41 @@ export function PeopleWorkspacePage({ permissions }: { permissions: string[] }) 
 
             {clientTab==='contracts'&&<div className="client-tab-section"><div className="client-tab-heading"><div><span className="eyebrow">Relação contratual</span><h3>Contratos</h3></div><strong>{selectedLeases.length}</strong></div>{selectedLeases.length?<div className="client-entity-list">{selectedLeases.map(lease=><article key={lease.id}><div><span>{lease.code} · {lease.property_code}</span><strong>{[lease.property_address?.street,lease.property_address?.number].filter(Boolean).join(', ')||'Imóvel vinculado'}</strong><small>{lease.tenants.some(tenant=>tenant.person_id===selected.id)?'Locatário':'Proprietário'} · {lease.start_date?new Date(lease.start_date+'T12:00:00').toLocaleDateString('pt-BR'):'—'} até {lease.end_date?new Date(lease.end_date+'T12:00:00').toLocaleDateString('pt-BR'):'—'}</small></div><div><strong>{money(lease.rent_amount)}</strong><i className={'status-badge '+(['signed','approved'].includes(lease.status)?'success':['cancelled'].includes(lease.status)?'danger':'neutral')}>{leaseStatus(lease.status)}</i></div></article>)}</div>:<div className="client-tab-empty"><FileText size={22}/>Nenhum contrato vinculado a este cliente.</div>}</div>}
 
-            {clientTab==='finance'&&<div className="client-tab-empty client-tab-coming"><CircleDollarSign size={24}/><strong>Visão financeira do cliente</strong><span>Esta aba receberá cobranças, recebimentos, repasses e pendências vinculadas ao cadastro.</span></div>}
-            {clientTab==='commercial'&&<div className="client-tab-empty client-tab-coming"><Users size={24}/><strong>Relacionamento comercial</strong><span>Leads, visitas, propostas e próximos contatos serão consolidados aqui.</span></div>}
+            {clientTab==='finance'&&(permissions.includes('finance.view')?
+              <div className="client-tab-section client-insights-tab">
+                <div className="client-tab-heading"><div><span className="eyebrow">Movimentação financeira</span><h3>Financeiro do cliente</h3></div><CircleDollarSign size={20}/></div>
+                {insightsLoading&&!financeSummary?<div className="client-tab-empty">Carregando financeiro...</div>:financeSummary&&<>
+                  <div className="client-insight-metrics">
+                    <article><span>Em aberto</span><strong>{money(financeSummary.tenant.open_amount)}</strong><small>{financeSummary.tenant.open_count} cobrança(s)</small></article>
+                    <article className={financeSummary.tenant.overdue_count?'attention':''}><span>Em atraso</span><strong>{money(financeSummary.tenant.overdue_amount)}</strong><small>{financeSummary.tenant.overdue_count} vencida(s)</small></article>
+                    <article><span>Recebido</span><strong>{money(financeSummary.tenant.paid_amount)}</strong><small>aluguéis liquidados</small></article>
+                    <article><span>Repasses pendentes</span><strong>{money(financeSummary.owner.pending_amount)}</strong><small>{financeSummary.owner.pending_count} repasse(s)</small></article>
+                  </div>
+                  <div className="client-insight-columns">
+                    <section><div className="client-insight-title"><WalletCards size={15}/><div><strong>Cobranças como locatário</strong><span>{financeSummary.tenant.total_charges} lançamento(s)</span></div></div>{financeSummary.charges.length?<div className="client-compact-list">{financeSummary.charges.slice(0,10).map(row=><article key={row.id}><div><strong>{row.property_code?`Imóvel #${row.property_code}`:'Locação'}</strong><small>Venc. {new Date(row.due_date+'T12:00:00').toLocaleDateString('pt-BR')} · competência {new Date(row.competence+'T12:00:00').toLocaleDateString('pt-BR',{month:'2-digit',year:'numeric'})}</small></div><div><strong>{money(row.gross_amount)}</strong><i className={'status-badge '+(row.status==='paid'?'success':new Date(row.due_date+'T23:59:59')<new Date()?'danger':'neutral')}>{row.status==='paid'?'Pago':row.status==='cancelled'?'Cancelado':'Aberto'}</i></div></article>)}</div>:<div className="client-mini-empty">Nenhuma cobrança vinculada.</div>}</section>
+                    <section><div className="client-insight-title"><Landmark size={15}/><div><strong>Repasses como proprietário</strong><span>{financeSummary.owner.total_repasses} lançamento(s)</span></div></div>{financeSummary.repasses.length?<div className="client-compact-list">{financeSummary.repasses.slice(0,10).map(row=><article key={row.id}><div><strong>Repasse</strong><small>Previsto para {new Date(row.due_date+'T12:00:00').toLocaleDateString('pt-BR')}</small></div><div><strong>{money(row.amount)}</strong><i className={'status-badge '+(row.status==='paid'?'success':'neutral')}>{row.status==='paid'?'Pago':'Pendente'}</i></div></article>)}</div>:<div className="client-mini-empty">Nenhum repasse vinculado.</div>}</section>
+                  </div>
+                </>}
+              </div>:<div className="client-tab-empty">Sem permissão para visualizar dados financeiros.</div>)}
+            {clientTab==='commercial'&&(permissions.includes('crm.view')?
+              <div className="client-tab-section client-insights-tab">
+                <div className="client-tab-heading"><div><span className="eyebrow">Relacionamento</span><h3>Comercial</h3></div><TrendingUp size={20}/></div>
+                {insightsLoading&&!commercialSummary?<div className="client-tab-empty">Carregando relacionamento comercial...</div>:commercialSummary&&<>
+                  <div className="client-insight-metrics">
+                    <article><span>Leads</span><strong>{commercialSummary.metrics.leads}</strong><small>{commercialSummary.metrics.active} ativo(s)</small></article>
+                    <article><span>Visitas</span><strong>{commercialSummary.metrics.visits}</strong><small>agendadas/realizadas</small></article>
+                    <article><span>Propostas</span><strong>{commercialSummary.metrics.proposals}</strong><small>histórico comercial</small></article>
+                    <article><span>Fechamentos</span><strong>{commercialSummary.metrics.won}</strong><small>negócio(s) ganho(s)</small></article>
+                  </div>
+                  {commercialSummary.next_action&&<div className="client-next-action"><CalendarClock size={17}/><div><span>Próxima atividade</span><strong>{commercialSummary.next_action.title||'Atividade comercial'}</strong><small>{commercialSummary.next_action.at?new Date(commercialSummary.next_action.at).toLocaleString('pt-BR'):'Sem data'} · imóvel #{commercialSummary.next_action.property_code}</small></div></div>}
+                  <div className="client-insight-columns">
+                    <section><div className="client-insight-title"><Users size={15}/><div><strong>Atendimentos</strong><span>{commercialSummary.inquiries.length} lead(s)</span></div></div>{commercialSummary.inquiries.length?<div className="client-compact-list">{commercialSummary.inquiries.slice(0,12).map(row=><article key={row.id}><div><strong>#{row.property_code} · {row.property_title}</strong><small>{row.responsible_name||'Sem responsável'}{row.next_action_title?` · próxima: ${row.next_action_title}`:''}</small></div><div><i className={'status-badge '+(row.status==='won'?'success':row.status==='lost'?'danger':'neutral')}>{({new:'Novo',contacted:'Contato',visit_scheduled:'Visita',qualified:'Qualificado',proposal:'Proposta',converted:'Contrato',won:'Fechado',lost:'Perdido'} as Record<string,string>)[row.status]||row.status}</i></div></article>)}</div>:<div className="client-mini-empty">Nenhum atendimento comercial vinculado.</div>}</section>
+                    <section><div className="client-insight-title"><FileText size={15}/><div><strong>Propostas recentes</strong><span>{commercialSummary.proposals.length} proposta(s)</span></div></div>{commercialSummary.proposals.length?<div className="client-compact-list">{commercialSummary.proposals.slice(0,10).map(row=><article key={row.id}><div><strong>{money(row.rent_amount)}</strong><small>Início {new Date(row.start_date+'T12:00:00').toLocaleDateString('pt-BR')}</small></div><div><i className={'status-badge '+(['accepted','converted','won'].includes(row.status)?'success':['rejected','withdrawn'].includes(row.status)?'danger':'neutral')}>{row.status}</i></div></article>)}</div>:<div className="client-mini-empty">Nenhuma proposta vinculada.</div>}</section>
+                  </div>
+                </>}
+              </div>:<div className="client-tab-empty">Sem permissão para visualizar o CRM.</div>)}
             {clientTab==='documents'&&(permissions.includes('documents.view')?<EntityDocumentsPanel entityType="person" entityId={selected.id} entityLabel={selected.name} permissions={permissions} compact/>:<div className="client-tab-empty">Sem permissão para visualizar documentos.</div>)}
-            {clientTab==='history'&&<div className="client-history"><div><History size={15}/><span>Cadastro criado</span><strong>{new Date(selected.created_at).toLocaleString('pt-BR')}</strong></div><div><Check size={15}/><span>Situação atual</span><strong>{selected.is_active?'Cadastro ativo':'Cadastro arquivado'}</strong></div><div><Users size={15}/><span>Vínculos atuais</span><strong>{selected.role_keys.map(roleLabel).join(' · ')||'Nenhum'}</strong></div></div>}
+            {clientTab==='history'&&<div className="client-tab-section client-insights-tab"><div className="client-tab-heading"><div><span className="eyebrow">Rastreabilidade</span><h3>Histórico do cliente</h3></div><History size={20}/></div>{insightsLoading&&!historyEvents.length?<div className="client-tab-empty">Carregando histórico...</div>:historyEvents.length?<div className="client-timeline-real">{historyEvents.map((event,index)=><article key={event.kind+'-'+event.at+'-'+index}><span className="client-timeline-dot"/><div><strong>{event.title}</strong>{event.detail&&<small>{event.detail}</small>}</div><time>{new Date(event.at).toLocaleString('pt-BR')}</time></article>)}</div>:<div className="client-tab-empty">Nenhuma movimentação registrada.</div>}</div>}
           </div>
         </>}
       </main>
