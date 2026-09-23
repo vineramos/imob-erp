@@ -46,6 +46,8 @@ def _person_response(person: Person) -> PersonResponse:
         phone=person.phone,
         address=person.address,
         notes=person.notes,
+        billing_legal_name=person.billing_legal_name,
+        billing_document_number=person.billing_document_number,
         is_active=person.is_active,
         role_keys=sorted(role.role_key for role in person.roles if role.is_active),
         created_at=person.created_at,
@@ -183,6 +185,8 @@ def create_person(
         phone=(payload.phone or "").strip() or None,
         address=payload.address.model_dump(),
         notes=(payload.notes or "").strip() or None,
+        billing_legal_name=(payload.billing_legal_name or "").strip() or None,
+        billing_document_number=(payload.billing_document_number or "").strip() or None,
         created_by_user_id=context.user.id,
     )
     person.roles = [PersonRole(role_key=key, is_active=True) for key in sorted(set(payload.role_keys))]
@@ -249,6 +253,8 @@ def update_person(
     person.phone = (payload.phone or "").strip() or None
     person.address = payload.address.model_dump()
     person.notes = (payload.notes or "").strip() or None
+    person.billing_legal_name = (payload.billing_legal_name or "").strip() or None
+    person.billing_document_number = (payload.billing_document_number or "").strip() or None
 
     try:
         db.flush()
