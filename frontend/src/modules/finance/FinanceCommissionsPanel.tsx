@@ -1,5 +1,5 @@
 import { CheckCircle2, ChevronLeft, ChevronRight, Download, Eye, FileCheck2, Percent, Plus, RefreshCw, Search, Settings2, UserRoundPlus, X, XCircle } from 'lucide-react'
-import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react'
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ApiError, apiBlobRequest, apiRequest } from '../../api/client'
 import type { Person } from '../../api/types'
 import { BrokerCreateModal } from '../properties/BrokerCreateModal'
@@ -25,29 +25,76 @@ export function FinanceCommissionsPanel({permissions}:{permissions:string[]}){
  const [selectedId,setSelectedId]=useState<string|null>(null)
  const [loading,setLoading]=useState(true)
  const competence=`${month}-01`
- const load=useCallback(async()=>{setLoading(true);setError('');try{
-   if(canPrepare){const now=new Date();const previous=new Date(now.getFullYear(),now.getMonth()-1,1);const previousCompetence=`${previous.getFullYear()}-${String(previous.getMonth()+1).padStart(2,'0')}-01`;await apiRequest(`/finance/advanced/commissions/batches/ensure?competence=${previousCompetence}`,{method:'POST'}).catch(()=>undefined)}
-   const [r,e,b,p1,p2]=await Promise.all([apiRequest<Rule[]>('/finance/advanced/commissions/rules'),apiRequest<Entry[]>(`/finance/advanced/commissions?competence=${competence}`),apiRequest<Batch[]>('/finance/advanced/commissions/batches'),apiRequest<Person[]>('/people?role=broker'),apiRequest<Person[]>('/people?role=referrer')]);setRules(r);setEntries(e);setBatches(b);const map=new Map([...p1,...p2].map(p=>[p.id,p]));const persons=[...map.values()];setPeople(persons);setPersonId(current=>persons.some(p=>p.id===current)?current:persons[0]?.id||'')}catch(cause){setError(cause instanceof ApiError?cause.detail:'Não foi possível carregar as comissões.')}finally{setLoading(false)}},[competence,canPrepare])
- useEffect(()=>{void load()},[load])
+ // One initial month-close synchronization; never re-run a write on filter changes or manual refresh.
+ const ensured=useRef(false)
+ const requestId=useRef(0)
+ const peopleRequestId=useRef(0)
+ const rulesCache=useRef<Rule[]|null>(null)
+ const [peopleLoading,setPeopleLoading]=useState(false)
+ useEffect(()=>{
+   if(!canPrepare||ensured.current)return
+   ensured.current=true
+   const now=new Date(),previous=new Date(now.getFullYear(),now.getMonth()-1,1)
+   const previousCompetence=`${previous.getFullYear()}-${String(previous.getMonth()+1).padStart(2,'0')}-01`
+   void apiRequest(`/finance/advanced/commissions/batches/ensure?competence=${previousCompetence}`,{method:'POST'}).catch(()=>undefined)
+ },[canPrepare])
+ const load=useCallback(async()=>{
+   const id=++requestId.current
+   setLoading(true);setError('')
+   try{
+     const [r,e,b]=await Promise.all([
+       rulesCache.current?Promise.resolve(rulesCache.current):apiRequest<Rule[]>('/finance/advanced/commissions/rules'),
+       apiRequest<Entry[]>(`/finance/advanced/commissions?competence=${competence}`),
+       apiRequest<Batch[]>(`/finance/advanced/commissions/batches?competence=${competence}`),
+     ])
+     if(id!==requestId.current)return
+     rulesCache.current=r;setRules(r);setEntries(e);setBatches(b)
+   }catch(cause){
+     if(id===requestId.current)setError(cause instanceof ApiError?cause.detail:'Não foi possível carregar as comissões.')
+   }finally{
+     if(id===requestId.current)setLoading(false)
+   }
+ },[competence])
+ useEffect(()=>{void load();return()=>{requestId.current+=1}},[load])
+ async function loadPeople(){
+   const id=++peopleRequestId.current
+   setPeopleLoading(true);setModalError('')
+   try{
+     const [brokers,referrers]=await Promise.all([
+       apiRequest<Person[]>('/people?role=broker'),
+       apiRequest<Person[]>('/people?role=referrer'),
+     ])
+     if(id!==peopleRequestId.current)return
+     const persons=[...new Map([...brokers,...referrers].map(person=>[person.id,person])).values()]
+     setPeople(persons)
+     setPersonId(current=>persons.some(person=>person.id===current)?current:persons[0]?.id||'')
+   }catch(cause){
+     if(id===peopleRequestId.current)setModalError(cause instanceof ApiError?cause.detail:'Não foi possível carregar os beneficiários.')
+   }finally{
+     if(id===peopleRequestId.current)setPeopleLoading(false)
+   }
+ }
+ function openRuleModal(){setModalError('');setOpen(true);void loadPeople()}
+
  useEffect(()=>{if(!open)return;const close=(event:KeyboardEvent)=>{if(event.key==='Escape'&&!saving)setOpen(false)};window.addEventListener('keydown',close);return()=>window.removeEventListener('keydown',close)},[open,saving])
- async function createRule(ev:FormEvent){ev.preventDefault();if(!personId)return;setSaving(true);setModalError('');try{await apiRequest('/finance/advanced/commissions/rules',{method:'POST',body:JSON.stringify({name,event_type:eventType,basis,calculation_type:calc,value:Number(value.replace(',','.')),beneficiary_type:beneficiaryType,beneficiary_person_id:personId,property_id:null,lease_contract_id:null,due_days:Number(dueDays)||0,priority:100,notes:null})});setOpen(false);setSuccess('Regra de comissão criada.');await load()}catch(cause){setModalError(cause instanceof ApiError?cause.detail:'Não foi possível criar a regra.')}finally{setSaving(false)}}
+ async function createRule(ev:FormEvent){ev.preventDefault();if(!personId)return;setSaving(true);setModalError('');try{await apiRequest('/finance/advanced/commissions/rules',{method:'POST',body:JSON.stringify({name,event_type:eventType,basis,calculation_type:calc,value:Number(value.replace(',','.')),beneficiary_type:beneficiaryType,beneficiary_person_id:personId,property_id:null,lease_contract_id:null,due_days:Number(dueDays)||0,priority:100,notes:null})});setOpen(false);setSuccess('Regra de comissão criada.');rulesCache.current=null;await load()}catch(cause){setModalError(cause instanceof ApiError?cause.detail:'Não foi possível criar a regra.')}finally{setSaving(false)}}
  async function generate(){const [y,m]=month.split('-').map(Number);const end=new Date(y,m,0).toISOString().slice(0,10);setSaving(true);setError('');try{const created=await apiRequest<Entry[]>(`/finance/advanced/commissions/generate?start_date=${month}-01&end_date=${end}`,{method:'POST'});setSuccess(`${created.length} comissão(ões) gerada(s).`);await load()}catch(cause){setError(cause instanceof ApiError?cause.detail:'Não foi possível gerar comissões.')}finally{setSaving(false)}}
  async function action(entry:Entry,type:'approve'|'cancel'){setSaving(true);setError('');try{await apiRequest(`/finance/advanced/commissions/${entry.id}/${type}`,{method:'POST'});await load()}catch(cause){setError(cause instanceof ApiError?cause.detail:'Não foi possível atualizar a comissão.')}finally{setSaving(false)}}
  async function batchAction(batch:Batch,type:'approve'|'return'){setSaving(true);setError('');try{if(type==='return'){const reason=window.prompt('Motivo da devolução para correção:')?.trim();if(!reason)return;await apiRequest(`/finance/advanced/commissions/batches/${batch.id}/return?reason=${encodeURIComponent(reason)}`,{method:'POST'})}else await apiRequest(`/finance/advanced/commissions/batches/${batch.id}/approve`,{method:'POST'});await load()}catch(cause){setError(cause instanceof ApiError?cause.detail:'Não foi possível atualizar o lote.')}finally{setSaving(false)}}
  async function downloadInvoice(batch:Batch){try{const blob=await apiBlobRequest(`/finance/advanced/commissions/batches/${batch.id}/invoice`);const url=URL.createObjectURL(blob);window.open(url,'_blank','noopener,noreferrer');setTimeout(()=>URL.revokeObjectURL(url),30000)}catch(cause){setError(cause instanceof ApiError?cause.detail:'Não foi possível abrir a Nota Fiscal.')}}
  const batchStatusLabel:Record<string,string>={report_released:'Relatório liberado',report_issued:'Relatório emitido',awaiting_finance_approval:'Aguardando aprovação financeira',returned:'Devolvido para correção',scheduled:'Programado para pagamento',paid:'Pago',cancelled:'Cancelado'}
  const batchStatusClass=(status:string)=>status==='paid'?'success':status==='scheduled'?'warning':status==='awaiting_finance_approval'?'warning':status==='returned'?'danger':'neutral'
- function brokerCreated(person:Person){setPersonId(person.id);setSuccess(`${person.name} cadastrado como corretor.`);void load()}
+ function brokerCreated(person:Person){setPersonId(person.id);setSuccess(`${person.name} cadastrado como corretor.`);if(open)void loadPeople()}
  const pending=entries.filter(e=>!['paid','cancelled'].includes(e.status)),total=pending.reduce((s,e)=>s+Number(e.amount||0),0),paid=entries.filter(e=>e.status==='paid').reduce((s,e)=>s+Number(e.amount||0),0)
  const normalized=query.trim().toLocaleLowerCase('pt-BR')
- const currentBatches=useMemo(()=>batches.filter(b=>b.competence.slice(0,7)===month),[batches,month])
+ const currentBatches=batches
  const visibleEntries=useMemo(()=>entries.filter(e=>!normalized||[e.code,e.source_code,e.beneficiary_name].join(' ').toLocaleLowerCase('pt-BR').includes(normalized)),[entries,normalized])
  const visibleBatches=useMemo(()=>currentBatches.filter(b=>!normalized||[b.code,b.beneficiary_name,b.broker_legal_name||''].join(' ').toLocaleLowerCase('pt-BR').includes(normalized)),[currentBatches,normalized])
  const visibleRules=useMemo(()=>rules.filter(r=>!normalized||[r.code,r.name,r.beneficiary_name].join(' ').toLocaleLowerCase('pt-BR').includes(normalized)),[rules,normalized])
  const activeEntry=visibleEntries.find(e=>e.id===selectedId)||visibleEntries[0]||null
  const activeBatch=visibleBatches.find(b=>b.id===selectedId)||visibleBatches[0]||null
  const activeRule=visibleRules.find(r=>r.id===selectedId)||visibleRules[0]||null
- return <section className="workspace finance-advanced-workspace commissions-workspace"><div className="page-heading finance-heading"><div><span className="eyebrow">Financeiro · Comissões</span><h1>Comissões parametrizáveis</h1><p>Regras por evento e base de cálculo, gerando obrigação operacional rastreável no financeiro.</p></div><div className="heading-actions"><button className="icon-button" type="button" onClick={()=>setMonth(current=>shiftMonth(current,-1))} aria-label="Competência anterior" title="Competência anterior"><ChevronLeft size={16}/></button><input className="finance-compact-input" type="month" value={month} onChange={e=>setMonth(e.target.value)}/><button className="icon-button" type="button" onClick={()=>setMonth(current=>shiftMonth(current,1))} aria-label="Próxima competência" title="Próxima competência"><ChevronRight size={16}/></button><button className="button secondary" onClick={()=>void load()}><RefreshCw size={14}/> Atualizar</button><button className="button secondary" type="button" onClick={()=>setDemoOpen(true)}><Eye size={14}/> Prévia visual</button>{canCreateBroker&&<button className="button secondary" onClick={()=>setBrokerOpen(true)}><UserRoundPlus size={14}/> Novo corretor</button>}{canPrepare&&<button className="button secondary" onClick={()=>void generate()} disabled={saving}><Percent size={14}/> Gerar período</button>}{canPrepare&&<button className="button primary" onClick={()=>{setModalError('');setOpen(true)}}><Plus size={14}/> Nova regra</button>}</div></div>{error&&<div className="form-alert danger-alert">{error}</div>}{success&&<div className="form-alert success-alert">{success}</div>}
+ return <section className="workspace finance-advanced-workspace commissions-workspace"><div className="page-heading finance-heading"><div><span className="eyebrow">Financeiro · Comissões</span><h1>Comissões parametrizáveis</h1><p>Regras por evento e base de cálculo, gerando obrigação operacional rastreável no financeiro.</p></div><div className="heading-actions"><button className="icon-button" type="button" onClick={()=>setMonth(current=>shiftMonth(current,-1))} aria-label="Competência anterior" title="Competência anterior"><ChevronLeft size={16}/></button><input className="finance-compact-input" type="month" value={month} onChange={e=>setMonth(e.target.value)}/><button className="icon-button" type="button" onClick={()=>setMonth(current=>shiftMonth(current,1))} aria-label="Próxima competência" title="Próxima competência"><ChevronRight size={16}/></button><button className="button secondary" onClick={()=>void load()}><RefreshCw size={14}/> Atualizar</button><button className="button secondary" type="button" onClick={()=>setDemoOpen(true)}><Eye size={14}/> Prévia visual</button>{canCreateBroker&&<button className="button secondary" onClick={()=>setBrokerOpen(true)}><UserRoundPlus size={14}/> Novo corretor</button>}{canPrepare&&<button className="button secondary" onClick={()=>void generate()} disabled={saving}><Percent size={14}/> Gerar período</button>}{canPrepare&&<button className="button primary" onClick={openRuleModal}><Plus size={14}/> Nova regra</button>}</div></div>{error&&<div className="form-alert danger-alert">{error}</div>}{success&&<div className="form-alert success-alert">{success}</div>}
  <div className="finance-advanced-metrics"><article className="panel"><span>Regras ativas</span><strong>{rules.filter(r=>r.is_active).length}</strong><small>{rules.length} cadastrada(s)</small></article><article className="panel"><span>A pagar</span><strong>{money(total)}</strong><small>{pending.length} comissão(ões)</small></article><article className="panel metric-positive"><span>Pagas no mês</span><strong>{money(paid)}</strong><small>Baixa vinculada ao financeiro</small></article></div>
 
  <div className="commission-view-tabs" role="group" aria-label="Fluxo de comissões">
@@ -92,7 +139,7 @@ export function FinanceCommissionsPanel({permissions}:{permissions:string[]}){
    </>:<div className="commission-empty">Selecione um registro para visualizar a ficha.</div>}
   </section>
  </div>
- {open&&<div className="portfolio-modal-backdrop" onMouseDown={e=>{if(e.currentTarget===e.target&&!saving)setOpen(false)}}><form className="panel portfolio-modal commission-rule-modal" onSubmit={createRule} role="dialog" aria-modal="true"><div className="portfolio-modal-header"><div><span className="eyebrow">Regra de comissão</span><h2>Nova regra</h2><p>A regra pode ser alterada depois sem perder a rastreabilidade das entradas já geradas.</p></div><button className="portfolio-modal-close" type="button" aria-label="Fechar" disabled={saving} onClick={()=>setOpen(false)}><X size={17}/></button></div><div className="commission-rule-body">{modalError&&<div className="form-alert danger-alert" role="alert">{modalError}</div>}<label className="field"><span>Nome</span><input value={name} onChange={e=>setName(e.target.value)} required/></label><div className="form-grid two-columns"><label className="field"><span>Evento</span><select value={eventType} onChange={e=>setEventType(e.target.value)}><option value="first_rent">Primeiro aluguel</option><option value="recurring">Recorrente</option><option value="intermediation">Intermediação</option></select></label><label className="field"><span>Base</span><select value={basis} onChange={e=>setBasis(e.target.value)}><option value="agency_revenue">Receita da imobiliária</option><option value="rent">Aluguel</option><option value="administration_fee">Taxa de administração</option><option value="intermediation_fee">Intermediação</option></select></label><label className="field"><span>Cálculo</span><select value={calc} onChange={e=>setCalc(e.target.value)}><option value="percent">Percentual</option><option value="fixed">Valor fixo</option></select></label><label className="field"><span>{calc==='percent'?'Percentual (%)':'Valor (R$)'}</span><input inputMode="decimal" value={value} onChange={e=>setValue(e.target.value)} required/></label><label className="field"><span>Tipo</span><select value={beneficiaryType} onChange={e=>setBeneficiaryType(e.target.value)}><option value="broker">Corretor</option><option value="referrer">Angariador</option><option value="other">Outro</option></select></label><label className="field"><span>Beneficiário</span><select value={personId} onChange={e=>setPersonId(e.target.value)} required><option value="">Selecione...</option>{people.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></label><label className="field"><span>Vencimento após recebimento</span><input type="number" min="0" max="180" value={dueDays} onChange={e=>setDueDays(e.target.value)}/></label></div></div><div className="canonical-modal-actions"><button className="button secondary" type="button" onClick={()=>setOpen(false)}>Cancelar</button><button className="button primary" disabled={saving}>{saving?'Salvando...':'Salvar regra'}</button></div></form></div>}
+ {open&&<div className="portfolio-modal-backdrop" onMouseDown={e=>{if(e.currentTarget===e.target&&!saving)setOpen(false)}}><form className="panel portfolio-modal commission-rule-modal" onSubmit={createRule} role="dialog" aria-modal="true"><div className="portfolio-modal-header"><div><span className="eyebrow">Regra de comissão</span><h2>Nova regra</h2><p>A regra pode ser alterada depois sem perder a rastreabilidade das entradas já geradas.</p></div><button className="portfolio-modal-close" type="button" aria-label="Fechar" disabled={saving} onClick={()=>setOpen(false)}><X size={17}/></button></div><div className="commission-rule-body">{modalError&&<div className="form-alert danger-alert" role="alert">{modalError}</div>}<label className="field"><span>Nome</span><input value={name} onChange={e=>setName(e.target.value)} required/></label><div className="form-grid two-columns"><label className="field"><span>Evento</span><select value={eventType} onChange={e=>setEventType(e.target.value)}><option value="first_rent">Primeiro aluguel</option><option value="recurring">Recorrente</option><option value="intermediation">Intermediação</option></select></label><label className="field"><span>Base</span><select value={basis} onChange={e=>setBasis(e.target.value)}><option value="agency_revenue">Receita da imobiliária</option><option value="rent">Aluguel</option><option value="administration_fee">Taxa de administração</option><option value="intermediation_fee">Intermediação</option></select></label><label className="field"><span>Cálculo</span><select value={calc} onChange={e=>setCalc(e.target.value)}><option value="percent">Percentual</option><option value="fixed">Valor fixo</option></select></label><label className="field"><span>{calc==='percent'?'Percentual (%)':'Valor (R$)'}</span><input inputMode="decimal" value={value} onChange={e=>setValue(e.target.value)} required/></label><label className="field"><span>Tipo</span><select value={beneficiaryType} onChange={e=>setBeneficiaryType(e.target.value)}><option value="broker">Corretor</option><option value="referrer">Angariador</option><option value="other">Outro</option></select></label><label className="field"><span>Beneficiário</span><select value={personId} onChange={e=>setPersonId(e.target.value)} required><option value="">{peopleLoading?'Carregando beneficiários...':'Selecione...'}</option>{people.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></label><label className="field"><span>Vencimento após recebimento</span><input type="number" min="0" max="180" value={dueDays} onChange={e=>setDueDays(e.target.value)}/></label></div></div><div className="canonical-modal-actions"><button className="button secondary" type="button" onClick={()=>setOpen(false)}>Cancelar</button><button className="button primary" disabled={saving||peopleLoading||!personId}>{saving?'Salvando...':'Salvar regra'}</button></div></form></div>}
  <BrokerCreateModal open={brokerOpen} onClose={()=>setBrokerOpen(false)} onCreated={brokerCreated}/><CommissionFlowDemo open={demoOpen} onClose={()=>setDemoOpen(false)}/>
  </section>
 }
