@@ -1219,3 +1219,46 @@
     border-radius: 14px 14px 0 0;
   }
 }
+
+/* Person photos reused in property relationships */
+.property-detail-v81 .property-person-link{
+  grid-template-columns:30px minmax(0,1fr) auto auto;
+}
+.property-relation-avatar,
+.property-broker-picker-avatar{
+  width:28px;
+  height:28px;
+  border-radius:8px;
+  display:grid;
+  place-items:center;
+  overflow:hidden;
+  object-fit:cover;
+  background:var(--surface-muted);
+  color:var(--brand-primary);
+  font-size:7px;
+  font-weight:800;
+  flex:0 0 auto;
+}
+img.property-relation-avatar,
+img.property-broker-picker-avatar{display:block;object-fit:cover}
+.property-detail-v81 .property-broker-link.assigned{
+  grid-template-columns:30px minmax(0,1fr);
+  align-items:center;
+  column-gap:8px;
+}
+.property-detail-v81 .property-broker-link>span{
+  min-width:0;
+  display:grid;
+  gap:3px;
+}
+.property-broker-picker-list .property-broker-picker-avatar{
+  width:34px;
+  height:34px;
+  border-radius:9px;
+}
+@media(max-width:520px){
+  .property-detail-v81 .property-person-link{
+    grid-template-columns:28px minmax(0,1fr) auto;
+  }
+  .property-detail-v81 .property-person-link>svg{display:none}
+}
