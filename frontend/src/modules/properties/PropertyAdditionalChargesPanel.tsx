@@ -56,8 +56,7 @@ export function PropertyAdditionalChargesPanel({property,canEdit,onUpdated,hasSi
  {hasSignedLease&&<p className="property-charge-notice">Contratos já assinados não são alterados automaticamente. Confira a composição da locação antes de gerar novas cobranças.</p>}
  {!rows.length&&!editing&&<p className="property-charge-notice">Nenhum encargo adicional cadastrado.</p>}
  <div className="property-charge-list">{rows.map(row=><article key={row.key} className={'property-charge-item'+(invalidKeys.includes(row.key)?' property-charge-item-invalid':'')}>
-  <div className="property-charge-item-head"><strong>{row.label||kinds[row.kind]}</strong>{editing?<button type="button" className="button secondary" disabled={busy} onClick={()=>setRows(old=>old.filter(item=>item.key!==row.key))}><Trash2 size={14}/> Remover</button>:<strong>{price(parseDecimal(row.amount)??0)}</strong>}</div>
-  {editing?<><div className="property-charge-fieldgrid">
+  {editing?<><div className="property-charge-item-head"><strong>{row.label||kinds[row.kind]}</strong><button type="button" className="button secondary" disabled={busy} onClick={()=>setRows(old=>old.filter(item=>item.key!==row.key))}><Trash2 size={14}/> Remover</button></div><div className="property-charge-fieldgrid">
    <label>Tipo<select value={row.kind} onChange={e=>{const kind=e.target.value as Charge['kind'];patch(row.key,{kind,label:row.label===kinds[row.kind]?kinds[kind]:row.label,frequency:kind==='fire_insurance'?'annual':row.frequency,agency_retention_type:'none',agency_retention_value:0})}}>{Object.entries(kinds).map(([key,label])=><option key={key} value={key}>{label}</option>)}</select></label>
    <label>Descrição<input maxLength={120} value={row.label} onChange={e=>patch(row.key,{label:e.target.value})}/></label>
    <label>Valor (R$)<input type="text" inputMode="decimal" placeholder="100,00" aria-invalid={invalidKeys.includes(row.key)&&parseDecimal(row.amount)===null} value={row.amount} onChange={e=>patch(row.key,{amount:e.target.value})}/></label>
@@ -68,7 +67,15 @@ export function PropertyAdditionalChargesPanel({property,canEdit,onUpdated,hasSi
    <label>Retenção da imobiliária<select value={row.agency_retention_type} onChange={e=>patch(row.key,{agency_retention_type:e.target.value as Charge['agency_retention_type'],agency_retention_value:0})}><option value="none">Não há</option>{row.kind!=='other'&&row.beneficiary==='third_party'&&<><option value="percent">Percentual (%)</option><option value="fixed">Valor fixo (R$)</option></>}</select></label>
    {row.agency_retention_type!=='none'&&<label>Valor de retenção<input type="text" inputMode="decimal" placeholder="0,00" aria-invalid={invalidKeys.includes(row.key)&&parseDecimal(row.agency_retention_value)===null} value={row.agency_retention_value} onChange={e=>patch(row.key,{agency_retention_value:e.target.value})}/></label>}
   </div>{invalidKeys.includes(row.key)&&<p className="property-charge-error">Verifique a descrição e os valores deste encargo.</p>}<div className="property-charge-choices"><label><input type="checkbox" checked={row.active} onChange={e=>patch(row.key,{active:e.target.checked})}/> Ativo</label><label><input type="checkbox" checked={row.include_in_invoice} onChange={e=>patch(row.key,{include_in_invoice:e.target.checked})}/> Incluir na cobrança</label></div></>:
-  <div className="property-charge-choices"><span>{row.frequency==='monthly'?'Mensal':row.frequency==='annual'?'Anual':'Única'}</span><span>{row.active?'Ativo':'Inativo'}</span><span>{row.include_in_invoice?'Incluído na cobrança':'Fora da cobrança'}</span></div>}
+  <div className="property-charge-row">
+    <strong className="property-charge-row-title">{row.label||kinds[row.kind]}</strong>
+    <div className="property-charge-row-meta" aria-label="Configuração do encargo">
+      <span className="property-charge-tag">{row.frequency==='monthly'?'Mensal':row.frequency==='annual'?'Anual':'Única'}</span>
+      <span className={'property-charge-tag'+(row.active?' is-active':' is-inactive')}>{row.active?'Ativo':'Inativo'}</span>
+      <span className="property-charge-row-billing">{row.include_in_invoice?'Incluído na cobrança':'Fora da cobrança'}</span>
+    </div>
+    <strong className="property-charge-row-value">{price(parseDecimal(row.amount)??0)}</strong>
+  </div>}
  </article>)}</div>
  {editing&&<div className="property-charge-actions">
   {(['fire_insurance','guarantee_insurance','other'] as const).map(kind=><button key={kind} type="button" className="button secondary" disabled={busy||rows.length>=20} onClick={()=>setRows(old=>[...old,empty(kind)])}><Plus size={14}/>{kinds[kind]}</button>)}

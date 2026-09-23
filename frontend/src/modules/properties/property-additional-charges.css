@@ -11,3 +11,17 @@
 @media(max-width:600px){.property-charge-fieldgrid{grid-template-columns:1fr}.property-charge-panel{padding:12px}}
 
 .property-charge-item-invalid{border-color:#bd4a4a}.property-charge-fieldgrid input[aria-invalid="true"]{border-color:#bd4a4a;box-shadow:0 0 0 2px rgba(189,74,74,.1)}
+
+/* Compact, one-line summary. Keep the full form layout only while editing. */
+.property-charge-list{gap:8px}
+.property-charge-item{padding:11px 14px}
+.property-charge-row{display:grid;grid-template-columns:minmax(150px,1.3fr) minmax(275px,2fr) minmax(105px,auto);align-items:center;column-gap:18px;min-height:24px}
+.property-charge-row-title{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;font-weight:700;color:var(--text)}
+.property-charge-row-meta{display:flex;align-items:center;gap:7px;min-width:0;flex-wrap:wrap}
+.property-charge-tag{display:inline-flex;align-items:center;border:1px solid var(--border);background:var(--app-bg);border-radius:5px;padding:4px 8px;color:var(--text-muted);font-size:10px;font-weight:650;white-space:nowrap}
+.property-charge-tag.is-active{background:#edf7f0;border-color:#d5eadb;color:#27764c}
+.property-charge-tag.is-inactive{background:var(--app-bg);color:var(--text-muted)}
+.property-charge-row-billing{font-size:11px;color:var(--text-muted);white-space:nowrap}
+.property-charge-row-value{text-align:right;white-space:nowrap;font-size:14px;font-weight:750;font-variant-numeric:tabular-nums;color:var(--text)}
+@media(max-width:970px){.property-charge-row{grid-template-columns:minmax(145px,1fr) minmax(210px,1.5fr) auto;column-gap:12px}.property-charge-row-meta{gap:5px}}
+@media(max-width:630px){.property-charge-row{grid-template-columns:minmax(0,1fr) auto;row-gap:7px}.property-charge-row-meta{grid-row:2;grid-column:1/-1}.property-charge-row-value{grid-row:1;grid-column:2}.property-charge-item{padding:11px 12px}}
