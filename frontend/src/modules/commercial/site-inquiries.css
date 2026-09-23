@@ -657,3 +657,9 @@
   .crm-manual-history-form{grid-template-columns:1fr}
   .crm-manual-history-form .funnel-inline-actions{justify-content:flex-start}
 }
+
+/* CRM linked client photo */
+.funnel-person-summary{display:grid!important;grid-template-columns:38px minmax(0,1fr);align-items:center;gap:9px}
+.funnel-person-summary>div{min-width:0;display:grid;gap:2px}
+.crm-person-photo{width:36px;height:36px;border-radius:10px;display:block;object-fit:cover;overflow:hidden}
+.crm-person-photo-fallback{display:grid;place-items:center;background:var(--primary-soft);color:var(--primary-strong);font-size:8px;font-weight:800}
