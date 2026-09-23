@@ -141,6 +141,7 @@ export function PropertyWorkspacePage({permissions}:Props){
       onBack={backToList}
       onEdit={()=>openEdit(selected)}
       onRefresh={()=>void loadDetail(selected.id)}
+      onAdditionalChargesUpdated={updated=>setItems(current=>current.map(item=>item.id===updated.id?{...item,...updated}:item))}
       onSaveCommercial={()=>void saveCommercial()}
       onTogglePublication={enabled=>void togglePublication(enabled)}
       onAssignBroker={brokerPersonId=>void assignResponsibleBroker(brokerPersonId)}

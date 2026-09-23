@@ -4,7 +4,7 @@ import { apiRequest, ApiError } from '../../api/client'
 import type { Property, PropertyAdditionalCharge as Charge } from '../../api/types'
 import './property-additional-charges.css'
 
-type Props={property:Property;canEdit:boolean;onUpdated:()=>void;hasSignedLease:boolean}
+type Props={property:Property;canEdit:boolean;onUpdated:(updated:Property)=>void;hasSignedLease:boolean}
 const kinds:Record<Charge['kind'],string>={fire_insurance:'Seguro incêndio',guarantee_insurance:'Seguro fiança',other:'Outro encargo'}
 const empty=(kind:Charge['kind']):Charge=>({
  key:kind+'_'+Math.random().toString(36).slice(2,10),kind,label:kinds[kind],amount:0,
@@ -25,8 +25,14 @@ export function PropertyAdditionalChargesPanel({property,canEdit,onUpdated,hasSi
    if(rows.some(row=>!Number.isFinite(row.amount)||row.amount<0)){setError('Informe valores válidos para todos os encargos.');return}
    setBusy(true)
    try{
-     await apiRequest(`/properties/${property.id}/additional-charges`,{method:'PUT',body:JSON.stringify({charges:rows.map(row=>({...row,label:row.label.trim(),beneficiary_name:row.beneficiary_name?.trim()||null}))})})
-     setEditing(false);setSaved('Encargos adicionais salvos.');onUpdated()
+     const updated=await apiRequest<Property>(`/properties/${property.id}/additional-charges`,{method:'PUT',body:JSON.stringify({charges:rows.map(row=>({...row,label:row.label.trim(),beneficiary_name:row.beneficiary_name?.trim()||null}))})})
+     // Use the canonical API response immediately; do not wait for a page refresh.
+     // Synchronize the workspace source of truth before leaving edit mode so
+     // the prop-sync effect cannot restore the previous empty list.
+     onUpdated(updated)
+     setRows(updated.additional_charges||[])
+     setEditing(false)
+     setSaved('Encargos adicionais salvos.')
    }catch(cause){setError(cause instanceof ApiError?cause.detail:'Não foi possível salvar os encargos.')}
    finally{setBusy(false)}
  }
