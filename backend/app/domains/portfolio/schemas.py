@@ -32,6 +32,8 @@ class PersonCreate(BaseModel):
     phone: str | None = Field(default=None, max_length=40)
     address: AddressPayload = Field(default_factory=AddressPayload)
     notes: str | None = Field(default=None, max_length=2000)
+    billing_legal_name: str | None = Field(default=None, max_length=180)
+    billing_document_number: str | None = Field(default=None, max_length=24)
     role_keys: list[PersonRoleKey] = Field(default_factory=list, max_length=6)
 
 
@@ -48,6 +50,8 @@ class PersonResponse(BaseModel):
     phone: str | None = None
     address: dict
     notes: str | None = None
+    billing_legal_name: str | None = None
+    billing_document_number: str | None = None
     is_active: bool
     role_keys: list[str]
     created_at: datetime
