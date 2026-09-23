@@ -192,8 +192,8 @@ export type PersonCreate = {
   role_keys: Array<'owner' | 'tenant' | 'guarantor' | 'broker' | 'supplier' | 'referrer'>
 }
 
-export type PropertyOwner = { person_id: string; name: string; ownership_percent: number }
-export type PropertyResponsibleBroker = { person_id: string; name: string; email: string | null; phone: string | null }
+export type PropertyOwner = { person_id: string; name: string; ownership_percent: number; photo_content_url?: string | null; photo_updated_at?: string | null }
+export type PropertyResponsibleBroker = { person_id: string; name: string; email: string | null; phone: string | null; photo_content_url?: string | null; photo_updated_at?: string | null }
 
 export type PropertyFeatures = {
   property: string[]
