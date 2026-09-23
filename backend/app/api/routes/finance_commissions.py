@@ -18,7 +18,7 @@ from app.domains.finance.advanced_schemas import (
 from app.domains.finance.advanced_service import generate_commissions_for_charge, money, sync_commission_status
 from app.domains.finance.core_models import FinancialTitle
 from app.domains.finance.models import FinancialSettlement, RentCharge
-from app.domains.foundation.access import UserContext, require_permission
+from app.domains.foundation.access import UserContext, get_current_user_context, require_permission
 from app.domains.foundation.models import Organization
 from app.domains.foundation.audit import write_audit
 from app.domains.portfolio.models import Person
@@ -122,6 +122,27 @@ def _treasury_category(item: CommissionEntry) -> str:
     return "Comissões"
 
 
+
+
+
+
+def _broker_for_user(db: Session, context: UserContext) -> Person | None:
+    email = (context.user.email or "").strip().lower()
+    if not email:
+        return None
+    candidates = db.scalars(select(Person).where(
+        Person.organization_id == context.user.organization_id,
+        Person.is_active.is_(True),
+    )).all()
+    return next((person for person in candidates if (person.email or "").strip().lower() == email and any(role.role_key == "broker" and role.is_active for role in person.roles)), None)
+
+
+def _authorize_batch_access(db: Session, context: UserContext, batch: CommissionPaymentBatch) -> None:
+    if context.has("finance.view"):
+        return
+    broker = _broker_for_user(db, context)
+    if broker is None or broker.id != batch.beneficiary_person_id:
+        raise HTTPException(403, "Este lote não pertence ao corretor autenticado.")
 
 
 def _month_end(competence: date) -> date:
@@ -356,6 +377,29 @@ def ensure_payment_batches(
     return [_batch_response(db, row) for row in rows]
 
 
+
+
+@router.get("/batches/mine")
+def list_my_payment_batches(
+    context: UserContext = Depends(get_current_user_context),
+    db: Session = Depends(get_db),
+):
+    broker = _broker_for_user(db, context)
+    if broker is None:
+        raise HTTPException(404, "Usuário autenticado não está vinculado a um cadastro de corretor pelo mesmo e-mail.")
+    today = date.today()
+    previous_month = (today.replace(day=1) - timedelta(days=1)).replace(day=1)
+    if today > _month_end(previous_month):
+        _ensure_batches(db, context, previous_month)
+    rows = db.scalars(select(CommissionPaymentBatch).where(
+        CommissionPaymentBatch.organization_id == context.user.organization_id,
+        CommissionPaymentBatch.beneficiary_person_id == broker.id,
+    ).order_by(CommissionPaymentBatch.internal_number.desc()).limit(60)).all()
+    payload = [_batch_response(db, row) for row in rows]
+    db.commit()
+    return payload
+
+
 @router.get("/batches")
 def list_payment_batches(
     competence: date | None = Query(default=None),
@@ -378,7 +422,7 @@ def list_payment_batches(
 def issue_batch_report(
     batch_id: UUID,
     request: Request,
-    context: UserContext = Depends(require_permission("finance.view")),
+    context: UserContext = Depends(get_current_user_context),
     db: Session = Depends(get_db),
 ):
     batch = db.scalar(select(CommissionPaymentBatch).where(
@@ -387,6 +431,7 @@ def issue_batch_report(
     ))
     if batch is None:
         raise HTTPException(404, "Lote de comissão não encontrado.")
+    _authorize_batch_access(db, context, batch)
     if batch.status not in {"report_released", "report_issued", "returned"}:
         raise HTTPException(409, "O relatório deste lote não pode ser emitido neste status.")
     if batch.status != "returned":
@@ -404,7 +449,7 @@ async def upload_batch_invoice(
     batch_id: UUID,
     request: Request,
     file: UploadFile = File(...),
-    context: UserContext = Depends(require_permission("finance.view")),
+    context: UserContext = Depends(get_current_user_context),
     db: Session = Depends(get_db),
 ):
     batch = db.scalar(select(CommissionPaymentBatch).where(
@@ -413,6 +458,7 @@ async def upload_batch_invoice(
     ))
     if batch is None:
         raise HTTPException(404, "Lote de comissão não encontrado.")
+    _authorize_batch_access(db, context, batch)
     if batch.status not in {"report_issued", "returned"}:
         raise HTTPException(409, "Emita o relatório antes de anexar a Nota Fiscal.")
     filename = (file.filename or "nota-fiscal.pdf").replace("..", "-").replace("/", "-").replace("\\", "-")
@@ -441,7 +487,7 @@ async def upload_batch_invoice(
 @router.get("/batches/{batch_id}/invoice")
 def download_batch_invoice(
     batch_id: UUID,
-    context: UserContext = Depends(require_permission("finance.view")),
+    context: UserContext = Depends(get_current_user_context),
     db: Session = Depends(get_db),
 ):
     batch = db.scalar(select(CommissionPaymentBatch).where(
@@ -450,6 +496,7 @@ def download_batch_invoice(
     ))
     if batch is None or not batch.invoice_reference:
         raise HTTPException(404, "Nota Fiscal não encontrada.")
+    _authorize_batch_access(db, context, batch)
     try:
         content = get_document_storage().download_bytes(batch.invoice_reference)
     except DocumentStorageError as exc:
