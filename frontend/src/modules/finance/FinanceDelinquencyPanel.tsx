@@ -1,6 +1,6 @@
 import {
   AlertTriangle, CalendarClock, CheckCircle2, Clipboard, MessageCircle, RefreshCw,
-  ShieldCheck, TimerReset, UserRound, X,
+  ShieldCheck, TimerReset, Search, History, X,
 } from 'lucide-react'
 import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react'
 import { ApiError, apiRequest } from '../../api/client'
@@ -48,6 +48,9 @@ export function FinanceDelinquencyPanel({permissions}:Props){
   const [error,setError]=useState('')
   const [success,setSuccess]=useState('')
   const [filter,setFilter]=useState<'active'|'critical'|'promise'|'guarantee'|'resolved'>('active')
+  const [query,setQuery]=useState('')
+  const [activeId,setActiveId]=useState<string|null>(null)
+  const [detailTab,setDetailTab]=useState<'overview'|'guarantee'|'history'>('overview')
   const [selected,setSelected]=useState<Case|null>(null)
   const [modal,setModal]=useState<Modal>(null)
   const [channel,setChannel]=useState('whatsapp')
@@ -77,13 +80,16 @@ export function FinanceDelinquencyPanel({permissions}:Props){
   useEffect(()=>{void load()},[load])
 
   const filtered=useMemo(()=>cases.filter(item=>{
+    const term=query.trim().toLocaleLowerCase('pt-BR')
+    if(term&&![item.code,item.charge_code,item.lease_code,item.property_code,item.tenant_name].join(' ').toLocaleLowerCase('pt-BR').includes(term))return false
     if(filter==='resolved')return item.status==='resolved'
     if(item.status==='resolved')return false
     if(filter==='critical')return item.critical
     if(filter==='promise')return item.workflow.promise_status==='pending'||item.workflow.promise_status==='broken'
     if(filter==='guarantee')return item.workflow.guarantee_status!=='not_applicable'
     return true
-  }),[cases,filter])
+  }),[cases,filter,query])
+  const active=filtered.find(item=>item.id===activeId)||filtered[0]||null
 
   function open(item:Case,next:Exclude<Modal,null>){
     setSelected(item);setModal(next);setError('');setSuccess('');setNotes('');setNextAction(item.next_action_at?localDateTime(item.next_action_at):'')
@@ -160,36 +166,99 @@ export function FinanceDelinquencyPanel({permissions}:Props){
 
     {error&&<div className="form-alert danger-alert">{error}</div>}{success&&<div className="form-alert success-alert">{success}</div>}
 
-    <div className="finance-filter delinquency-filter">
-      <button className={filter==='active'?'active':''} onClick={()=>setFilter('active')}>Ativos</button>
-      <button className={filter==='critical'?'active':''} onClick={()=>setFilter('critical')}>Críticos</button>
-      <button className={filter==='promise'?'active':''} onClick={()=>setFilter('promise')}>Promessas</button>
-      <button className={filter==='guarantee'?'active':''} onClick={()=>setFilter('guarantee')}>Garantias</button>
-      <button className={filter==='resolved'?'active':''} onClick={()=>setFilter('resolved')}>Resolvidos</button>
-    </div>
-
-    {loading?<article className="panel settings-loading">Carregando casos de inadimplência...</article>:<div className="delinquency-list">{filtered.map(item=>{
-      const flow=item.workflow, contact=item.tenant_contacts[0]
-      return <article className={`panel delinquency-case ${item.critical?'critical':''}`} key={item.id}>
-        <div className="delinquency-case-head"><div className="delinquency-case-title"><div className="delinquency-icon"><AlertTriangle size={18}/></div><div><span>{item.code} · {item.charge_code}</span><strong>{item.tenant_name}</strong><small>{item.lease_code} · Imóvel #{item.property_code}</small></div></div><div className="delinquency-days"><span>Atraso</span><strong>D+{item.days_overdue}</strong><small>Venceu {dateLabel(item.due_date)}</small></div><div className="delinquency-amount"><span>Em aberto</span><strong>{money(item.amount)}</strong><i className={`status-badge ${caseStatusClass(item.status)}`}>{statusLabels[item.status]||item.status}</i></div></div>
-
-        <div className="delinquency-ladder"><span className={item.days_overdue>=item.first_contact_after_days?'done':''}>D+{item.first_contact_after_days}<b>1º contato</b></span><span className={item.days_overdue>=item.followup_after_days?'done':''}>D+{item.followup_after_days}<b>Acompanhamento</b></span><span className={item.days_overdue>=item.critical_after_days?'critical done':''}>D+{item.critical_after_days}<b>Garantia</b></span></div>
-
-        <div className="delinquency-grid">
-          <div><span>Contato</span><strong>{contact?.phone||contact?.email||'Sem contato cadastrado'}</strong><small>Último registro: {dateTimeLabel(item.last_contact_at)}</small></div>
-          <div><span>Próximo passo</span><strong>{item.suggested_action||'Caso encerrado'}</strong><small>{item.next_action_at?`Agenda: ${dateTimeLabel(item.next_action_at)}`:`${item.pending_agenda_tasks} tarefa(s) pendente(s) na Agenda`}</small></div>
-          <div><span>Garantia</span><strong>{flow.guarantee_label}</strong><small>{flow.guarantee_provider_name||'Prestador não informado'}{flow.guarantee_policy_number?` · ${flow.guarantee_policy_number}`:''}</small></div>
-          <div><span>Andamento da garantia</span><strong><i className={`status-badge ${guaranteeStatusClass(flow.guarantee_status)}`}>{guaranteeLabels[flow.guarantee_status]||flow.guarantee_status}</i></strong><small>{flow.guarantee_protocol?`Protocolo ${flow.guarantee_protocol}`:'Sem protocolo'}</small></div>
+    {loading?<article className="panel settings-loading">Carregando casos de inadimplência...</article>:
+    <div className="delinquency-master-detail">
+      <aside className="panel delinquency-directory" aria-label="Lista de inadimplência">
+        <label className="delinquency-search"><Search size={15}/><input aria-label="Buscar caso" placeholder="Buscar locatário, imóvel ou cobrança..." value={query} onChange={e=>setQuery(e.target.value)}/></label>
+        <select aria-label="Filtro de casos" value={filter} onChange={e=>{setFilter(e.target.value as typeof filter);setDetailTab('overview')}}>
+          <option value="active">Em acompanhamento</option><option value="critical">Críticos</option><option value="promise">Promessas</option><option value="guarantee">Garantias</option><option value="resolved">Resolvidos</option>
+        </select>
+        <small>{filtered.length} de {cases.length} caso(s)</small>
+        <div className="delinquency-directory-list">
+          {filtered.map(item=><button key={item.id} type="button" aria-pressed={active?.id===item.id} className={'delinquency-directory-row '+(active?.id===item.id?'active':'')+(item.critical?' critical':'')} onClick={()=>{setActiveId(item.id);setDetailTab('overview')}}>
+            <span className="delinquency-directory-head"><strong>{item.tenant_name}</strong><i className={'status-badge '+caseStatusClass(item.status)}>{statusLabels[item.status]||item.status}</i></span>
+            <small>{item.code} · Imóvel #{item.property_code}</small>
+            <span className="delinquency-directory-head"><b>{money(item.amount)}</b><em>D+{item.days_overdue}</em></span>
+            <small>Próxima ação: {item.next_action_at?dateTimeLabel(item.next_action_at):item.suggested_action||'Não definida'}</small>
+          </button>)}
+          {!filtered.length&&<div className="delinquency-directory-empty">Nenhum caso encontrado neste filtro.</div>}
         </div>
-
-        {flow.promise_status&&<div className={`delinquency-promise ${flow.promise_status}`}><CalendarClock size={15}/><div><strong>{promiseLabels[flow.promise_status]||flow.promise_status}</strong><span>{flow.promise_due_date?`${money(flow.promise_amount)} para ${dateLabel(flow.promise_due_date)}`:money(flow.promise_amount)}</span></div></div>}
-        {flow.guarantee_status==='received'&&<div className="delinquency-indemnity"><CheckCircle2 size={15}/><div><strong>Indenização registrada: {money(flow.received_amount)}</strong><span>Isso não baixa automaticamente o débito do locatário. A cobrança original permanece rastreável até sua regularização.</span></div></div>}
-
-        <div className="delinquency-actions">{item.status!=='resolved'&&<><button className="button secondary compact" type="button" onClick={()=>void copyMessage(item)}><Clipboard size={13}/> Copiar mensagem</button>{canManage&&<button className="button secondary compact" type="button" onClick={()=>open(item,'contact')}><MessageCircle size={13}/> Registrar contato</button>}{canManage&&<button className="button secondary compact" type="button" onClick={()=>open(item,'promise')}><CalendarClock size={13}/> Promessa</button>}{canManage&&flow.guarantee_type!=='none'&&<button className="button primary compact" type="button" onClick={()=>open(item,'guarantee')}><ShieldCheck size={13}/> Garantia</button>}</>}</div>
-
-        <details className="delinquency-history"><summary>Histórico do caso · {item.action_log.length} evento(s)</summary><div>{[...item.action_log].reverse().map((row,index)=><div key={`${row.at||index}-${index}`}><span>{dateTimeLabel(row.at)}</span><strong>{actionLabels[row.action||'']||row.action||'Evento'}</strong><small>{row.detail||row.notes||''}{row.channel?` · ${row.channel}`:''}</small></div>)}</div></details>
-      </article>
-    })}{filtered.length===0&&<article className="panel finance-empty"><ShieldCheck size={26}/><strong>Nenhum caso neste filtro.</strong><span>A régua abre casos automaticamente quando uma cobrança vence sem baixa.</span></article>}</div>}
+      </aside>
+      <section className="panel delinquency-detail" aria-label="Ficha de inadimplência">
+        {!active?<div className="delinquency-directory-empty">Selecione um caso para visualizar a ficha operacional.</div>:<>
+          <header className="delinquency-detail-header">
+            <div><span className="eyebrow">INADIMPLÊNCIA · {active.code}</span><h2>{active.tenant_name} <i className={'status-badge '+caseStatusClass(active.status)}>{statusLabels[active.status]||active.status}</i></h2><p>{active.charge_code} · {active.lease_code} · Imóvel #{active.property_code}</p></div>
+            <div className="delinquency-detail-actions">
+              {active.status!=='resolved'&&<><button type="button" className="button secondary" onClick={()=>void copyMessage(active)}><Clipboard size={14}/> Copiar mensagem</button>
+              {canManage&&<button type="button" className="button primary" onClick={()=>open(active,'contact')}><MessageCircle size={14}/> Registrar contato</button>}</>}
+            </div>
+          </header>
+          <div className="delinquency-detail-strip">
+            <div><span>Valor em aberto</span><strong>{money(active.amount)}</strong></div>
+            <div><span>Atraso</span><strong>D+{active.days_overdue}</strong></div>
+            <div><span>Vencimento</span><strong>{dateLabel(active.due_date)}</strong></div>
+            <div><span>Próxima ação</span><strong>{dateTimeLabel(active.next_action_at)}</strong></div>
+          </div>
+          <nav className="delinquency-detail-tabs" aria-label="Abas da inadimplência">
+            <button type="button" className={detailTab==='overview'?'active':''} onClick={()=>setDetailTab('overview')}><CalendarClock size={14}/> Visão geral</button>
+            <button type="button" className={detailTab==='guarantee'?'active':''} onClick={()=>setDetailTab('guarantee')}><ShieldCheck size={14}/> Garantia e promessa</button>
+            <button type="button" className={detailTab==='history'?'active':''} onClick={()=>setDetailTab('history')}><History size={14}/> Histórico de contatos</button>
+          </nav>
+          <div className="delinquency-detail-body">
+            {detailTab==='overview'&&<div className="delinquency-detail-panels">
+              <article className="delinquency-detail-card"><h3>Plano de acompanhamento</h3>
+                <div className="delinquency-ladder"><span className={active.days_overdue>=active.first_contact_after_days?'done':''}>D+{active.first_contact_after_days}<b>Primeiro contato</b></span><span className={active.days_overdue>=active.followup_after_days?'done':''}>D+{active.followup_after_days}<b>Acompanhamento</b></span><span className={active.days_overdue>=active.critical_after_days?'critical done':''}>D+{active.critical_after_days}<b>Marco crítico</b></span></div>
+                <div className="delinquency-detail-facts">
+                  <div><span>Último contato</span><strong>{dateTimeLabel(active.last_contact_at)}</strong></div>
+                  <div><span>Próximo passo sugerido</span><strong>{active.suggested_action||'Não definido'}</strong></div>
+                  <div><span>Responsável</span><strong>{active.assigned_user_id?'Usuário vinculado':'Não atribuído'}</strong><small>Identificação interna: {active.assigned_user_id||'—'}</small></div>
+                  <div><span>Agenda</span><strong>{active.pending_agenda_tasks} tarefa(s) pendente(s)</strong></div>
+                  <div><span>Contato do locatário</span><strong>{active.tenant_contacts[0]?.phone||active.tenant_contacts[0]?.email||'Não informado'}</strong></div>
+                  <div><span>Situação</span><strong>{statusLabels[active.status]||active.status}</strong></div>
+                </div>
+              </article>
+              <article className="delinquency-detail-card"><h3>Ações do caso</h3>
+                <div className="delinquency-detail-action-list">
+                  <div><span>Próxima ação agendada</span><strong>{dateTimeLabel(active.next_action_at)}</strong></div>
+                  <div><span>Último contato</span><strong>{dateTimeLabel(active.last_contact_at)}</strong></div>
+                  <div><span>Garantia</span><strong>{active.workflow.guarantee_label}</strong></div>
+                  <div><span>Promessa</span><strong>{active.workflow.promise_status?promiseLabels[active.workflow.promise_status]||active.workflow.promise_status:'Não registrada'}</strong></div>
+                </div>
+                {active.status!=='resolved'&&canManage&&<div className="delinquency-detail-buttons">
+                  <button type="button" className="button secondary" onClick={()=>open(active,'promise')}><CalendarClock size={14}/> Registrar promessa</button>
+                  {active.workflow.guarantee_type!=='none'&&<button type="button" className="button secondary" onClick={()=>open(active,'guarantee')}><ShieldCheck size={14}/> Acompanhar garantia</button>}
+                </div>}
+              </article>
+            </div>}
+            {detailTab==='guarantee'&&<div className="delinquency-detail-panels">
+              <article className="delinquency-detail-card"><h3>Garantia</h3><div className="delinquency-detail-facts">
+                <div><span>Tipo</span><strong>{active.workflow.guarantee_label}</strong></div>
+                <div><span>Status</span><strong>{guaranteeLabels[active.workflow.guarantee_status]||active.workflow.guarantee_status}</strong></div>
+                <div><span>Prestador</span><strong>{active.workflow.guarantee_provider_name||'Não informado'}</strong></div>
+                <div><span>Protocolo</span><strong>{active.workflow.guarantee_protocol||'Não informado'}</strong></div>
+                <div><span>Valor solicitado</span><strong>{money(active.workflow.claimed_amount)}</strong></div>
+                <div><span>Valor recebido</span><strong>{money(active.workflow.received_amount)}</strong></div>
+              </div>
+              {active.status!=='resolved'&&canManage&&active.workflow.guarantee_type!=='none'&&<button type="button" className="button secondary" onClick={()=>open(active,'guarantee')}>Atualizar acompanhamento</button>}
+              </article>
+              <article className="delinquency-detail-card"><h3>Promessa de pagamento</h3><div className="delinquency-detail-action-list">
+                <div><span>Situação</span><strong>{active.workflow.promise_status?promiseLabels[active.workflow.promise_status]||active.workflow.promise_status:'Não registrada'}</strong></div>
+                <div><span>Valor</span><strong>{money(active.workflow.promise_amount)}</strong></div>
+                <div><span>Data prometida</span><strong>{dateLabel(active.workflow.promise_due_date)}</strong></div>
+              </div>
+              {active.status!=='resolved'&&canManage&&<button type="button" className="button secondary" onClick={()=>open(active,'promise')}>Registrar promessa</button>}
+              </article>
+            </div>}
+            {detailTab==='history'&&<article className="delinquency-detail-card"><h3>Histórico do caso · {active.action_log.length} evento(s)</h3>
+              <div className="delinquency-detail-history">{[...active.action_log].reverse().map((row,index)=><div key={(row.at||index)+'-'+index}>
+                <span>{dateTimeLabel(row.at)}</span><div><strong>{actionLabels[row.action||'']||row.action||'Evento'}</strong><small>{row.detail||row.notes||''}{row.channel?' · '+row.channel:''}</small></div>
+              </div>)}
+              {!active.action_log.length&&<p>Nenhum evento registrado neste caso.</p>}</div>
+            </article>}
+          </div>
+        </>}
+      </section>
+    </div>}
 
     {modal&&selected&&<div className="portfolio-modal-backdrop delinquency-modal-backdrop" onMouseDown={event=>{if(event.currentTarget===event.target)close()}}>
       {modal==='contact'&&<form className="panel portfolio-modal delinquency-modal" onSubmit={submitContact}><div className="portfolio-modal-header"><div><span className="eyebrow">{selected.code}</span><h2>Registrar contato</h2><p>O registro conclui o marco correspondente da régua e mantém o histórico auditável.</p></div><button className="portfolio-modal-close" type="button" onClick={close}><X size={17}/></button></div><div className="delinquency-modal-body"><label><span>Canal</span><select value={channel} onChange={e=>setChannel(e.target.value)}><option value="whatsapp">WhatsApp</option><option value="phone">Telefone</option><option value="email">E-mail</option><option value="other">Outro</option></select></label><label><span>Próxima ação (opcional)</span><input type="datetime-local" value={nextAction} onChange={e=>setNextAction(e.target.value)}/></label><label className="full"><span>Retorno / observações</span><textarea rows={5} value={notes} onChange={e=>setNotes(e.target.value)} placeholder="Ex.: locatário informou que pagará amanhã."/></label></div><div className="form-actions"><button className="button secondary" type="button" onClick={close}>Cancelar</button><button className="button primary" disabled={saving}>{saving?'Salvando...':'Registrar contato'}</button></div></form>}
