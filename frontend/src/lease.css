@@ -181,3 +181,238 @@ img.lease-person-avatar{display:block;object-fit:cover}
 @media(max-width:480px){
   .contract-facts-grid,.contract-kpis-v2,.contract-document-summary-v2{grid-template-columns:1fr}
 }
+
+
+/* Contracts 8.1 layout recovery — full workspace and readable operational density */
+.contracts-hub{
+  width:100%;
+  min-width:0;
+  gap:0;
+}
+.contracts-hub-tabs{
+  width:auto;
+  max-width:none;
+  margin:16px 24px 0;
+  padding:5px;
+  justify-self:start;
+}
+.contracts-hub-tabs button{
+  min-width:190px;
+  min-height:46px;
+  padding:8px 13px;
+}
+.contracts-hub-tabs strong{font-size:10.5px}
+.contracts-hub-tabs small{font-size:8.5px}
+
+.contracts-hub>.workspace{
+  width:100%;
+  max-width:none;
+  margin:0;
+  padding:24px 24px 34px;
+}
+.contracts-hub .page-heading{
+  width:100%;
+  margin:0;
+}
+.contracts-hub .page-heading h1{
+  font-size:25px;
+  letter-spacing:-.025em;
+}
+.contracts-hub .page-heading p{
+  font-size:10.5px;
+  line-height:1.45;
+}
+
+.lease-workspace .contract-metrics,
+.contracts-workspace .contract-metrics{
+  grid-template-columns:repeat(4,minmax(0,1fr));
+  gap:10px;
+  margin:0;
+}
+.lease-workspace .contract-metrics .metric-card,
+.contracts-workspace .contract-metrics .metric-card{
+  min-height:88px;
+  padding:13px 15px;
+  border-radius:10px;
+  box-shadow:none;
+}
+.lease-workspace .contract-metrics .metric-card span,
+.contracts-workspace .contract-metrics .metric-card span{font-size:8.5px}
+.lease-workspace .contract-metrics .metric-card strong,
+.contracts-workspace .contract-metrics .metric-card strong{font-size:22px}
+.lease-workspace .contract-metrics .metric-card small,
+.contracts-workspace .contract-metrics .metric-card small{font-size:9px}
+
+.contract-master-detail{
+  grid-template-columns:350px minmax(0,1fr);
+  gap:14px;
+  min-height:560px;
+  align-items:stretch;
+}
+.contract-directory-v2{
+  padding:12px;
+  gap:10px;
+}
+.contract-directory-search{
+  min-height:40px;
+  padding:0 10px;
+}
+.contract-directory-search input{
+  height:38px;
+  font-size:10px;
+}
+.contract-directory-top select{
+  height:38px;
+  font-size:9.5px;
+}
+.contract-directory-count,
+.contract-directory-count small{font-size:8.5px}
+.contract-directory-list{gap:6px}
+.contract-directory-row{
+  padding:12px;
+  grid-template-columns:38px minmax(0,1fr);
+  gap:10px;
+  border-color:color-mix(in srgb,var(--border) 72%,transparent);
+}
+.contract-directory-icon{
+  width:36px;
+  height:36px;
+}
+.contract-directory-line strong{font-size:11px}
+.contract-directory-line .status-badge{font-size:7.4px;padding:3px 6px}
+.contract-directory-copy b{font-size:10px}
+.contract-directory-copy small,
+.contract-directory-copy em{font-size:8.7px;line-height:1.35}
+
+.contract-detail-v2{min-height:560px}
+.contract-detail-header{
+  min-height:78px;
+  padding:15px 17px;
+}
+.contract-detail-heading{
+  grid-template-columns:46px minmax(0,1fr);
+  gap:11px;
+}
+.contract-detail-icon{
+  width:46px;
+  height:46px;
+}
+.contract-title-row h2{font-size:20px}
+.contract-detail-heading p{font-size:9px}
+.contract-detail-actions-v2 .button{
+  min-height:34px;
+  font-size:9px;
+  padding:0 10px;
+}
+
+.contract-essential-strip{
+  grid-template-columns:1fr .72fr 1.35fr 1fr .9fr;
+}
+.contract-essential-strip>div{
+  padding:11px 13px;
+}
+.contract-essential-strip span{font-size:7.7px}
+.contract-essential-strip strong{font-size:10.5px}
+
+.contract-detail-tabs{
+  gap:4px;
+  padding:8px 12px;
+}
+.contract-detail-tabs button{
+  min-height:36px;
+  padding:0 11px;
+  font-size:9.5px;
+}
+.contract-detail-body{
+  padding:15px;
+}
+.contract-overview-v2{
+  grid-template-columns:minmax(0,1.7fr) minmax(300px,.78fr);
+  gap:12px;
+}
+.contract-surface-v2{
+  padding:13px 14px;
+  border-radius:10px;
+}
+.contract-section-heading{margin-bottom:11px}
+.contract-section-heading span{font-size:7.8px}
+.contract-section-heading h3{font-size:12.5px}
+.contract-facts-grid{gap:9px}
+.contract-facts-grid>div{padding:11px 12px}
+.contract-facts-grid span{font-size:7.8px}
+.contract-facts-grid strong{font-size:10.5px}
+.contract-facts-grid small{font-size:8.6px}
+.contract-flow-summary span{font-size:8.8px}
+.contract-flow-summary strong{font-size:9.3px}
+.contract-notes-v2 p{font-size:9.8px}
+
+.contract-party-list article{padding:10px}
+.contract-party-list strong{font-size:10.3px}
+.contract-party-list small{font-size:8.5px}
+.contract-signer-list-v2 strong{font-size:9.8px}
+.contract-signer-list-v2 small,
+.contract-signer-list-v2 article>span{font-size:8.3px}
+
+.contract-kpis-v2 article{
+  min-height:84px;
+  padding:11px 12px;
+}
+.contract-kpis-v2 span{font-size:7.8px}
+.contract-kpis-v2 strong{font-size:17px}
+.contract-kpis-v2 small{font-size:8.5px}
+.contract-charge-list strong{font-size:10.2px}
+.contract-charge-list small{font-size:8.5px}
+.contract-empty-soft{font-size:9.2px}
+
+/* Administração: mantém a operação atual, mas com a mesma escala e largura do módulo. */
+.contracts-workspace .contract-filter-bar{
+  margin:0;
+}
+.contracts-workspace .contract-card{
+  box-shadow:none;
+}
+.contracts-workspace .contract-row{
+  padding:16px 18px;
+  gap:18px;
+}
+.contracts-workspace .contract-code strong,
+.contracts-workspace .contract-property strong,
+.contracts-workspace .contract-commercial strong{font-size:11px}
+.contracts-workspace .contract-code span,
+.contracts-workspace .contract-property span,
+.contracts-workspace .contract-commercial span{font-size:8.5px}
+.contracts-workspace .contract-code small,
+.contracts-workspace .contract-property small,
+.contracts-workspace .contract-commercial small{font-size:9px}
+.contracts-workspace .contract-document-strip{padding:10px 14px}
+.contracts-workspace .contract-actions{padding:9px 14px}
+
+/* Encerramentos usa a mesma régua horizontal das outras áreas. */
+.contracts-hub .lease-exit-workspace,
+.contracts-hub .lease-exit-settlement-workspace{
+  max-width:none;
+  width:100%;
+}
+
+@media(min-width:1500px){
+  .contract-master-detail{grid-template-columns:370px minmax(0,1fr)}
+}
+@media(max-width:1180px){
+  .contract-master-detail{grid-template-columns:300px minmax(0,1fr)}
+  .contract-overview-v2{grid-template-columns:1fr}
+}
+@media(max-width:900px){
+  .contracts-hub-tabs{
+    margin:12px 16px 0;
+    width:calc(100% - 32px);
+    justify-self:stretch;
+  }
+  .contracts-hub-tabs button{flex:1;min-width:0}
+  .contracts-hub>.workspace{padding:18px 16px 28px}
+  .contract-master-detail{grid-template-columns:1fr;min-height:auto}
+  .contract-detail-v2{min-height:0}
+}
+@media(max-width:700px){
+  .contracts-hub-tabs{display:grid}
+  .contracts-hub .page-heading h1{font-size:21px}
+}
