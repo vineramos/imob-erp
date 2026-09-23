@@ -1,4 +1,4 @@
-import { BadgeCheck, BadgeDollarSign, BriefcaseBusiness, Building2, CalendarCheck2, FileText, History, Landmark, Mail, MapPin, Pencil, Phone, Plus, Search, Target, UserRoundCheck, Users, WalletCards, X } from 'lucide-react'
+import { BadgeCheck, BadgeDollarSign, BriefcaseBusiness, Building2, CalendarCheck2, Camera, FileText, History, Landmark, Mail, MapPin, Pencil, Phone, Plus, Search, Target, Trash2, UserRoundCheck, Users, WalletCards, X } from 'lucide-react'
 import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react'
 import { ApiError, apiBlobRequest, apiRequest } from '../../api/client'
 import type { Address, Person, PersonCreate, Property } from '../../api/types'
@@ -19,6 +19,18 @@ type CommissionBatch={id:string;code:string;beneficiary_person_id:string;benefic
 const emptyBank:BankForm={bank_name:'',bank_code:'',branch:'',account_number:'',account_digit:'',account_type:'checking',pix_key_type:'none',pix_key:'',account_holder_name:'',account_holder_document:''}
 function documentLabel(value:string|null){return value||'CPF/CNPJ não informado'}
 
+function BrokerPhoto({person,className}:{person:Person;className:string}){
+  const [src,setSrc]=useState('')
+  useEffect(()=>{
+    let active=true,objectUrl=''
+    if(!person.photo_content_url){setSrc('');return()=>undefined}
+    void apiBlobRequest(person.photo_content_url).then(blob=>{if(!active)return;objectUrl=URL.createObjectURL(blob);setSrc(objectUrl)}).catch(()=>{if(active)setSrc('')})
+    return()=>{active=false;if(objectUrl)URL.revokeObjectURL(objectUrl)}
+  },[person.id,person.photo_content_url,person.photo_updated_at])
+  if(src)return <img className={className} src={src} alt={person.name}/>
+  return <span className={className}><UserRoundCheck size={17}/></span>
+}
+
 export function BrokersPage({permissions}:{permissions:string[]}){
   const canCreate=permissions.includes('properties.create'),canEdit=permissions.includes('properties.edit')
   const [items,setItems]=useState<Person[]>([]),[properties,setProperties]=useState<Property[]>([]),[query,setQuery]=useState(''),[loading,setLoading]=useState(true)
@@ -26,7 +38,7 @@ export function BrokersPage({permissions}:{permissions:string[]}){
   const [commercial,setCommercial]=useState<BrokerCommercial|null>(null),[commercialLoading,setCommercialLoading]=useState(false),[commercialError,setCommercialError]=useState('')
   const [commissionBatches,setCommissionBatches]=useState<CommissionBatch[]>([]),[commissionLoading,setCommissionLoading]=useState(false),[commissionError,setCommissionError]=useState('')
   const [pageError,setPageError]=useState(''),[modalError,setModalError]=useState(''),[success,setSuccess]=useState('')
-  const [open,setOpen]=useState(false),[editing,setEditing]=useState<Person|null>(null),[saving,setSaving]=useState(false),[bankLoading,setBankLoading]=useState(false)
+  const [open,setOpen]=useState(false),[editing,setEditing]=useState<Person|null>(null),[saving,setSaving]=useState(false),[bankLoading,setBankLoading]=useState(false),[photoSaving,setPhotoSaving]=useState(false)
   const [personType,setPersonType]=useState<'individual'|'company'>('individual'),[name,setName]=useState(''),[documentNumber,setDocumentNumber]=useState(''),[email,setEmail]=useState(''),[phone,setPhone]=useState(''),[creci,setCreci]=useState(''),[billingLegalName,setBillingLegalName]=useState(''),[billingDocumentNumber,setBillingDocumentNumber]=useState(''),[address,setAddress]=useState<Address>(emptyAddress),[notes,setNotes]=useState(''),[bank,setBank]=useState<BankForm>(emptyBank)
   const load=useCallback(async()=>{setLoading(true);setPageError('');try{const [brokers,portfolio]=await Promise.all([apiRequest<Person[]>('/people?role=broker'),apiRequest<Property[]>('/properties')]);setItems(brokers);setProperties(portfolio);setSelectedId(current=>current&&brokers.some(item=>item.id===current)?current:(brokers[0]?.id??null))}catch(cause){setPageError(cause instanceof ApiError?cause.detail:'Não foi possível carregar os corretores.')}finally{setLoading(false)}},[])
   useEffect(()=>{void load()},[load])
@@ -46,6 +58,27 @@ export function BrokersPage({permissions}:{permissions:string[]}){
   const setBankField=<K extends keyof BankForm>(key:K,value:BankForm[K])=>setBank(current=>({...current,[key]:value}))
 
 
+  async function uploadBrokerPhoto(person:Person,file:File){
+    if(!canEdit||photoSaving)return
+    if(!['image/jpeg','image/png','image/webp'].includes(file.type)){setPageError('Use uma imagem JPG, PNG ou WEBP.');return}
+    if(file.size>8*1024*1024){setPageError('A foto pode ter no máximo 8 MB.');return}
+    setPhotoSaving(true);setPageError('');setSuccess('')
+    try{
+      const body=new FormData();body.append('file',file)
+      await apiRequest<void>(`/people/${person.id}/photo`,{method:'POST',body})
+      await load()
+      setSuccess('Foto do corretor atualizada.')
+    }catch(cause){setPageError(cause instanceof ApiError?cause.detail:'Não foi possível atualizar a foto do corretor.')}
+    finally{setPhotoSaving(false)}
+  }
+  async function removeBrokerPhoto(person:Person){
+    if(!canEdit||photoSaving||!person.photo_content_url)return
+    setPhotoSaving(true);setPageError('');setSuccess('')
+    try{await apiRequest<void>(`/people/${person.id}/photo`,{method:'DELETE'});await load();setSuccess('Foto do corretor removida.')}
+    catch(cause){setPageError(cause instanceof ApiError?cause.detail:'Não foi possível remover a foto do corretor.')}
+    finally{setPhotoSaving(false)}
+  }
+
   const batchStatusLabel:Record<string,string>={report_released:'Relatório liberado',report_issued:'Relatório emitido',awaiting_finance_approval:'Aguardando aprovação financeira',returned:'Devolvido para correção',scheduled:'Programado para pagamento',paid:'Pago',cancelled:'Cancelado'}
   async function issueCommissionReport(batch:CommissionBatch){setCommissionError('');try{const blob=await apiBlobRequest(`/finance/advanced/commissions/batches/${batch.id}/report`,{method:'POST'});const url=URL.createObjectURL(blob);const anchor=document.createElement('a');anchor.href=url;anchor.download=`${batch.code}.pdf`;document.body.appendChild(anchor);anchor.click();anchor.remove();URL.revokeObjectURL(url);setCommissionBatches(current=>current.map(item=>item.id===batch.id?{...item,status:item.status==='returned'?'returned':'report_issued',report_issued_at:item.report_issued_at||new Date().toISOString()}:item))}catch(cause){setCommissionError(cause instanceof ApiError?cause.detail:'Não foi possível emitir o relatório.')}}
   async function uploadCommissionInvoice(batch:CommissionBatch,file:File){setCommissionError('');const form=new FormData();form.append('file',file);try{const updated=await apiRequest<CommissionBatch>(`/finance/advanced/commissions/batches/${batch.id}/invoice`,{method:'POST',body:form});setCommissionBatches(current=>current.map(item=>item.id===updated.id?updated:item))}catch(cause){setCommissionError(cause instanceof ApiError?cause.detail:'Não foi possível enviar a Nota Fiscal.')}}
@@ -57,11 +90,11 @@ export function BrokersPage({permissions}:{permissions:string[]}){
       <aside className="panel broker-directory-list">
         <div className="broker-directory-search"><Search size={14}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Buscar corretor..."/></div>
         <div className="broker-directory-count">{filtered.length} corretor(es)</div>
-        <div className="broker-directory-items">{filtered.map(item=>{const creci=(item.notes||'').match(/(?:^|\n)CRECI:\s*(.+)/i)?.[1]?.trim();const portfolioCount=properties.filter(property=>property.responsible_broker?.person_id===item.id).length;return <button className={'broker-directory-row '+(selectedId===item.id?'active':'')} type="button" key={item.id} onClick={()=>{setSelectedId(item.id);setDetailTab('overview')}}><span className="broker-directory-avatar"><UserRoundCheck size={17}/></span><span className="broker-directory-copy"><strong>{item.name}</strong><small>{creci?'CRECI '+creci:'CRECI não informado'}</small><i>{portfolioCount} imóvel(is) na carteira</i></span></button>})}{filtered.length===0&&<div className="broker-directory-empty">Nenhum corretor encontrado.</div>}</div>
+        <div className="broker-directory-items">{filtered.map(item=>{const creci=(item.notes||'').match(/(?:^|\n)CRECI:\s*(.+)/i)?.[1]?.trim();const portfolioCount=properties.filter(property=>property.responsible_broker?.person_id===item.id).length;return <button className={'broker-directory-row '+(selectedId===item.id?'active':'')} type="button" key={item.id} onClick={()=>{setSelectedId(item.id);setDetailTab('overview')}}><BrokerPhoto person={item} className="broker-directory-avatar"/><span className="broker-directory-copy"><strong>{item.name}</strong><small>{creci?'CRECI '+creci:'CRECI não informado'}</small><i>{portfolioCount} imóvel(is) na carteira</i></span></button>})}{filtered.length===0&&<div className="broker-directory-empty">Nenhum corretor encontrado.</div>}</div>
       </aside>
       <main className="panel broker-profile">
         {!selected?<div className="broker-profile-empty"><UserRoundCheck size={34}/><strong>Selecione um corretor</strong><span>A ficha completa aparecerá aqui.</span></div>:<>
-          <header className="broker-profile-header"><div className="broker-profile-avatar"><UserRoundCheck size={23}/></div><div className="broker-profile-title"><span className="eyebrow">Ficha do corretor</span><h2>{selected.name}</h2><div>{selected.email&&<span><Mail size={12}/>{selected.email}</span>}{selected.phone&&<span><Phone size={12}/>{selected.phone}</span>}{selected.address?.city&&<span><MapPin size={12}/>{selected.address.city}/{selected.address.state}</span>}</div></div>{canEdit&&<button className="button secondary compact" type="button" onClick={()=>void startEdit(selected)}><Pencil size={13}/> Editar</button>}</header>
+          <header className="broker-profile-header"><div className="broker-profile-photo-wrap"><BrokerPhoto person={selected} className="broker-profile-avatar"/>{canEdit&&<label className="broker-photo-upload" title={selected.photo_content_url?'Trocar foto':'Adicionar foto'}><Camera size={12}/><input type="file" accept="image/jpeg,image/png,image/webp" disabled={photoSaving} onChange={event=>{const file=event.target.files?.[0];if(file)void uploadBrokerPhoto(selected,file);event.currentTarget.value=''}}/></label>}{canEdit&&selected.photo_content_url&&<button className="broker-photo-remove" type="button" title="Remover foto" disabled={photoSaving} onClick={()=>void removeBrokerPhoto(selected)}><Trash2 size={10}/></button>}</div><div className="broker-profile-title"><span className="eyebrow">Ficha do corretor</span><h2>{selected.name}</h2><div>{selected.email&&<span><Mail size={12}/>{selected.email}</span>}{selected.phone&&<span><Phone size={12}/>{selected.phone}</span>}{selected.address?.city&&<span><MapPin size={12}/>{selected.address.city}/{selected.address.state}</span>}</div></div>{canEdit&&<button className="button secondary compact" type="button" onClick={()=>void startEdit(selected)}><Pencil size={13}/> Editar</button>}</header>
           <nav className="broker-profile-tabs" aria-label="Seções da ficha do corretor">{tabs.map(tab=>{const Icon=tab.icon;return <button className={detailTab===tab.key?'active':''} type="button" key={tab.key} onClick={()=>setDetailTab(tab.key)}><Icon size={13}/><span>{tab.label}</span></button>})}</nav>
           <div className="broker-profile-body">
             {detailTab==='overview'&&<div className="broker-overview"><section className="broker-kpi-grid"><article><span>Carteira</span><strong>{brokerStats.total}</strong><small>imóveis vinculados</small></article><article><span>Disponíveis</span><strong>{brokerStats.available}</strong><small>prontos para negócio</small></article><article><span>Publicados</span><strong>{brokerStats.published}</strong><small>no site público</small></article><article><span>Locados</span><strong>{brokerStats.leased}</strong><small>na carteira atual</small></article></section><section className="broker-overview-grid"><article><span>Identificação</span><strong>{documentLabel(selected.document_number)}</strong><small>{(selected.notes||'').match(/(?:^|\n)CRECI:\s*(.+)/i)?.[1]?.trim()?'CRECI '+(selected.notes||'').match(/(?:^|\n)CRECI:\s*(.+)/i)?.[1]?.trim():'CRECI não informado'}</small></article><article><span>Contato</span><strong>{selected.phone||'Telefone não informado'}</strong><small>{selected.email||'E-mail não informado'}</small></article><article><span>Base</span><strong>{selected.address?.city||'Cidade não informada'}{selected.address?.state?'/'+selected.address.state:''}</strong><small>{[selected.address?.neighborhood,selected.address?.street].filter(Boolean).join(' · ')||'Endereço não informado'}</small></article><article><span>Status</span><strong className="broker-active-label"><BadgeCheck size={13}/> Ativo</strong><small>cadastro habilitado no ERP</small></article></section></div>}
