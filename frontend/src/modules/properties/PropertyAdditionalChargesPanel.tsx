@@ -56,7 +56,7 @@ export function PropertyAdditionalChargesPanel({property,canEdit,onUpdated,hasSi
  {hasSignedLease&&<p className="property-charge-notice">Contratos já assinados não são alterados automaticamente. Confira a composição da locação antes de gerar novas cobranças.</p>}
  {!rows.length&&!editing&&<p className="property-charge-notice">Nenhum encargo adicional cadastrado.</p>}
  <div className="property-charge-list">{rows.map(row=><article key={row.key} className={'property-charge-item'+(invalidKeys.includes(row.key)?' property-charge-item-invalid':'')}>
-  <div className="property-charge-item-head"><strong>{row.label||kinds[row.kind]}</strong>{editing?<button type="button" className="button secondary" disabled={busy} onClick={()=>setRows(old=>old.filter(item=>item.key!==row.key))}><Trash2 size={14}/> Remover</button>:<strong>{price(row.amount)}</strong>}</div>
+  <div className="property-charge-item-head"><strong>{row.label||kinds[row.kind]}</strong>{editing?<button type="button" className="button secondary" disabled={busy} onClick={()=>setRows(old=>old.filter(item=>item.key!==row.key))}><Trash2 size={14}/> Remover</button>:<strong>{price(parseDecimal(row.amount)??0)}</strong>}</div>
   {editing?<><div className="property-charge-fieldgrid">
    <label>Tipo<select value={row.kind} onChange={e=>{const kind=e.target.value as Charge['kind'];patch(row.key,{kind,label:row.label===kinds[row.kind]?kinds[kind]:row.label,frequency:kind==='fire_insurance'?'annual':row.frequency,agency_retention_type:'none',agency_retention_value:0})}}>{Object.entries(kinds).map(([key,label])=><option key={key} value={key}>{label}</option>)}</select></label>
    <label>Descrição<input maxLength={120} value={row.label} onChange={e=>patch(row.key,{label:e.target.value})}/></label>
