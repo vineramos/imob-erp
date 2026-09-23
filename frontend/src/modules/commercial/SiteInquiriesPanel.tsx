@@ -15,7 +15,7 @@ import {
   X,
 } from 'lucide-react'
 import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react'
-import { ApiError, apiRequest } from '../../api/client'
+import { ApiError, apiBlobRequest, apiRequest } from '../../api/client'
 
 type InquiryStatus = 'new' | 'contacted' | 'visit_scheduled' | 'qualified' | 'proposal' | 'converted' | 'won' | 'lost'
 type FunnelStageStatus = 'new' | 'contacted' | 'visit_scheduled' | 'qualified' | 'proposal' | 'won' | 'lost'
@@ -96,7 +96,7 @@ type CommercialTimelineEvent = { kind:string; label:string; detail:string|null; 
 type CommercialFunnel = {
   inquiry: SiteInquiry
   responsible: CrmResponsible | null
-  person: { id: string; name: string; document_number: string | null; email: string | null; phone: string | null } | null
+  person: { id: string; name: string; document_number: string | null; email: string | null; phone: string | null; photo_content_url: string | null; photo_updated_at: string | null } | null
   property_status: string | null
   property_publication_enabled: boolean
   suggested_rent_amount: number | null
@@ -110,6 +110,18 @@ type ProposalConversion = {
   lease_code: string
   lease_status: string
   message: string
+}
+
+function CrmPersonPhoto({person}:{person:CommercialFunnel['person']}){
+  const [src,setSrc]=useState('')
+  useEffect(()=>{
+    let active=true,objectUrl=''
+    if(!person?.photo_content_url){setSrc('');return()=>undefined}
+    void apiBlobRequest(person.photo_content_url).then(blob=>{if(!active)return;objectUrl=URL.createObjectURL(blob);setSrc(objectUrl)}).catch(()=>{if(active)setSrc('')})
+    return()=>{active=false;if(objectUrl)URL.revokeObjectURL(objectUrl)}
+  },[person?.id,person?.photo_content_url,person?.photo_updated_at])
+  if(src)return <img className="crm-person-photo" src={src} alt={person?.name||'Interessado'}/>
+  return <span className="crm-person-photo crm-person-photo-fallback">{(person?.name||'Interessado').trim().split(/\s+/).slice(0,2).map(part=>part[0]?.toUpperCase()).join('')}</span>
 }
 
 type Props = { permissions: string[] }
@@ -325,7 +337,7 @@ export function SiteInquiriesPanel({ permissions }: Props) {
         <div className="commercial-funnel-body">
           {modalError && <div className="form-alert danger-alert" role="alert">{modalError}</div>}{modalSuccess && <div className="form-alert success-alert">{modalSuccess}</div>}
           {modalLoading && !funnel ? <div className="settings-loading">Carregando atendimento...</div> : funnel && <>
-            <section className="funnel-summary-grid"><article className="funnel-summary-card"><span>Interessado</span><strong>{funnel.person?.name || funnel.inquiry.name}</strong><small>{funnel.person ? 'Cadastro vinculado automaticamente' : 'Será cadastrado no próximo passo'}</small></article><article className="funnel-summary-card"><span>Imóvel</span><strong>#{funnel.inquiry.property_code}</strong><small>{funnel.property_status || 'indisponível'} · {funnel.property_publication_enabled ? 'publicado' : 'fora do site'}</small></article><article className="funnel-summary-card"><span>Aluguel de referência</span><strong>{money(funnel.suggested_rent_amount)}</strong><small>valor atual do estoque</small></article></section>
+            <section className="funnel-summary-grid"><article className="funnel-summary-card funnel-person-summary"><CrmPersonPhoto person={funnel.person}/><div><span>Interessado</span><strong>{funnel.person?.name || funnel.inquiry.name}</strong><small>{funnel.person ? 'Cadastro vinculado automaticamente' : 'Será cadastrado no próximo passo'}</small></div></article><article className="funnel-summary-card"><span>Imóvel</span><strong>#{funnel.inquiry.property_code}</strong><small>{funnel.property_status || 'indisponível'} · {funnel.property_publication_enabled ? 'publicado' : 'fora do site'}</small></article><article className="funnel-summary-card"><span>Aluguel de referência</span><strong>{money(funnel.suggested_rent_amount)}</strong><small>valor atual do estoque</small></article></section>
 
             <section className="canonical-modal-section funnel-section crm-workflow-section"><div className="funnel-section-heading"><div><span className="eyebrow">Gestão do atendimento</span><h3>Etapa, responsável e próxima atividade</h3></div>{funnel.responsible&&<span title={funnel.responsible.email||''}>{funnel.responsible.name.slice(0,1).toUpperCase()}</span>}</div><div className="crm-workflow-grid crm-workflow-grid-v86"><label className="field"><span>Etapa do funil</span><select disabled={!canManage||busy} value={workflowStage} onChange={event=>setWorkflowStage(event.target.value as FunnelStageStatus)}>{funnelStageOptions.map(stage=><option key={stage.value} value={stage.value}>{stage.label}</option>)}</select></label><label className="field"><span>Responsável</span><select disabled={!canManage||busy} value={workflowResponsible} onChange={event=>setWorkflowResponsible(event.target.value)}><option value="">Não atribuído</option>{responsibles.map(row=><option key={row.id} value={row.id}>{row.name}</option>)}</select></label><label className="field"><span>Próxima atividade</span><input disabled={!canManage||busy} maxLength={180} value={workflowAction} onChange={event=>setWorkflowAction(event.target.value)} placeholder="Ex.: ligar, enviar WhatsApp, confirmar visita"/></label><label className="field"><span>Quando</span><input disabled={!canManage||busy} type="datetime-local" value={workflowAt} onChange={event=>setWorkflowAt(event.target.value)}/></label><label className="field crm-workflow-notes"><span>Observações</span><input disabled={!canManage||busy} maxLength={2000} value={workflowNotes} onChange={event=>setWorkflowNotes(event.target.value)} placeholder="Contexto para o próximo contato"/></label></div>{canManage&&<div className="funnel-inline-actions"><button className="button secondary" type="button" disabled={busy} onClick={()=>void saveWorkflow()}><UserRoundCheck size={14}/> Salvar gestão</button></div>}</section>
 
