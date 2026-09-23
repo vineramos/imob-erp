@@ -23,6 +23,8 @@ class Person(Base):
     phone: Mapped[str | None] = mapped_column(String(40))
     address: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, nullable=False)
     notes: Mapped[str | None] = mapped_column(Text)
+    billing_legal_name: Mapped[str | None] = mapped_column(String(180))
+    billing_document_number: Mapped[str | None] = mapped_column(String(24), index=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("app_users.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
