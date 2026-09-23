@@ -48,6 +48,8 @@ def _person_response(person: Person) -> PersonResponse:
         notes=person.notes,
         billing_legal_name=person.billing_legal_name,
         billing_document_number=person.billing_document_number,
+        photo_content_url=f"/people/{person.id}/photo/content" if person.photo_storage_reference else None,
+        photo_updated_at=person.photo_updated_at,
         is_active=person.is_active,
         role_keys=sorted(role.role_key for role in person.roles if role.is_active),
         created_at=person.created_at,
