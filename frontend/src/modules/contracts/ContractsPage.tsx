@@ -404,16 +404,16 @@ export function ContractsPage({ permissions }: Props) {
             <select aria-label="Filtrar contratos por status" value={filter} onChange={event=>setFilter(event.target.value as typeof filter)}>
               <option value="all">Todos os status</option><option value="draft">Rascunhos</option><option value="review">Em revisão</option><option value="approved">Aprovados</option><option value="pending_signature">Assinatura</option><option value="signed">Assinados</option><option value="cancelled">Cancelados</option>
             </select>
-            <div className="contract-directory-count"><span>${filtered.length} contrato(s)</span><small>${contracts.length} no total</small></div>
+            <div className="contract-directory-count"><span>{filtered.length} contrato(s)</span><small>{contracts.length} no total</small></div>
           </div>
           <div className="contract-directory-list">
             {filtered.map(item=><button key={item.id} type="button" aria-pressed={selectedId===item.id} className={'contract-directory-row '+(selectedId===item.id?'active':'')} onClick={()=>{setSelectedId(item.id);setDetailTab('overview')}}>
               <span className="contract-directory-icon"><FileSignature size={18}/></span>
               <span className="contract-directory-copy">
-                <span className="contract-directory-line"><strong>${item.code}</strong><i className={'status-badge '+statusClass(item.status)}>${statusLabel[item.status]}</i></span>
-                <b>Imóvel #${item.property_code}</b>
-                <small title={addressLine(item.property_address)}>${addressLine(item.property_address)}</small>
-                <em>${planLabel[item.plan]||item.plan} · Administração ${adminFee(item)}</em>
+                <span className="contract-directory-line"><strong>{item.code}</strong><i className={'status-badge '+statusClass(item.status)}>{statusLabel[item.status]}</i></span>
+                <b>Imóvel #{item.property_code}</b>
+                <small title={addressLine(item.property_address)}>{addressLine(item.property_address)}</small>
+                <em>{planLabel[item.plan]||item.plan} · Administração {adminFee(item)}</em>
               </span>
             </button>)}
             {!filtered.length&&<div className="contract-directory-empty"><FileSignature size={24}/><strong>Nenhum contrato encontrado</strong><span>Experimente outro termo ou status.</span></div>}
@@ -424,9 +424,9 @@ export function ContractsPage({ permissions }: Props) {
             <header className="contract-detail-header">
               <div className="contract-detail-heading">
                 <span className="contract-detail-icon"><FileSignature size={21}/></span>
-                <div><span className="eyebrow">CONTRATO DE ADMINISTRAÇÃO · V${selectedContract.current_version}</span>
-                  <div className="contract-title-row"><h2>${selectedContract.code}</h2><i className={'status-badge '+statusClass(selectedContract.status)}>${statusLabel[selectedContract.status]}</i></div>
-                  <p title={addressLine(selectedContract.property_address)}>Imóvel #${selectedContract.property_code} · ${addressLine(selectedContract.property_address)}</p>
+                <div><span className="eyebrow">CONTRATO DE ADMINISTRAÇÃO · V{selectedContract.current_version}</span>
+                  <div className="contract-title-row"><h2>{selectedContract.code}</h2><i className={'status-badge '+statusClass(selectedContract.status)}>{statusLabel[selectedContract.status]}</i></div>
+                  <p title={addressLine(selectedContract.property_address)}>Imóvel #{selectedContract.property_code} · {addressLine(selectedContract.property_address)}</p>
                 </div>
               </div>
               <div className="contract-detail-actions-v2">
@@ -443,11 +443,11 @@ export function ContractsPage({ permissions }: Props) {
               </div>
             </header>
             <div className="contract-essential-strip admin-essential-strip">
-              <div><span>Plano</span><strong>${planLabel[selectedContract.plan]||selectedContract.plan}</strong></div>
-              <div><span>Administração</span><strong>${adminFee(selectedContract)}</strong></div>
-              <div><span>Intermediação</span><strong>${Number(selectedContract.intermediation_percent).toLocaleString('pt-BR')}% · ${selectedContract.intermediation_installments} parcela(s)</strong></div>
-              <div><span>Repasse</span><strong>D+${selectedContract.owner_repasse_business_days} dias úteis</strong></div>
-              <div><span>Assinatura</span><strong>${signingLabel(selectedContract)}</strong></div>
+              <div><span>Plano</span><strong>{planLabel[selectedContract.plan]||selectedContract.plan}</strong></div>
+              <div><span>Administração</span><strong>{adminFee(selectedContract)}</strong></div>
+              <div><span>Intermediação</span><strong>{Number(selectedContract.intermediation_percent).toLocaleString('pt-BR')}% · {selectedContract.intermediation_installments} parcela(s)</strong></div>
+              <div><span>Repasse</span><strong>D+{selectedContract.owner_repasse_business_days} dias úteis</strong></div>
+              <div><span>Assinatura</span><strong>{signingLabel(selectedContract)}</strong></div>
             </div>
             <nav className="contract-detail-tabs" aria-label="Abas do contrato">
               <button type="button" className={detailTab==='overview'?'active':''} onClick={()=>setDetailTab('overview')}><FileText size={14}/> Visão geral</button>
@@ -461,59 +461,59 @@ export function ContractsPage({ permissions }: Props) {
               {detailTab==='overview'&&<div className="contract-overview-v2">
                 <article className="contract-surface-v2"><div className="contract-section-heading"><div><span>Resumo operacional</span><h3>Condições principais</h3></div><ShieldCheck size={16}/></div>
                   <div className="contract-facts-grid">
-                    <div><span>Imóvel</span><strong>#${selectedContract.property_code}</strong><small title={addressLine(selectedContract.property_address)}>${addressLine(selectedContract.property_address)}</small></div>
-                    <div><span>Proprietários</span><strong>${selectedContract.owners.length} titular(es)</strong><small>${selectedContract.owners.map(owner=>owner.name).join(' / ')||'Não informado'}</small></div>
-                    <div><span>Vigência</span><strong>${selectedContract.start_date?new Date(selectedContract.start_date+'T12:00:00').toLocaleDateString('pt-BR'):'Não definida'}</strong><small>Fim ${selectedContract.end_date?new Date(selectedContract.end_date+'T12:00:00').toLocaleDateString('pt-BR'):'não definido'}</small></div>
-                    <div><span>Plano</span><strong>${planLabel[selectedContract.plan]||selectedContract.plan}</strong><small>Administração ${adminFee(selectedContract)}</small></div>
-                    <div><span>Condomínio</span><strong>${payerLabel[selectedContract.condo_operational_payer]||selectedContract.condo_operational_payer}</strong><small>Responsável operacional</small></div>
-                    <div><span>IPTU</span><strong>${payerLabel[selectedContract.iptu_operational_payer]||selectedContract.iptu_operational_payer}</strong><small>Responsável operacional</small></div>
+                    <div><span>Imóvel</span><strong>#{selectedContract.property_code}</strong><small title={addressLine(selectedContract.property_address)}>{addressLine(selectedContract.property_address)}</small></div>
+                    <div><span>Proprietários</span><strong>{selectedContract.owners.length} titular(es)</strong><small>{selectedContract.owners.map(owner=>owner.name).join(' / ')||'Não informado'}</small></div>
+                    <div><span>Vigência</span><strong>{selectedContract.start_date?new Date(selectedContract.start_date+'T12:00:00').toLocaleDateString('pt-BR'):'Não definida'}</strong><small>Fim {selectedContract.end_date?new Date(selectedContract.end_date+'T12:00:00').toLocaleDateString('pt-BR'):'não definido'}</small></div>
+                    <div><span>Plano</span><strong>{planLabel[selectedContract.plan]||selectedContract.plan}</strong><small>Administração {adminFee(selectedContract)}</small></div>
+                    <div><span>Condomínio</span><strong>{payerLabel[selectedContract.condo_operational_payer]||selectedContract.condo_operational_payer}</strong><small>Responsável operacional</small></div>
+                    <div><span>IPTU</span><strong>{payerLabel[selectedContract.iptu_operational_payer]||selectedContract.iptu_operational_payer}</strong><small>Responsável operacional</small></div>
                   </div>
                 </article>
-                <article className="contract-surface-v2 contract-status-card"><div className="contract-section-heading"><div><span>Fluxo atual</span><h3>${statusLabel[selectedContract.status]}</h3></div><ShieldCheck size={16}/></div>
+                <article className="contract-surface-v2 contract-status-card"><div className="contract-section-heading"><div><span>Fluxo atual</span><h3>{statusLabel[selectedContract.status]}</h3></div><ShieldCheck size={16}/></div>
                   <div className="contract-flow-summary">
-                    <div><span>Assinatura</span><strong>${signingLabel(selectedContract)}</strong></div>
-                    <div><span>PDF atual</span><strong>${documentCurrent?'Gerado':'Pendente'}</strong></div>
-                    <div><span>Arquivo final</span><strong>${selectedContract.archive_status==='archived'?'Arquivado':'Pendente'}</strong></div>
-                    <div><span>Versão</span><strong>v${selectedContract.current_version}</strong></div>
+                    <div><span>Assinatura</span><strong>{signingLabel(selectedContract)}</strong></div>
+                    <div><span>PDF atual</span><strong>{documentCurrent?'Gerado':'Pendente'}</strong></div>
+                    <div><span>Arquivo final</span><strong>{selectedContract.archive_status==='archived'?'Arquivado':'Pendente'}</strong></div>
+                    <div><span>Versão</span><strong>v{selectedContract.current_version}</strong></div>
                   </div>
                 </article>
-                {selectedContract.notes&&<article className="contract-surface-v2 contract-notes-v2"><div className="contract-section-heading"><div><span>Observações</span><h3>Condições adicionais</h3></div></div><p>${selectedContract.notes}</p></article>}
+                {selectedContract.notes&&<article className="contract-surface-v2 contract-notes-v2"><div className="contract-section-heading"><div><span>Observações</span><h3>Condições adicionais</h3></div></div><p>{selectedContract.notes}</p></article>}
               </div>}
               {detailTab==='parties'&&<div className="contract-parties-v2">
                 <article className="contract-surface-v2"><div className="contract-section-heading"><div><span>Partes</span><h3>Proprietários do imóvel</h3></div><Users size={16}/></div>
-                  <div className="contract-party-list">{selectedContract.owners.map((owner,index)=><article key={index+'-'+owner.name}><span className="contract-party-avatar">${owner.name.trim().charAt(0).toUpperCase()}</span><div><strong>${owner.name}</strong><small>${Number(owner.ownership_percent).toLocaleString('pt-BR')}% de participação</small></div></article>)}
+                  <div className="contract-party-list">{selectedContract.owners.map((owner,index)=><article key={index+'-'+owner.name}><span className="contract-party-avatar">{owner.name.trim().charAt(0).toUpperCase()}</span><div><strong>{owner.name}</strong><small>{Number(owner.ownership_percent).toLocaleString('pt-BR')}% de participação</small></div></article>)}
                     {!selectedContract.owners.length&&<div className="contract-empty-soft">Nenhum proprietário vinculado.</div>}
                   </div>
                 </article>
                 <article className="contract-surface-v2"><div className="contract-section-heading"><div><span>Signatários</span><h3>Participantes da assinatura</h3></div><Users size={16}/></div>
-                  <div className="contract-signer-list-v2">{selectedContract.signers.map((signer,index)=><article key={index+'-'+signer.email}><b>${signer.sign_order}</b><div><strong>${signer.name}</strong><small>${signerRoleLabel[signer.role]||signer.role} · ${signer.email}</small></div></article>)}
+                  <div className="contract-signer-list-v2">{selectedContract.signers.map((signer,index)=><article key={index+'-'+signer.email}><b>{signer.sign_order}</b><div><strong>{signer.name}</strong><small>{signerRoleLabel[signer.role]||signer.role} · {signer.email}</small></div></article>)}
                     {!selectedContract.signers.length&&<div className="contract-empty-soft">Nenhum signatário definido nesta versão.</div>}
                   </div>
                 </article>
               </div>}
               {detailTab==='finance'&&<div className="contract-finance-v2">
                 <div className="contract-kpis-v2">
-                  <article><span>Taxa de administração</span><strong>${adminFee(selectedContract)}</strong><small>Condição contratada</small></article>
-                  <article><span>Intermediação</span><strong>${Number(selectedContract.intermediation_percent).toLocaleString('pt-BR')}%</strong><small>${selectedContract.intermediation_installments} parcela(s)</small></article>
-                  <article><span>Repasse</span><strong>D+${selectedContract.owner_repasse_business_days}</strong><small>Dias úteis após recebimento</small></article>
-                  <article><span>Plano</span><strong>${planLabel[selectedContract.plan]||selectedContract.plan}</strong><small>Condições contratuais</small></article>
+                  <article><span>Taxa de administração</span><strong>{adminFee(selectedContract)}</strong><small>Condição contratada</small></article>
+                  <article><span>Intermediação</span><strong>{Number(selectedContract.intermediation_percent).toLocaleString('pt-BR')}%</strong><small>{selectedContract.intermediation_installments} parcela(s)</small></article>
+                  <article><span>Repasse</span><strong>D+{selectedContract.owner_repasse_business_days}</strong><small>Dias úteis após recebimento</small></article>
+                  <article><span>Plano</span><strong>{planLabel[selectedContract.plan]||selectedContract.plan}</strong><small>Condições contratuais</small></article>
                 </div>
                 <article className="contract-surface-v2"><div className="contract-section-heading"><div><span>Condições financeiras</span><h3>Regras desta versão</h3></div><WalletCards size={17}/></div>
                   <div className="contract-flow-summary">
-                    <div><span>Intermediação</span><strong>${Number(selectedContract.intermediation_percent).toLocaleString('pt-BR')}% em ${selectedContract.intermediation_installments} parcela(s)</strong></div>
-                    <div><span>Administração após intermediação</span><strong>${adminFee(selectedContract)}</strong></div>
-                    <div><span>Repasse ao proprietário</span><strong>D+${selectedContract.owner_repasse_business_days} dias úteis</strong></div>
+                    <div><span>Intermediação</span><strong>{Number(selectedContract.intermediation_percent).toLocaleString('pt-BR')}% em {selectedContract.intermediation_installments} parcela(s)</strong></div>
+                    <div><span>Administração após intermediação</span><strong>{adminFee(selectedContract)}</strong></div>
+                    <div><span>Repasse ao proprietário</span><strong>D+{selectedContract.owner_repasse_business_days} dias úteis</strong></div>
                   </div>
                   <p className="admin-contract-finance-note">As cobranças e baixas efetivas permanecem na central Financeiro; esta aba mostra somente as condições vigentes deste contrato.</p>
                 </article>
               </div>}
               {detailTab==='signature'&&<div className="contract-signature-v2">
-                <article className="contract-surface-v2"><div className="contract-section-heading"><div><span>Assinatura eletrônica</span><h3>${signingLabel(selectedContract)}</h3></div><FileSignature size={17}/></div>
+                <article className="contract-surface-v2"><div className="contract-section-heading"><div><span>Assinatura eletrônica</span><h3>{signingLabel(selectedContract)}</h3></div><FileSignature size={17}/></div>
                   <div className="contract-document-summary-v2">
-                    <div><span>Provedor</span><strong>${selectedContract.signing_provider||'Não definido'}</strong></div>
-                    <div><span>Envelope</span><strong title={selectedContract.signing_envelope_id||undefined}>${selectedContract.signing_envelope_id||'Não enviado'}</strong></div>
-                    <div><span>PDF atual</span><strong>${documentCurrent?'Gerado e versionado':'Pendente'}</strong></div>
-                    <div><span>Arquivo final</span><strong>${selectedContract.archive_status==='archived'?'Arquivado':'Pendente'}</strong></div>
+                    <div><span>Provedor</span><strong>{selectedContract.signing_provider||'Não definido'}</strong></div>
+                    <div><span>Envelope</span><strong title={selectedContract.signing_envelope_id||undefined}>{selectedContract.signing_envelope_id||'Não enviado'}</strong></div>
+                    <div><span>PDF atual</span><strong>{documentCurrent?'Gerado e versionado':'Pendente'}</strong></div>
+                    <div><span>Arquivo final</span><strong>{selectedContract.archive_status==='archived'?'Arquivado':'Pendente'}</strong></div>
                   </div>
                   <SignatureTimeline key={selectedContract.id} contractId={selectedContract.id}/>
                 </article>
@@ -521,10 +521,10 @@ export function ContractsPage({ permissions }: Props) {
               {detailTab==='documents'&&<div className="contract-documents-v2">
                 <article className="contract-surface-v2"><div className="contract-section-heading"><div><span>Documento principal</span><h3>PDF e integridade</h3></div><FileCheck2 size={17}/></div>
                   <div className="contract-document-summary-v2">
-                    <div><span>Versão documental</span><strong>${selectedContract.generated_document_version??'Não gerado'}</strong></div>
-                    <div><span>SHA-256 original</span><strong title={selectedContract.generated_document_hash||undefined}>${selectedContract.generated_document_hash||'Pendente'}</strong></div>
-                    <div><span>SHA-256 final</span><strong title={selectedContract.final_document_hash||undefined}>${selectedContract.final_document_hash||'Pendente'}</strong></div>
-                    <div><span>Arquivo final</span><strong>${selectedContract.archive_status==='archived'?'Arquivado':selectedContract.archive_status.replaceAll('_',' ')}</strong></div>
+                    <div><span>Versão documental</span><strong>{selectedContract.generated_document_version??'Não gerado'}</strong></div>
+                    <div><span>SHA-256 original</span><strong title={selectedContract.generated_document_hash||undefined}>{selectedContract.generated_document_hash||'Pendente'}</strong></div>
+                    <div><span>SHA-256 final</span><strong title={selectedContract.final_document_hash||undefined}>{selectedContract.final_document_hash||'Pendente'}</strong></div>
+                    <div><span>Arquivo final</span><strong>{selectedContract.archive_status==='archived'?'Arquivado':selectedContract.archive_status.replaceAll('_',' ')}</strong></div>
                   </div>
                   {documentCurrent&&<a className="button secondary admin-document-link" href={'/api/administration-contracts/'+selectedContract.id+'/document/pdf'} target="_blank" rel="noreferrer"><Download size={14}/> Visualizar PDF atual</a>}
                 </article>
@@ -532,7 +532,7 @@ export function ContractsPage({ permissions }: Props) {
               </div>}
               {detailTab==='history'&&<div className="contract-history-v2">
                 <article className="contract-surface-v2"><div className="contract-section-heading"><div><span>Versionamento</span><h3>Histórico imutável</h3></div><History size={17}/></div>
-                  <div className="contract-version-list-v2">{[...selectedContract.versions].reverse().map(version=><article key={version.version_number}><b>v${version.version_number}</b><div><strong>${version.change_summary||'Versão registrada'}</strong><small>${new Date(version.created_at).toLocaleString('pt-BR')}</small></div></article>)}
+                  <div className="contract-version-list-v2">{[...selectedContract.versions].reverse().map(version=><article key={version.version_number}><b>v{version.version_number}</b><div><strong>{version.change_summary||'Versão registrada'}</strong><small>{new Date(version.created_at).toLocaleString('pt-BR')}</small></div></article>)}
                     {!selectedContract.versions.length&&<div className="contract-empty-soft">Nenhuma versão registrada.</div>}
                   </div>
                 </article>
