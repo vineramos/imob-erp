@@ -361,14 +361,13 @@ def _ensure_batches(db: Session, context: UserContext, competence: date) -> list
 
 @router.post("/batches/ensure")
 def ensure_payment_batches(
+    request: Request,
     competence: date = Query(...),
-    request: Request | None = None,
     context: UserContext = Depends(require_permission("finance.payment.prepare")),
     db: Session = Depends(get_db),
 ):
     created = _ensure_batches(db, context, competence)
-    if request is not None:
-        _audit(db, request, context, "finance.commission_batches.generated", "commission_payment_batch", competence.isoformat(), {"created": len(created)})
+    _audit(db, request, context, "finance.commission_batches.generated", "commission_payment_batch", competence.isoformat(), {"created": len(created)})
     db.commit()
     rows = db.scalars(select(CommissionPaymentBatch).where(
         CommissionPaymentBatch.organization_id == context.user.organization_id,
