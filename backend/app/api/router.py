@@ -46,6 +46,7 @@ from app.api.routes.people_lifecycle import router as people_lifecycle_router
 from app.api.routes.person_bank_details import router as person_bank_details_router
 from app.api.routes.person_profile import router as person_profile_router
 from app.api.routes.person_media import router as person_media_router
+from app.api.routes.person_insights import router as person_insights_router
 from app.api.routes.portfolio import router as portfolio_router
 from app.api.routes.property_lifecycle import router as property_lifecycle_router
 from app.api.routes.property_media import router as property_media_router
@@ -104,6 +105,7 @@ api_router.include_router(economic_indices_router)
 api_router.include_router(person_bank_details_router)
 api_router.include_router(person_profile_router)
 api_router.include_router(person_media_router)
+api_router.include_router(person_insights_router)
 api_router.include_router(property_media_router)
 api_router.include_router(contracts_router)
 api_router.include_router(leases_router)
