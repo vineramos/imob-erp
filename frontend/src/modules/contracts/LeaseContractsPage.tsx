@@ -9,6 +9,9 @@ import {
   FileText,
   History,
   Plus,
+  Search,
+  Home,
+  CircleDollarSign,
   RotateCcw,
   Send,
   ShieldCheck,
@@ -36,6 +39,8 @@ function LeasePersonPhoto({person,className}:{person:Person;className:string}){
 }
 
 type LeaseStatus = 'draft' | 'review' | 'approved' | 'pending_signature' | 'signed' | 'closed' | 'cancelled'
+type ContractDetailTab = 'overview' | 'parties' | 'finance' | 'signature' | 'documents' | 'history'
+type LeaseCharge = { id:string; lease_contract_id:string; code:string; competence:string; due_date:string; status:string; gross_amount:number; paid_amount:number|null; paid_at:string|null }
 type GuaranteeType = 'insurance' | 'deposit' | 'capitalization' | 'guarantor' | 'none'
 type LeaseWorkflowAction = 'submit_review' | 'approve' | 'prepare_signature' | 'return_draft' | 'cancel'
 type LeaseSignerRole = 'owner' | 'tenant' | 'agency' | 'witness' | 'other'
@@ -281,6 +286,12 @@ export function LeaseContractsPage({ permissions }: Props) {
   const [changeSummary, setChangeSummary] = useState('')
   const [expanded, setExpanded] = useState<string | null>(null)
   const [expandedTab, setExpandedTab] = useState<'details' | 'lifecycle' | 'documents'>('details')
+  const [selectedId,setSelectedId]=useState<string|null>(null)
+  const [detailTab,setDetailTab]=useState<ContractDetailTab>('overview')
+  const [contractQuery,setContractQuery]=useState('')
+  const [contractStatus,setContractStatus]=useState<'all'|LeaseStatus>('all')
+  const [contractCharges,setContractCharges]=useState<LeaseCharge[]>([])
+  const [chargesLoading,setChargesLoading]=useState(false)
   const [signerLookupIndex, setSignerLookupIndex] = useState<number | null>(null)
   const [cancelTarget, setCancelTarget] = useState<Lease | null>(null)
   const [cancelReason, setCancelReason] = useState('')
@@ -342,6 +353,30 @@ export function LeaseContractsPage({ permissions }: Props) {
     signed: items.filter((item) => item.status === 'signed').length,
   }), [items])
   const tenantMonthlyTotal = useMemo(() => Number(form.rent_amount || 0) + form.monthly_charges.reduce((total, item) => total + (item.active && item.payer === 'tenant' ? Number(item.amount || 0) : 0), 0), [form.rent_amount, form.monthly_charges])
+
+  const filteredContracts=useMemo(()=>{
+    const term=contractQuery.trim().toLocaleLowerCase('pt-BR')
+    return items.filter(item=>{
+      if(contractStatus!=='all'&&item.status!==contractStatus)return false
+      if(!term)return true
+      const haystack=[item.code,item.property_code,addressLine(item.property_address),...item.tenants.map(tenant=>tenant.name),...item.owners.map(owner=>owner.name)].join(' ').toLocaleLowerCase('pt-BR')
+      return haystack.includes(term)
+    })
+  },[items,contractQuery,contractStatus])
+  useEffect(()=>{
+    if(filteredContracts.length===0){setSelectedId(null);return}
+    if(!selectedId||!filteredContracts.some(item=>item.id===selectedId))setSelectedId(filteredContracts[0].id)
+  },[filteredContracts,selectedId])
+  const selectedLease=useMemo(()=>items.find(item=>item.id===selectedId)??null,[items,selectedId])
+  useEffect(()=>{
+    if(!selectedLease||detailTab!=='finance'||!granted.has('finance.view'))return
+    setChargesLoading(true)
+    void apiRequest<LeaseCharge[]>(`/finance/charges?lease_contract_id=${selectedLease.id}`)
+      .then(setContractCharges)
+      .catch(cause=>setError(cause instanceof ApiError?cause.detail:'Não foi possível carregar o financeiro do contrato.'))
+      .finally(()=>setChargesLoading(false))
+  },[selectedLease,detailTab,granted])
+
 
   function openNew() {
     setEditing(null)
