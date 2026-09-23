@@ -11,8 +11,8 @@ from sqlalchemy.orm import Session, selectinload
 from app.core.database import get_db
 from app.domains.foundation.access import UserContext, require_permission
 from app.domains.foundation.audit import write_audit
-from app.domains.foundation.models import Organization, OrganizationSettings
-from app.domains.portfolio.models import Property, PropertyOwner, PropertyPhoto
+from app.domains.foundation.models import AppUser, Organization, OrganizationSettings
+from app.domains.portfolio.models import Person, Property, PropertyOwner, PropertyPhoto
 from app.domains.portfolio.schemas import (
     PublicPropertyResponse,
     PropertyFeatures,
@@ -88,6 +88,8 @@ class SiteInquiryResponse(BaseModel):
     status: str
     source: str
     responsible_user_id: UUID | None = None
+    property_broker_person_id: UUID | None = None
+    property_broker_name: str | None = None
     next_action_title: str | None = None
     next_action_at: datetime | None = None
     next_action_notes: str | None = None
@@ -571,7 +573,28 @@ def create_public_site_inquiry(
         if duplicate is not None:
             return PublicSiteInquiryAck(message="Recebemos seu interesse. Nossa equipe fará o contato.")
 
+    # Property brokers are Person records, while CRM assignees are AppUser records.
+    # Auto-assign only when the broker has an active ERP user with the same email.
+    broker_user_id = None
+    if property_item.responsible_broker_person_id:
+        broker = db.scalar(
+            select(Person).where(
+                Person.id == property_item.responsible_broker_person_id,
+                Person.organization_id == organization_id,
+                Person.is_active.is_(True),
+            )
+        )
+        if broker and broker.email:
+            broker_user_id = db.scalar(
+                select(AppUser.id).where(
+                    AppUser.organization_id == organization_id,
+                    AppUser.is_active.is_(True),
+                    func.lower(AppUser.email) == broker.email.strip().lower(),
+                )
+            )
+
     item = PublicSiteInquiry(
+        responsible_user_id=broker_user_id,
         organization_id=organization_id,
         property_id=property_item.id,
         property_code=f"{property_item.internal_number:06d}",
@@ -592,8 +615,10 @@ def create_public_site_inquiry(
     return PublicSiteInquiryAck(message="Recebemos seu interesse. Nossa equipe fará o contato.")
 
 
-def _site_inquiry_response(item: PublicSiteInquiry) -> SiteInquiryResponse:
+def _site_inquiry_response(item: PublicSiteInquiry, *, broker: Person | None = None) -> SiteInquiryResponse:
     return SiteInquiryResponse(
+        property_broker_person_id=broker.id if broker else None,
+        property_broker_name=broker.name if broker else None,
         id=item.id,
         property_id=item.property_id,
         property_code=item.property_code,
@@ -643,7 +668,21 @@ def list_site_inquiries(
                 )
             ).lower()
         ]
-    return [_site_inquiry_response(item) for item in items]
+    # Fetch property/broker names once per list; do not run N+1 on CRM cards.
+    property_ids = {row.property_id for row in items if row.property_id}
+    properties = db.scalars(select(Property).where(
+        Property.organization_id == context.user.organization_id,
+        Property.id.in_(property_ids),
+    )).all() if property_ids else []
+    by_property = {row.id: row.responsible_broker_person_id for row in properties}
+    broker_ids = {bid for bid in by_property.values() if bid}
+    broker_rows = db.scalars(select(Person).where(
+        Person.organization_id == context.user.organization_id,
+        Person.id.in_(broker_ids),
+        Person.is_active.is_(True),
+    )).all() if broker_ids else []
+    broker_map = {row.id: row for row in broker_rows}
+    return [_site_inquiry_response(row, broker=broker_map.get(by_property.get(row.property_id))) for row in items]
 
 
 @router.patch("/crm/site-inquiries/{inquiry_id}", response_model=SiteInquiryResponse)
@@ -680,4 +719,12 @@ def update_site_inquiry(
     )
     db.commit()
     db.refresh(item)
-    return _site_inquiry_response(item)
+    prop = db.scalar(select(Property).where(
+        Property.id == item.property_id, Property.organization_id == context.user.organization_id,
+    )) if item.property_id else None
+    broker = db.scalar(select(Person).where(
+        Person.id == prop.responsible_broker_person_id,
+        Person.organization_id == context.user.organization_id,
+        Person.is_active.is_(True),
+    )) if prop and prop.responsible_broker_person_id else None
+    return _site_inquiry_response(item, broker=broker)

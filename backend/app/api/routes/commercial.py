@@ -211,7 +211,9 @@ def _funnel(db: Session, inquiry: PublicSiteInquiry) -> dict:
         author = db.get(AppUser, row.created_by_user_id) if row.created_by_user_id else None
         timeline.append({"kind": "manual", "label": row.title, "detail": row.notes, "at": row.created_at, "author_name": author.name if author else None})
     timeline.sort(key=lambda event: event["at"] or inquiry.created_at, reverse=True)
+    property_broker = db.get(Person, prop.responsible_broker_person_id) if prop and prop.responsible_broker_person_id else None
     return {
+        "property_broker": {"id": property_broker.id, "name": property_broker.name} if property_broker else None,
         "inquiry": {"id": inquiry.id, "property_id": inquiry.property_id, "property_code": inquiry.property_code, "property_title": inquiry.property_title, "name": inquiry.name, "email": inquiry.email, "phone": inquiry.phone, "preferred_contact": inquiry.preferred_contact, "message": inquiry.message, "status": inquiry.status, "source": inquiry.source, "responsible_user_id": inquiry.responsible_user_id, "next_action_title": inquiry.next_action_title, "next_action_at": inquiry.next_action_at, "next_action_notes": inquiry.next_action_notes, "created_at": inquiry.created_at, "updated_at": inquiry.updated_at},
         "responsible": {"id": responsible.id, "name": responsible.name, "email": responsible.email} if responsible else None,
         "person": {"id": person.id, "name": person.name, "document_number": person.document_number, "email": person.email, "phone": person.phone, "photo_content_url": f"/people/{person.id}/photo/content" if person.photo_storage_reference else None, "photo_updated_at": person.photo_updated_at} if person else None,
@@ -302,22 +304,52 @@ def broker_commercial_activity(person_id: UUID, context: UserContext = Depends(r
             )
         )
 
+    # Portfolio ownership is independent from ERP user identity. Show unassigned
+    # leads for the broker's properties even if that broker has no login.
+    portfolio_ids = db.scalars(
+        select(Property.id).where(
+            Property.organization_id == context.user.organization_id,
+            Property.responsible_broker_person_id == broker.id,
+        )
+    ).all()
+    criteria = []
+    if linked_user:
+        criteria.append(PublicSiteInquiry.responsible_user_id == linked_user.id)
+    if portfolio_ids:
+        criteria.append(
+            (PublicSiteInquiry.property_id.in_(portfolio_ids))
+            & (PublicSiteInquiry.responsible_user_id.is_(None))
+        )
+    inquiries = db.scalars(
+        select(PublicSiteInquiry).where(
+            PublicSiteInquiry.organization_id == context.user.organization_id,
+            or_(*criteria),
+        ).order_by(PublicSiteInquiry.updated_at.desc()).limit(100)
+    ).all() if criteria else []
     if linked_user is None:
         return {
             "broker_person_id": broker.id,
             "linked_user": None,
-            "link_status": "missing_user_link",
-            "leads": [],
+            "link_status": "property_portfolio_only",
+            "leads": [
+                {
+                    "id": row.id,
+                    "property_code": row.property_code,
+                    "property_title": row.property_title,
+                    "name": row.name,
+                    "email": row.email,
+                    "phone": row.phone,
+                    "status": row.status,
+                    "next_action_title": row.next_action_title,
+                    "next_action_at": row.next_action_at,
+                    "updated_at": row.updated_at,
+                }
+                for row in inquiries
+            ],
             "visits": [],
             "proposals": [],
         }
 
-    inquiries = db.scalars(
-        select(PublicSiteInquiry).where(
-            PublicSiteInquiry.organization_id == context.user.organization_id,
-            PublicSiteInquiry.responsible_user_id == linked_user.id,
-        ).order_by(PublicSiteInquiry.updated_at.desc()).limit(100)
-    ).all()
     visits = db.scalars(
         select(CommercialVisit).where(
             CommercialVisit.organization_id == context.user.organization_id,
