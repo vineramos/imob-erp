@@ -205,6 +205,13 @@ export type PropertyFeatures = {
   year_built: number | null
 }
 
+export type PropertyAdditionalCharge = {
+  key:string;kind:'fire_insurance'|'guarantee_insurance'|'other';label:string;amount:number
+  active:boolean;payer:'tenant'|'owner'|'agency';beneficiary:'third_party'|'owner'|'agency'
+  beneficiary_name:string|null;frequency:'monthly'|'annual'|'one_time';include_in_invoice:boolean
+  agency_retention_type:'none'|'percent'|'fixed';agency_retention_value:number
+  start_date:string|null;end_date:string|null
+}
 export type Property = {
   id: string
   internal_number: number
@@ -216,6 +223,7 @@ export type Property = {
   rent_amount: number | null
   condo_amount: number | null
   iptu_amount: number | null
+  additional_charges: PropertyAdditionalCharge[]
   area_m2: number | null
   bedrooms: number
   suites: number
