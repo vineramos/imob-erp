@@ -19,7 +19,7 @@ def test_property_broker_appears_in_crm_and_broker_leads_without_user_link(clien
         f"/api/properties/{prop['id']}/responsible-broker",
         json={"broker_person_id": broker["id"]},
     )).json()
-    assert assigned["responsible_broker"]["id"] == broker["id"]
+    assert assigned["responsible_broker"]["person_id"] == broker["id"]
     publication = publish_property(client, prop["id"])
     assert_response(client.post(
         f"/api/public/sites/{identity['organization_id']}/properties/{publication['public_slug']}/inquiries",
