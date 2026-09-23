@@ -1,6 +1,6 @@
-import { Archive, Building2, Check, CircleDollarSign, FileText, History, Home, Landmark, Mail, MapPin, Pencil, Phone, Plus, RotateCcw, Search, UserRound, Users, X } from 'lucide-react'
+import { Archive, Building2, Camera, Check, CircleDollarSign, FileText, History, Home, Landmark, Mail, MapPin, Pencil, Phone, Plus, RotateCcw, Search, Trash2, UserRound, Users, X } from 'lucide-react'
 import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react'
-import { ApiError, apiRequest } from '../../api/client'
+import { ApiError, apiBlobRequest, apiRequest } from '../../api/client'
 import type { Address, Person, PersonCreate, Property } from '../../api/types'
 import { ConfirmDialog } from '../../components/ConfirmDialog'
 import { EntityDocumentsPanel } from '../documents/EntityDocumentsPanel'
@@ -33,6 +33,17 @@ type ClientLease = {
 
 function bankHasData(value:BankForm){return Boolean(value.bank_name.trim()||value.bank_code.trim()||value.branch.trim()||value.account_number.trim()||value.account_digit.trim()||value.pix_key_type!=='none'||value.pix_key.trim()||value.account_holder_name.trim()||value.account_holder_document.trim())}
 function profileHasData(value:ProfileForm,personType:PersonCreate['person_type']){if(value.secondary_phone.trim())return true;if(personType==='company')return Boolean(value.trade_name.trim()||value.state_registration.trim()||value.municipal_registration.trim());return Boolean(value.identity_number.trim()||value.identity_issuer.trim()||value.birth_date||value.nationality.trim()||value.marital_status||value.occupation.trim())}
+function PersonPhoto({person,className}:{person:Person;className:string}){
+  const [src,setSrc]=useState('')
+  useEffect(()=>{
+    let active=true,objectUrl=''
+    if(!person.photo_content_url){setSrc('');return()=>undefined}
+    void apiBlobRequest(person.photo_content_url).then(blob=>{if(!active)return;objectUrl=URL.createObjectURL(blob);setSrc(objectUrl)}).catch(()=>{if(active)setSrc('')})
+    return()=>{active=false;if(objectUrl)URL.revokeObjectURL(objectUrl)}
+  },[person.id,person.photo_content_url,person.photo_updated_at])
+  return src?<img className={className} src={src} alt={person.name}/>:<span className={className}>{person.name.trim().split(/\s+/).filter(Boolean).slice(0,2).map(part=>part[0]?.toUpperCase()).join('')||'CL'}</span>
+}
+
 
 export function PeopleWorkspacePage({ permissions }: { permissions: string[] }) {
   const canCreate = permissions.includes('properties.create'), canEdit = permissions.includes('properties.edit')
@@ -43,7 +54,7 @@ export function PeopleWorkspacePage({ permissions }: { permissions: string[] }) 
   const [showArchiveConfirm,setShowArchiveConfirm]=useState(false)
   const [bank,setBank]=useState<BankForm>(emptyBank),[profile,setProfile]=useState<ProfileForm>(emptyProfile),[bankExists,setBankExists]=useState(false),[profileExists,setProfileExists]=useState(false)
   const [activeTab,setActiveTab]=useState<PersonTab>('main'),[detailsLoading,setDetailsLoading]=useState(false)
-  const [selectedId,setSelectedId]=useState<string|null>(null),[clientTab,setClientTab]=useState<ClientTab>('overview')
+  const [selectedId,setSelectedId]=useState<string|null>(null),[clientTab,setClientTab]=useState<ClientTab>('overview'),[photoSaving,setPhotoSaving]=useState(false)
   const [error,setError]=useState(''),[success,setSuccess]=useState('')
   const load=useCallback(async()=>{setLoading(true);setError('');try{const [active,archived,props,leaseItems]=await Promise.all([apiRequest<Person[]>('/people'),apiRequest<Person[]>('/people/archived'),apiRequest<Property[]>('/properties'),apiRequest<ClientLease[]>('/lease-contracts')]);setItems([...active,...archived].sort((a,b)=>a.name.localeCompare(b.name)));setProperties(props);setLeases(leaseItems)}catch(cause){setError(cause instanceof ApiError?cause.detail:'Não foi possível carregar os clientes.')}finally{setLoading(false)}},[])
   useEffect(()=>{void load()},[load])
@@ -113,6 +124,26 @@ export function PeopleWorkspacePage({ permissions }: { permissions: string[] }) 
       else setError(cause instanceof ApiError?cause.detail:'Não foi possível salvar a pessoa.')
     }finally{setSaving(false)}
   }
+  async function uploadPhoto(person:Person,file:File){
+    if(!canEdit||photoSaving)return
+    if(!['image/jpeg','image/png','image/webp'].includes(file.type)){setError('Use uma imagem JPG, PNG ou WEBP.');return}
+    if(file.size>8*1024*1024){setError('A foto pode ter no máximo 8 MB.');return}
+    setPhotoSaving(true);setError('');setSuccess('')
+    try{
+      const body=new FormData();body.append('file',file)
+      await apiRequest<void>(`/people/${person.id}/photo`,{method:'POST',body})
+      await load()
+      setSuccess(person.person_type==='company'?'Logo atualizado.':'Foto atualizada.')
+    }catch(cause){setError(cause instanceof ApiError?cause.detail:'Não foi possível atualizar a foto.')}
+    finally{setPhotoSaving(false)}
+  }
+  async function removePhoto(person:Person){
+    if(!canEdit||photoSaving||!person.photo_content_url)return
+    setPhotoSaving(true);setError('');setSuccess('')
+    try{await apiRequest<void>(`/people/${person.id}/photo`,{method:'DELETE'});await load();setSuccess('Foto removida.')}
+    catch(cause){setError(cause instanceof ApiError?cause.detail:'Não foi possível remover a foto.')}
+    finally{setPhotoSaving(false)}
+  }
   const tabButton=(key:PersonTab,label:string,Icon:typeof UserRound)=><button type="button" role="tab" aria-selected={activeTab===key} className={activeTab===key?'active':''} onClick={()=>setActiveTab(key)}><Icon size={14}/><span>{label}</span></button>
   return <section className="workspace portfolio-workspace client-workspace-v9">
     <div className="page-heading portfolio-heading client-heading-v9">
@@ -138,7 +169,7 @@ export function PeopleWorkspacePage({ permissions }: { permissions: string[] }) 
             const personProps=properties.filter(property=>property.owners.some(owner=>owner.person_id===person.id))
             const personLeases=leases.filter(lease=>lease.tenants.some(tenant=>tenant.person_id===person.id)||personProps.some(property=>property.id===lease.property_id))
             return <button type="button" key={person.id} className={'client-directory-row '+(selectedId===person.id?'active':'')} onClick={()=>{setSelectedId(person.id);setClientTab('overview')}}>
-              <span className="client-directory-avatar">{initials(person.name)}</span>
+              <PersonPhoto person={person} className="client-directory-avatar"/>
               <span className="client-directory-copy"><strong>{person.name}</strong><small>{person.document_number||'Documento não informado'} · {person.phone||'Sem telefone'}</small><span className="client-directory-roles">{person.role_keys.slice(0,3).map(role=><i key={role}>{roleLabel(role)}</i>)}</span><em>{personProps.length} imóvel(is) · {personLeases.filter(lease=>!['cancelled','closed'].includes(lease.status)).length} contrato(s) ativo(s)</em></span>
             </button>
           })}
@@ -149,7 +180,11 @@ export function PeopleWorkspacePage({ permissions }: { permissions: string[] }) 
       <main className="panel client-profile">
         {!selected?<div className="client-profile-empty"><Users size={28}/><strong>Selecione um cliente</strong><span>A ficha completa aparecerá aqui.</span></div>:<>
           <header className="client-profile-header">
-            <div className="client-profile-avatar">{initials(selected.name)}</div>
+            <div className="client-profile-photo-wrap">
+              <PersonPhoto person={selected} className="client-profile-avatar"/>
+              {canEdit&&<label className="client-photo-upload" title={selected.photo_content_url?'Trocar foto':'Adicionar foto'}><Camera size={12}/><input type="file" accept="image/jpeg,image/png,image/webp" disabled={photoSaving} onChange={event=>{const file=event.target.files?.[0];if(file)void uploadPhoto(selected,file);event.currentTarget.value=''}}/></label>}
+              {canEdit&&selected.photo_content_url&&<button className="client-photo-remove" type="button" title="Remover foto" disabled={photoSaving} onClick={()=>void removePhoto(selected)}><Trash2 size={10}/></button>}
+            </div>
             <div className="client-profile-title">
               <div className="client-profile-name-row"><h2>{selected.name}</h2><i className={'status-badge '+(selected.is_active?'success':'neutral')}>{selected.is_active?'Ativo':'Arquivado'}</i></div>
               <div className="client-profile-badges"><span>{personTypeLabel(selected)}</span>{selected.role_keys.map(role=><i key={role}>{roleLabel(role)}</i>)}</div>
