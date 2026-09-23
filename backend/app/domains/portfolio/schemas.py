@@ -4,6 +4,7 @@ from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
+from app.domains.leases.schemas import LeaseMonthlyChargePayload
 
 
 class AddressPayload(BaseModel):
@@ -297,5 +298,5 @@ class EconomicIndexSyncResponse(BaseModel):
     imported: int
     latest_competence: date | None = None
     next_retry_at: datetime | None = None
-    message: strfrom app.domains.leases.schemas import LeaseMonthlyChargePayload
+    message: str
 
