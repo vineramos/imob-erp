@@ -83,6 +83,8 @@ def _property_response(item: Property) -> PropertyResponse:
                 "person_id": str(owner.person_id),
                 "name": owner.person.name,
                 "ownership_percent": float(owner.ownership_percent),
+                "photo_content_url": f"/people/{owner.person.id}/photo/content" if owner.person.photo_storage_reference else None,
+                "photo_updated_at": owner.person.photo_updated_at,
             }
             for owner in item.owners
         ],
@@ -92,6 +94,8 @@ def _property_response(item: Property) -> PropertyResponse:
                 "name": item.responsible_broker.name,
                 "email": item.responsible_broker.email,
                 "phone": item.responsible_broker.phone,
+                "photo_content_url": f"/people/{item.responsible_broker.id}/photo/content" if item.responsible_broker.photo_storage_reference else None,
+                "photo_updated_at": item.responsible_broker.photo_updated_at,
             }
             if item.responsible_broker else None
         ),
