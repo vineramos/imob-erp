@@ -198,3 +198,66 @@ def test_tenant_charge_views_do_not_expose_internal_insurance_retention():
     assert not any(key.startswith("agency_retention") for key in safe_item)
     assert "third_party_net_amount" not in safe_rule
     assert "third_party_net_amount" not in safe_item
+
+def test_property_additional_charges_validate_persist_and_feed_new_lease_templates(client, identity):
+    """Property templates can be reused in a NEW lease; no signed contract is mutated."""
+    from app.domains.finance.service import suggested_monthly_charge_rules
+    from app.domains.foundation.access import UserContext, get_current_user_context
+    from app.domains.portfolio.models import Property
+    from app.main import app
+
+    owner = create_person(
+        client, name="Proprietário Encargos Extras", document="92929292929",
+        email="owner.additional@example.com", role_keys=["owner"],
+    )
+    prop = create_property(client, owner["id"])
+    path = f"/api/properties/{prop['id']}/additional-charges"
+    fire = {
+        "key": "fire_insurance_2026", "kind": "fire_insurance", "label": "Seguro incêndio",
+        "amount": "360.00", "active": True, "payer": "tenant",
+        "beneficiary": "third_party", "beneficiary_name": "Seguradora Teste",
+        "frequency": "annual", "include_in_invoice": True,
+        "agency_retention_type": "fixed", "agency_retention_value": "60.00",
+    }
+    guarantee = {
+        "key": "guarantee_insurance_2026", "kind": "guarantee_insurance",
+        "label": "Seguro fiança", "amount": "500.00", "active": True,
+        "payer": "tenant", "beneficiary": "third_party",
+        "beneficiary_name": "Seguradora Teste", "frequency": "monthly",
+        "include_in_invoice": True, "agency_retention_type": "percent",
+        "agency_retention_value": "30.00",
+    }
+    other = {
+        "key": "other_2026", "kind": "other", "label": "Taxa acessória",
+        "amount": "45.00", "active": True, "payer": "tenant",
+        "beneficiary": "agency", "beneficiary_name": "Imobiliária",
+        "frequency": "monthly", "include_in_invoice": False,
+        "agency_retention_type": "none", "agency_retention_value": "0.00",
+    }
+    saved = assert_response(client.put(path, json={"charges": [fire, guarantee, other]})).json()
+    assert [item["key"] for item in saved["additional_charges"]] == [
+        "fire_insurance_2026", "guarantee_insurance_2026", "other_2026",
+    ]
+    assert decimal(saved["additional_charges"][0]["amount"]) == Decimal("360.00")
+    assert decimal(saved["additional_charges"][1]["agency_retention_value"]) == Decimal("30.00")
+    with SessionLocal() as db:
+        property_item = db.get(Property, UUID(prop["id"]))
+        proposed = suggested_monthly_charge_rules(property_item, {})
+        keys = [row["key"] for row in proposed]
+        assert len(keys) == len(set(keys))
+        assert "fire_insurance_2026" in keys and "guarantee_insurance_2026" in keys
+        assert "fire_insurance" not in keys and "guarantee_insurance" not in keys
+        assert "iptu" in keys and "condo" in keys
+        assert next(row for row in proposed if row["key"] == "other_2026")["include_in_invoice"] is False
+
+    duplicate = client.put(path, json={"charges": [fire, fire]})
+    assert duplicate.status_code == 422
+    invalid_retention = client.put(path, json={"charges": [{**other, "agency_retention_type": "percent", "agency_retention_value": "10"}]})
+    assert invalid_retention.status_code == 422
+
+    view_only = UserContext(user=identity["context"].user, permission_keys=frozenset({"properties.view"}))
+    app.dependency_overrides[get_current_user_context] = lambda: view_only
+    try:
+        assert client.put(path, json={"charges": []}).status_code == 403
+    finally:
+        app.dependency_overrides[get_current_user_context] = lambda: identity["context"]
