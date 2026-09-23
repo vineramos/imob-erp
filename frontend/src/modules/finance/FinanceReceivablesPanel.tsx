@@ -1,5 +1,5 @@
 import { AlertTriangle, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, FileText, History, ReceiptText, RefreshCw, Search, Send, WalletCards, X } from 'lucide-react'
-import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react'
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ApiError, apiRequest } from '../../api/client'
 import { shiftMonth } from './finance-period'
 import './finance-receivables.css'
@@ -8,19 +8,28 @@ type Tab='overview'|'composition'|'payments'|'history'
 const money=(v:number|null|undefined)=>Number(v||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'})
 const date=(v:string|null|undefined)=>v?new Date(v.slice(0,10)+'T12:00:00').toLocaleDateString('pt-BR'):'—'
 const when=(v:string|null|undefined)=>v?new Date(v).toLocaleString('pt-BR'):'—'
-const monthNow=()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')}
 const localNow=()=>{const d=new Date();return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,16)}
 const address=(c:Charge)=>[c.property_address.street,c.property_address.number,c.property_address.neighborhood,c.property_address.city].filter(Boolean).join(', ')||'Endereço não informado'
 const labels:Record<string,string>={generated:'Gerada',sent:'Enviada',overdue:'Em atraso',paid:'Recebida',cancelled:'Cancelada'}
 const tone=(s:string)=>s==='paid'?'success':s==='overdue'?'danger':'neutral'
-export function FinanceReceivablesPanel({permissions}:{permissions:string[]}){
- const [month,setMonth]=useState(monthNow()),[items,setItems]=useState<Charge[]>([]),[selectedId,setSelectedId]=useState<string|null>(null)
+export function FinanceReceivablesPanel({permissions,month,setMonth}:{permissions:string[];month:string;setMonth:(next:string|((month:string)=>string))=>void}){
+ const requestId=useRef(0)
+ const [items,setItems]=useState<Charge[]>([]),[selectedId,setSelectedId]=useState<string|null>(null)
  const [query,setQuery]=useState(''),[status,setStatus]=useState('all'),[tab,setTab]=useState<Tab>('overview')
  const [loading,setLoading]=useState(true),[saving,setSaving]=useState(false),[error,setError]=useState(''),[success,setSuccess]=useState('')
  const [payOpen,setPayOpen]=useState(false),[amount,setAmount]=useState(''),[paidAt,setPaidAt]=useState(localNow()),[method,setMethod]=useState('pix'),[reference,setReference]=useState('')
  const canGenerate=permissions.includes('finance.charge.create'),canReconcile=permissions.includes('finance.reconcile'),competence=month+'-01'
- const load=useCallback(async()=>{setLoading(true);setError('');try{setItems(await apiRequest<Charge[]>('/finance/charges?competence='+competence))}catch(e){setError(e instanceof ApiError?e.detail:'Erro ao carregar cobranças.')}finally{setLoading(false)}},[competence])
- useEffect(()=>{void load()},[load])
+ const load=useCallback(async()=>{
+  const request=++requestId.current
+  setLoading(true);setError('')
+  try{
+    const result=await apiRequest<Charge[]>('/finance/charges?competence='+competence)
+    if(request===requestId.current)setItems(result)
+  }catch(e){
+    if(request===requestId.current)setError(e instanceof ApiError?e.detail:'Erro ao carregar cobranças.')
+  }finally{if(request===requestId.current)setLoading(false)}
+ },[competence])
+ useEffect(()=>{void load();return()=>{requestId.current+=1}},[load])
  const filtered=useMemo(()=>items.filter(c=>(status==='all'||c.status===status)&&(!query.trim()||[c.code,c.lease_code,c.property_code,address(c),...c.tenants.map(t=>t.name||'')].join(' ').toLocaleLowerCase('pt-BR').includes(query.trim().toLocaleLowerCase('pt-BR')))),[items,status,query])
  useEffect(()=>{if(!filtered.length)setSelectedId(null);else if(!selectedId||!filtered.some(c=>c.id===selectedId))setSelectedId(filtered[0].id)},[filtered,selectedId])
  const selected=filtered.find(c=>c.id===selectedId)||null

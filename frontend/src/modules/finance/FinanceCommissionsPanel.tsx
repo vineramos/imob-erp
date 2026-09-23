@@ -12,13 +12,12 @@ type Entry={id:string;code:string;source_code:string;beneficiary_name:string;ben
 type BatchItem={id:string;commission_entry_id:string;amount:number;snapshot:Record<string,unknown>}
 type Batch={id:string;code:string;beneficiary_person_id:string;beneficiary_name:string;competence:string;status:string;total_amount:number;broker_legal_name:string|null;broker_document_number:string|null;organization_legal_name:string;organization_document_number:string|null;service_description:string;report_issued_at:string|null;invoice_filename:string|null;invoice_uploaded_at:string|null;finance_review_notes:string|null;approved_at:string|null;payment_due_date:string|null;paid_at:string|null;payment_reference:string|null;items:BatchItem[]}
 const money=(v:number)=>Number(v||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'})
-const currentMonth=()=>{const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`}
 const eventLabel:Record<string,string>={first_rent:'Primeiro aluguel',recurring:'Recorrente',intermediation:'Intermediação'}
 const basisLabel:Record<string,string>={rent:'Aluguel',administration_fee:'Taxa de administração',intermediation_fee:'Intermediação',agency_revenue:'Receita da imobiliária'}
 
-export function FinanceCommissionsPanel({permissions}:{permissions:string[]}){
+export function FinanceCommissionsPanel({permissions,month,setMonth}:{permissions:string[];month:string;setMonth:(next:string|((month:string)=>string))=>void}){
  const canPrepare=permissions.includes('finance.payment.prepare'),canApprove=permissions.includes('finance.payment.approve'),canCreateBroker=permissions.includes('properties.create')
- const [month,setMonth]=useState(currentMonth()),[rules,setRules]=useState<Rule[]>([]),[entries,setEntries]=useState<Entry[]>([]),[batches,setBatches]=useState<Batch[]>([]),[people,setPeople]=useState<Person[]>([]),[open,setOpen]=useState(false),[brokerOpen,setBrokerOpen]=useState(false),[demoOpen,setDemoOpen]=useState(false),[saving,setSaving]=useState(false),[error,setError]=useState(''),[modalError,setModalError]=useState(''),[success,setSuccess]=useState('')
+ const [rules,setRules]=useState<Rule[]>([]),[entries,setEntries]=useState<Entry[]>([]),[batches,setBatches]=useState<Batch[]>([]),[people,setPeople]=useState<Person[]>([]),[open,setOpen]=useState(false),[brokerOpen,setBrokerOpen]=useState(false),[demoOpen,setDemoOpen]=useState(false),[saving,setSaving]=useState(false),[error,setError]=useState(''),[modalError,setModalError]=useState(''),[success,setSuccess]=useState('')
  const [name,setName]=useState('Comissão de locação'),[eventType,setEventType]=useState('first_rent'),[basis,setBasis]=useState('agency_revenue'),[calc,setCalc]=useState('percent'),[value,setValue]=useState('20'),[beneficiaryType,setBeneficiaryType]=useState('broker'),[personId,setPersonId]=useState(''),[dueDays,setDueDays]=useState('0')
  const [view,setView]=useState<'entries'|'batches'|'rules'>('entries')
  const [query,setQuery]=useState('')

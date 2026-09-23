@@ -40,8 +40,8 @@ const money=(value:number)=>Number(value||0).toLocaleString('pt-BR',{style:'curr
 const currentMonth=()=>{const now=new Date();return `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`}
 const monthLabel=(month:string)=>new Date(`${month}-01T12:00:00`).toLocaleDateString('pt-BR',{month:'long',year:'numeric'})
 
-function FinanceDashboardPanel({onNavigate}:{onNavigate:(area:Area)=>void}){
-  const [month,setMonth]=useState(currentMonth())
+function FinanceDashboardPanel({onNavigate,month,setMonth}:{onNavigate:(area:Area)=>void;month:string;setMonth:(next:string|((month:string)=>string))=>void}){
+  const requestId=useRef(0)
   const [dashboard,setDashboard]=useState<Dashboard|null>(null)
   const [commissions,setCommissions]=useState<CommissionEntry[]>([])
   const [loading,setLoading]=useState(true)
@@ -49,19 +49,21 @@ function FinanceDashboardPanel({onNavigate}:{onNavigate:(area:Area)=>void}){
   const competence=`${month}-01`
 
   const load=useCallback(async()=>{
+    const request=++requestId.current
     setLoading(true);setError('')
     try{
       const [summary,commissionRows]=await Promise.all([
         apiRequest<Dashboard>(`/finance/dashboard?competence=${competence}`),
         apiRequest<CommissionEntry[]>(`/finance/advanced/commissions?competence=${competence}`),
       ])
+      if(request!==requestId.current)return
       setDashboard(summary)
       setCommissions(commissionRows)
     }catch(cause){
-      setError(cause instanceof ApiError?cause.detail:'Não foi possível carregar o dashboard financeiro.')
-    }finally{setLoading(false)}
+      if(request===requestId.current)setError(cause instanceof ApiError?cause.detail:'Não foi possível carregar o dashboard financeiro.')
+    }finally{if(request===requestId.current)setLoading(false)}
   },[competence])
-  useEffect(()=>{void load()},[load])
+  useEffect(()=>{void load();return()=>{requestId.current+=1}},[load])
 
   const pendingCommissions=useMemo(()=>commissions.filter(item=>!['paid','cancelled'].includes(item.status)),[commissions])
   const pendingCommissionAmount=useMemo(()=>pendingCommissions.reduce((total,item)=>total+Number(item.amount||0),0),[pendingCommissions])
@@ -125,6 +127,7 @@ function FinanceDashboardPanel({onNavigate}:{onNavigate:(area:Area)=>void}){
 
 export function FinancePage({permissions}:{permissions:string[]}){
   const [area,setArea]=useState<Area>('overview')
+  const [month,setMonth]=useState(currentMonth())
   const moreRef=useRef<HTMLDetailsElement>(null)
   const secondaryLabels:Partial<Record<Area,string>>={
     'billing-batches':'Emissão em lote',treasury:'Tesouraria',banking:'Bancos','bank-setup':'Contas e APIs',
@@ -169,5 +172,5 @@ export function FinancePage({permissions}:{permissions:string[]}){
       </details>
     </nav>
   </div>
-  {area==='overview'?<FinanceDashboardPanel onNavigate={setArea}/>:area==='ledger'?<FinanceCorePanel permissions={permissions} onNavigateSource={source=>setArea(source==='maintenance'?'maintenance':'rent')}/>:area==='cycle'?<FinanceMonthlyCyclePanel permissions={permissions} onNavigateArea={target=>setArea(target)}/>:area==='billing'?<FinanceReceivablesPanel permissions={permissions}/>:area==='billing-batches'?<FinanceBillingPanel permissions={permissions}/>:area==='repasses'?<FinanceRepassesPanel permissions={permissions}/>:area==='delinquency'?<FinanceDelinquencyPanel permissions={permissions}/>:area==='treasury'?<FinanceTreasuryPanel permissions={permissions}/>:area==='banking'?<FinanceBankingPanel permissions={permissions}/>:area==='bank-setup'?<FinanceBankSetupPanel permissions={permissions}/>:area==='bank-control'?<FinanceBankControlPanel permissions={permissions}/>:area==='inter'?<FinanceInterPanel permissions={permissions}/>:area==='reports'?<FinanceReportsPanel permissions={permissions}/>:area==='commissions'?<FinanceCommissionsPanel permissions={permissions}/>:area==='classifications'?<FinanceClassificationsPanel permissions={permissions}/>:area==='portals'?<FinancePortalsPanel permissions={permissions}/>:area==='rent'?<FinanceRentPage permissions={permissions}/>:<MaintenanceFinancePanel permissions={permissions}/>}</>
+  {area==='overview'?<FinanceDashboardPanel onNavigate={setArea} month={month} setMonth={setMonth}/>:area==='ledger'?<FinanceCorePanel permissions={permissions} onNavigateSource={source=>setArea(source==='maintenance'?'maintenance':'rent')}/>:area==='cycle'?<FinanceMonthlyCyclePanel permissions={permissions} onNavigateArea={target=>setArea(target)}/>:area==='billing'?<FinanceReceivablesPanel permissions={permissions} month={month} setMonth={setMonth}/>:area==='billing-batches'?<FinanceBillingPanel permissions={permissions}/>:area==='repasses'?<FinanceRepassesPanel permissions={permissions} month={month} setMonth={setMonth}/>:area==='delinquency'?<FinanceDelinquencyPanel permissions={permissions}/>:area==='treasury'?<FinanceTreasuryPanel permissions={permissions}/>:area==='banking'?<FinanceBankingPanel permissions={permissions}/>:area==='bank-setup'?<FinanceBankSetupPanel permissions={permissions}/>:area==='bank-control'?<FinanceBankControlPanel permissions={permissions}/>:area==='inter'?<FinanceInterPanel permissions={permissions}/>:area==='reports'?<FinanceReportsPanel permissions={permissions}/>:area==='commissions'?<FinanceCommissionsPanel permissions={permissions} month={month} setMonth={setMonth}/>:area==='classifications'?<FinanceClassificationsPanel permissions={permissions}/>:area==='portals'?<FinancePortalsPanel permissions={permissions}/>:area==='rent'?<FinanceRentPage permissions={permissions}/>:<MaintenanceFinancePanel permissions={permissions}/>}</>
 }

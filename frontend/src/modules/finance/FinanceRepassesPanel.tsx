@@ -1,5 +1,5 @@
 import { CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Download, FileText, Landmark, RefreshCw, Search, WalletCards, X } from 'lucide-react'
-import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react'
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ApiError, apiBlobRequest, apiRequest } from '../../api/client'
 import { shiftMonth } from './finance-period'
 import './finance-repasses.css'
@@ -13,25 +13,29 @@ type Tab='overview'|'payment'
 const money=(n:number|null|undefined)=>Number(n||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'})
 const date=(v:string|null|undefined)=>v?new Date(v.slice(0,10)+'T12:00:00').toLocaleDateString('pt-BR'):'—'
 const datetime=(v:string|null|undefined)=>v?new Date(v).toLocaleString('pt-BR'):'—'
-const thisMonth=()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')}
 const localNow=()=>{const d=new Date();return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,16)}
 const label:Record<string,string>={pending:'Pendente',paid:'Pago',settled_zero:'Sem valor'}
 const tone=(v:string)=>v==='paid'?'success':'neutral'
 
-export function FinanceRepassesPanel({permissions}:{permissions:string[]}){
+export function FinanceRepassesPanel({permissions,month,setMonth}:{permissions:string[];month:string;setMonth:(next:string|((month:string)=>string))=>void}){
+ const requestId=useRef(0)
  const canPay=permissions.includes('finance.repasse.execute')
- const [month,setMonth]=useState(thisMonth()),[rows,setRows]=useState<Repasse[]>([]),[loading,setLoading]=useState(true)
+ const [rows,setRows]=useState<Repasse[]>([]),[loading,setLoading]=useState(true)
  const [selectedId,setSelectedId]=useState<string|null>(null),[filter,setFilter]=useState('all'),[search,setSearch]=useState(''),[tab,setTab]=useState<Tab>('overview')
  const [error,setError]=useState(''),[success,setSuccess]=useState(''),[saving,setSaving]=useState(false)
  const [modal,setModal]=useState(false),[paidAt,setPaidAt]=useState(localNow()),[reference,setReference]=useState('')
  const competence=month+'-01'
  const load=useCallback(async()=>{
+  const request=++requestId.current
   setLoading(true);setError('')
-  try{setRows(await apiRequest<Repasse[]>('/finance/repasses?competence='+competence))}
-  catch(e){setError(e instanceof ApiError?e.detail:'Não foi possível carregar os repasses.')}
-  finally{setLoading(false)}
+  try{
+    const result=await apiRequest<Repasse[]>('/finance/repasses?competence='+competence)
+    if(request===requestId.current)setRows(result)
+  }catch(e){
+    if(request===requestId.current)setError(e instanceof ApiError?e.detail:'Não foi possível carregar os repasses.')
+  }finally{if(request===requestId.current)setLoading(false)}
  },[competence])
- useEffect(()=>{void load()},[load])
+ useEffect(()=>{void load();return()=>{requestId.current+=1}},[load])
  const filtered=useMemo(()=>{
   const q=search.trim().toLocaleLowerCase('pt-BR')
   return rows.filter(r=>(filter==='all'||r.status===filter)&&(!q||[r.owner_name,r.property_code,r.charge_code,r.lease_code].join(' ').toLocaleLowerCase('pt-BR').includes(q)))
