@@ -172,8 +172,6 @@ export function IntegrationsSettingsPage({ canEdit }: Props) {
       {error && <div className="form-alert danger-alert">{error}</div>}
       {success && <div className="form-alert success-alert">{success}</div>}
 
-      <PortalIntegrationsSettingsPanel canEdit={canEdit} />
-
       <form onSubmit={save} className="settings-layout integrations-layout">
         <div className="settings-column">
           <article className="panel integration-card integration-card-expanded">
@@ -234,6 +232,8 @@ export function IntegrationsSettingsPage({ canEdit }: Props) {
               <small className="smtp-security-note">A senha é criptografada antes de ser armazenada e nunca é exibida novamente.</small>
             </div>}
           </article>
+
+          <PortalIntegrationsSettingsPanel canEdit={canEdit} />
 
           <article className="panel form-panel">
             <div className="panel-heading panel-heading-row"><div><span className="eyebrow">Webhooks</span><h2>Base pública de retorno</h2></div><Webhook size={19} /></div>
