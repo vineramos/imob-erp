@@ -330,3 +330,28 @@ img.client-directory-avatar,img.client-profile-avatar{object-fit:cover;display:b
 .client-timeline-real article>div{display:grid;gap:2px}.client-timeline-real strong{font-size:12px}.client-timeline-real small{font-size:10px;color:var(--muted);line-height:1.4}.client-timeline-real time{font-size:9px;color:var(--muted);white-space:nowrap}
 @media(max-width:1050px){.client-insight-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.client-insight-columns{grid-template-columns:1fr}}
 @media(max-width:700px){.client-insight-metrics{grid-template-columns:1fr 1fr}.client-timeline-real article{grid-template-columns:14px minmax(0,1fr)}.client-timeline-real time{grid-column:2}}
+
+
+/* Clientes 8.2 — vínculos entre pessoas, imóveis e contratos */
+.client-property-list,.client-contract-list{display:grid;gap:8px}
+.client-property-card,.client-contract-card{border:1px solid var(--border);border-radius:9px;background:var(--surface);overflow:hidden}
+.client-property-main,.client-contract-main{width:100%;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:center;padding:10px 11px;border:0;background:transparent;color:var(--text);text-align:left;font:inherit;cursor:pointer}
+.client-property-main:hover,.client-contract-main:hover{background:var(--surface-muted)}
+.client-property-main>div:first-child,.client-contract-main>div:first-child{display:grid;gap:2px;min-width:0}
+.client-property-main>div:first-child>strong,.client-contract-main>div:first-child>strong{font-size:9.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.client-property-main>div:first-child>small,.client-contract-main>div:first-child>small{font-size:7.5px;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.client-contract-main>div:first-child>span{font-size:7px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em;font-weight:760}
+.client-property-summary,.client-contract-main>div:last-child{display:grid;gap:4px;justify-items:end;text-align:right}
+.client-property-summary>strong,.client-contract-main>div:last-child>strong{font-size:10px}
+.client-owner-share,.client-contract-parties{border-top:1px solid var(--border);padding:8px 10px;background:color-mix(in srgb,var(--surface-muted) 38%,var(--surface))}
+.client-owner-share-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:6px}
+.client-owner-share-head span,.client-contract-parties>span{font-size:7px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em;font-weight:760}
+.client-owner-share-head strong{font-size:9px}
+.client-coowners,.client-contract-parties>div{display:flex;gap:5px;flex-wrap:wrap}
+.client-coowners button,.client-contract-parties>div>button{border:1px solid var(--border);background:var(--surface);color:var(--text);border-radius:999px;padding:5px 8px;display:flex;align-items:center;gap:6px;font:inherit;cursor:pointer}
+.client-coowners button:hover,.client-contract-parties>div>button:hover{border-color:var(--primary);background:var(--primary-soft)}
+.client-coowners button.current{border-color:color-mix(in srgb,var(--primary) 45%,var(--border));background:var(--primary-soft)}
+.client-coowners button span,.client-contract-parties>div>button strong{font-size:7.5px;font-weight:700}
+.client-coowners button strong,.client-contract-parties>div>button small{font-size:7px;color:var(--text-muted)}
+.client-contract-parties{display:grid;gap:6px}
+@media(max-width:680px){.client-property-main,.client-contract-main{grid-template-columns:1fr}.client-property-summary,.client-contract-main>div:last-child{justify-items:start;text-align:left}}
