@@ -28,3 +28,22 @@
 .external-portal-loading{min-height:100vh;display:grid;place-items:center;align-content:center;gap:8px;color:#64748b}.external-portal-loading strong{color:#0f172a}.external-portal-loading span{font-size:12px}
 @media(max-width:900px){.external-portal-main-grid{grid-template-columns:1fr}.external-property-grid{grid-template-columns:1fr}.external-portal-hero{align-items:flex-start;flex-direction:column}.external-portal-hero-badge{min-width:0}}
 @media(max-width:800px){.external-portal-metrics{grid-template-columns:1fr}.external-portal-header{padding:0 14px}.external-portal-content{padding:16px 14px 36px}.external-context-switch{align-items:stretch;flex-direction:column}.external-context-actions{width:100%}.external-context-actions button{flex:1}.external-portal-list>div{align-items:flex-start}.external-portal-hero{padding:20px}.external-portal-hero h1{font-size:26px}}
+
+/* Portal client refinement: tighter hero, stronger property cards and real empty states */
+.external-portal-hero{min-height:138px;padding:20px 24px}
+.external-portal-hero h1{font-size:28px}
+.external-portal-hero p{font-size:11px}
+.external-portal-hero-badge{padding:9px 11px;min-width:158px}
+.external-property-grid article{padding:12px;min-height:74px}
+.external-property-copy{display:grid;gap:4px;min-width:0;flex:1}
+.external-property-topline{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.external-property-topline small{min-width:0}
+.external-property-topline i{font-size:8px;font-style:normal;font-weight:800;color:#8b6a2b;background:#fff8e8;border:1px solid #f1dfb6;border-radius:999px;padding:3px 6px;white-space:nowrap}
+.external-property-copy>strong{font-size:11px;line-height:1.4}
+.external-property-copy>span{font-size:8.5px;color:#64748b}
+.external-empty-state{min-height:78px;display:flex;align-items:center;justify-content:center;gap:9px;padding:14px;color:#64748b;text-align:left}
+.external-empty-state>svg{color:#94a3b8}
+.external-empty-state>div{display:grid;gap:2px}
+.external-empty-state strong{font-size:10px;color:#334155}
+.external-empty-state span{font-size:8.5px;line-height:1.35;color:#94a3b8}
+@media(max-width:800px){.external-portal-hero{min-height:0;padding:18px}.external-portal-hero h1{font-size:25px}}

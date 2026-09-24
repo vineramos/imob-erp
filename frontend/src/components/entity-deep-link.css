@@ -84,3 +84,11 @@
   .entity-deep-link-person .entity-deep-link-summary{margin-inline:14px}
   .entity-deep-link-person .entity-deep-link-detail{grid-template-columns:1fr;gap:4px}
 }
+
+/* Person quick-copy controls */
+.entity-deep-link-detail-value{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;min-width:0}
+.entity-deep-link-detail-value>strong{min-width:0;flex:1}
+.entity-deep-link-copy-detail{flex:0 0 auto;min-height:26px;border:1px solid var(--border,#e5e7eb);border-radius:7px;background:var(--surface,#fff);color:var(--text-muted,#64748b);padding:0 7px;display:inline-flex;align-items:center;gap:4px;font-size:9px;font-weight:650;cursor:pointer}
+.entity-deep-link-copy-detail:hover{background:var(--surface-soft,#f8fafc);color:var(--text-strong,#111827)}
+.entity-deep-link-copy-detail span{font-size:9px!important;color:inherit!important}
+@media(max-width:720px){.entity-deep-link-detail-value{align-items:center}.entity-deep-link-copy-detail span{display:none}}

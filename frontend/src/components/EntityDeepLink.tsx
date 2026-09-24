@@ -62,14 +62,15 @@ export function EntityDeepLink({ route }: Props) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [copied, setCopied] = useState(false)
+  const [copiedDetail, setCopiedDetail] = useState('')
 
   useEffect(() => {
     if (!target) {
-      setRecord(null); setError(''); setLoading(false); setCopied(false)
+      setRecord(null); setError(''); setLoading(false); setCopied(false); setCopiedDetail('')
       return
     }
     let active = true
-    setLoading(true); setError(''); setRecord(null); setCopied(false)
+    setLoading(true); setError(''); setRecord(null); setCopied(false); setCopiedDetail('')
     void apiRequest<DeepLinkRecord>(`/deep-links/${encodeURIComponent(target.kind)}/${encodeURIComponent(target.id)}`)
       .then(value => { if (active) setRecord(value) })
       .catch(cause => { if (active) setError(cause instanceof ApiError ? cause.detail : 'Não foi possível abrir este registro.') })
@@ -118,6 +119,20 @@ export function EntityDeepLink({ route }: Props) {
     }
   }
 
+  function isCopyablePersonDetail(label: string) {
+    return record?.kind === 'person' && ['CPF/CNPJ', 'CPF', 'CNPJ', 'E-mail', 'Telefone', 'Endereço'].includes(label)
+  }
+
+  async function copyDetail(label: string, value: string) {
+    try {
+      await navigator.clipboard.writeText(value)
+      setCopiedDetail(label)
+      window.setTimeout(() => setCopiedDetail(current => current === label ? '' : current), 1600)
+    } catch {
+      setCopiedDetail('')
+    }
+  }
+
   return <div className="entity-deep-link-layer" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) closePanel() }}>
     <aside className={`entity-deep-link panel ${record?.kind==='person'?'entity-deep-link-person':''}`} role="dialog" aria-modal="true" aria-label="Detalhes do registro">
       <header className="entity-deep-link-header">
@@ -145,7 +160,7 @@ export function EntityDeepLink({ route }: Props) {
             <span>{detail.label}</span>
             {detail.label==='Papéis'
               ? <div className="entity-deep-link-tags">{detail.value.split(',').map(value=><i key={value.trim()}>{value.trim()}</i>)}</div>
-              : <strong>{detail.value}</strong>}
+              : <div className="entity-deep-link-detail-value"><strong>{detail.value}</strong>{isCopyablePersonDetail(detail.label)&&detail.value&&<button type="button" className="entity-deep-link-copy-detail" onClick={()=>void copyDetail(detail.label,detail.value)} title={`Copiar ${detail.label}`} aria-label={`Copiar ${detail.label}`}><Copy size={12}/><span>{copiedDetail===detail.label?'Copiado':'Copiar'}</span></button>}</div>}
           </div>)}
         </div>
         <footer className="entity-deep-link-actions">
