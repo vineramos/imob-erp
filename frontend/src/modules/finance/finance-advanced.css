@@ -60,3 +60,60 @@
 @media(max-width:1200px){.commission-master-detail{grid-template-columns:300px minmax(0,1fr)}.commission-detail-body{grid-template-columns:1fr}}
 @media(max-width:900px){.commission-master-detail{grid-template-columns:1fr}.commission-directory,.commission-detail{min-height:0}.commission-directory-list{max-height:330px}}
 @media(max-width:650px){.commission-detail-strip,.commission-detail-facts{grid-template-columns:1fr}}
+
+/* Financeiro · Relatórios — hierarquia e altura independentes dos cards */
+.finance-reports-workspace{gap:10px;max-width:1280px;margin:0 auto}
+.finance-reports-heading{align-items:flex-end;margin-bottom:2px}
+.finance-reports-heading h1{margin:1px 0 3px;font-size:24px;letter-spacing:-.025em}
+.finance-reports-heading p{margin:0;max-width:700px;font-size:9px;line-height:1.4;color:var(--muted-text,#64748b)}
+.finance-reports-heading .heading-actions{gap:6px}
+.finance-reports-heading .finance-compact-input{height:33px;font-size:9px}
+.finance-reports-heading .button{min-height:33px;font-size:8px;padding-inline:10px}
+
+.finance-reports-metrics{gap:8px}
+.finance-reports-metrics>.panel{min-height:72px;padding:9px 11px;border-radius:9px;box-shadow:none}
+.finance-reports-metrics span{font-size:8px}
+.finance-reports-metrics strong{font-size:15px}
+.finance-reports-metrics small{font-size:7.2px;line-height:1.25}
+.finance-reports-metrics>.metric-positive{background:color-mix(in srgb,#ecfdf3 55%,var(--surface));border-color:color-mix(in srgb,#86efac 55%,var(--border-color,#e2e8f0))!important}
+
+.finance-reports-grid{grid-template-columns:minmax(0,1.55fr) minmax(340px,.85fr);gap:9px;align-items:start}
+.finance-report-card{padding:12px 13px;border-radius:10px;box-shadow:none;align-self:start}
+.finance-report-card .finance-advanced-card-head{margin-bottom:9px;padding-bottom:8px;border-bottom:1px solid var(--border-color,#e2e8f0);align-items:flex-start}
+.finance-report-card .finance-advanced-card-head h2{font-size:13px;margin:1px 0 0}
+.finance-report-card .finance-advanced-card-head p{margin:3px 0 0;font-size:7.5px;color:var(--muted-text,#64748b)}
+.finance-report-card .finance-advanced-card-head>svg{width:18px;height:18px;color:var(--muted-text,#64748b)}
+
+.finance-report-dre .dre-summary{gap:6px;margin-bottom:8px}
+.finance-report-dre .dre-summary>div{padding:7px 8px;border-radius:8px}
+.finance-report-dre .dre-summary span,.finance-report-dre .dre-summary small{font-size:7.5px}
+.finance-report-dre .dre-summary strong{font-size:12px}
+.finance-report-dre .finance-compact-row{padding:7px 2px}
+.finance-report-dre .finance-compact-row strong{font-size:9px}
+.finance-report-dre .finance-compact-row span{font-size:7.5px}
+.finance-report-dre>.button{margin-top:8px;min-height:29px;font-size:7.5px;padding:0 9px}
+
+.finance-report-annual{min-height:0}
+.finance-report-toolbar{grid-template-columns:96px minmax(150px,1fr) 72px auto;gap:6px;padding:8px;border:1px solid var(--border-color,#e2e8f0);border-radius:8px;background:var(--surface-subtle,#f8fafc)}
+.finance-report-toolbar select,.finance-report-toolbar input{height:31px;border-radius:7px;font-size:8.5px;padding:0 8px}
+.finance-report-toolbar .button{min-height:31px;font-size:7.5px;padding:0 9px}
+.finance-report-annual .finance-provider-note{margin:8px 0;padding:7px 8px;font-size:8px}
+.finance-report-annual .dre-summary.annual{margin:8px 0}
+.finance-report-annual .dre-summary.annual>div{padding:7px 8px}
+.finance-report-annual .finance-compact-list.limited{max-height:220px}
+.finance-report-annual .finance-compact-row{padding:7px 2px}
+.finance-report-annual .finance-inline-actions{margin:8px 0 0}
+
+@media(max-width:1180px){
+  .finance-reports-grid{grid-template-columns:1fr}
+  .finance-report-annual{max-width:none}
+}
+@media(max-width:760px){
+  .finance-reports-heading{align-items:flex-start}
+  .finance-reports-heading .heading-actions{width:100%}
+  .finance-reports-metrics{grid-template-columns:repeat(2,1fr)}
+  .finance-report-toolbar{grid-template-columns:1fr 1fr}
+}
+@media(max-width:520px){
+  .finance-reports-metrics,.finance-report-toolbar{grid-template-columns:1fr}
+}
