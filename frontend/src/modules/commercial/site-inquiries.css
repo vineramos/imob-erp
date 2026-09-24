@@ -663,3 +663,78 @@
 .funnel-person-summary>div{min-width:0;display:grid;gap:2px}
 .crm-person-photo{width:36px;height:36px;border-radius:10px;display:block;object-fit:cover;overflow:hidden}
 .crm-person-photo-fallback{display:grid;place-items:center;background:var(--primary-soft);color:var(--primary-strong);font-size:8px;font-weight:800}
+
+/* CRM v8.8 — compact list rows and denser workflow form */
+.site-inquiries-list{gap:7px}
+.site-inquiries-list .site-inquiry-card{
+  min-height:0;
+  grid-template-columns:minmax(220px,1.35fr) minmax(180px,.9fr) minmax(170px,1fr) minmax(280px,1.15fr);
+  gap:12px;
+  padding:10px 12px 10px 14px;
+  border-radius:10px;
+  box-shadow:none;
+}
+.site-inquiries-list .site-inquiry-property,
+.site-inquiries-list .site-inquiry-contact,
+.site-inquiries-list .site-inquiry-message{gap:3px}
+.site-inquiries-list .site-inquiry-property strong,
+.site-inquiries-list .site-inquiry-contact strong{font-size:10.5px}
+.site-inquiries-list .site-inquiry-property small,
+.site-inquiries-list .site-inquiry-contact small{font-size:8px}
+.site-inquiries-list .site-inquiry-contact>div{gap:6px}
+.site-inquiries-list .site-inquiry-contact a{font-size:8.5px}
+.site-inquiries-list .site-inquiry-message>span{font-size:7px}
+.site-inquiries-list .site-inquiry-message p{
+  font-size:9px;
+  line-height:1.3;
+  -webkit-line-clamp:1;
+}
+.site-inquiries-list .site-inquiry-status{
+  display:grid;
+  grid-template-columns:auto minmax(0,1fr) auto;
+  align-items:center;
+  gap:6px;
+}
+.site-inquiries-list .site-inquiry-status>label{
+  width:auto;
+  min-width:0;
+  display:grid;
+  grid-template-columns:auto minmax(115px,1fr);
+  align-items:center;
+  gap:6px;
+}
+.site-inquiries-list .site-inquiry-status label>span{font-size:7px;white-space:nowrap}
+.site-inquiries-list .site-inquiry-status select{height:30px;padding:0 8px;border-radius:7px;font-size:8.5px}
+.site-inquiries-list .site-inquiry-status .compact-button{min-height:30px!important;padding:0 9px!important;font-size:8.5px!important;white-space:nowrap}
+.site-inquiries-list .site-inquiry-status>svg{display:none}
+
+.commercial-funnel-modal .crm-workflow-grid-v86{
+  grid-template-columns:repeat(4,minmax(0,1fr))!important;
+  align-items:end;
+}
+.commercial-funnel-modal .crm-workflow-notes{
+  grid-column:1/4!important;
+}
+.commercial-funnel-modal .crm-workflow-save{
+  grid-column:4;
+  min-height:34px!important;
+  width:100%;
+  justify-content:center;
+  align-self:end;
+}
+.commercial-funnel-modal .crm-workflow-section{gap:7px!important}
+@media(max-width:1180px){
+  .site-inquiries-list .site-inquiry-card{grid-template-columns:1.15fr .9fr .9fr 1fr}
+}
+@media(max-width:900px){
+  .site-inquiries-list .site-inquiry-card{grid-template-columns:1fr 1fr}
+  .site-inquiries-list .site-inquiry-status{grid-column:1/-1}
+  .commercial-funnel-modal .crm-workflow-notes{grid-column:1/-1!important}
+  .commercial-funnel-modal .crm-workflow-save{grid-column:1/-1;width:max-content;justify-self:end}
+}
+@media(max-width:620px){
+  .site-inquiries-list .site-inquiry-card{grid-template-columns:1fr}
+  .site-inquiries-list .site-inquiry-status{grid-template-columns:1fr}
+  .site-inquiries-list .site-inquiry-status>label{grid-template-columns:1fr}
+  .commercial-funnel-modal .crm-workflow-save{width:100%;justify-self:stretch}
+}
