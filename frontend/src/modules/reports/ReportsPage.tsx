@@ -13,7 +13,7 @@ function YearField({ value, onChange }: { value: string; onChange: (value: strin
   </select></label>
 }
 
-export function ReportsPage() {
+export function ReportsPage({ permissions: _permissions }: { permissions: string[] }) {
   const [dimobYear,setDimobYear]=useState(String(currentYear-1))
   const [dimob,setDimob]=useState<Dimob|null>(null)
   const [loading,setLoading]=useState(false)
