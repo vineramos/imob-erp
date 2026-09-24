@@ -6,13 +6,14 @@ from uuid import UUID
 from xml.etree import ElementTree as ET
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.domains.foundation.access import UserContext, require_permission
-from app.domains.foundation.models import Organization
+from app.domains.foundation.audit import write_audit
+from app.domains.foundation.models import Organization, OrganizationSettings
 from app.domains.portfolio.models import Property, PropertyPhoto
 from app.integrations.document_storage import DocumentStorageError, get_document_storage
 
@@ -40,6 +41,39 @@ class PortalSelection(BaseModel):
     model_config = ConfigDict(extra="forbid")
     olx: bool = False
     vrsync: bool = False
+
+
+class PortalIntegrationConfigUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    status: str = Field(pattern="^(not_configured|pending_homologation|active|rejected)$")
+    notes: str = Field(default="", max_length=1000)
+
+
+def _settings(db: Session, organization_id: UUID) -> OrganizationSettings:
+    row = db.scalar(select(OrganizationSettings).where(OrganizationSettings.organization_id == organization_id))
+    if row is None:
+        row = OrganizationSettings(organization_id=organization_id, erp_theme={}, site_theme={}, operational_defaults={}, integrations={})
+        db.add(row)
+        db.flush()
+    return row
+
+
+def _portal_settings(db: Session, organization_id: UUID) -> dict:
+    row = _settings(db, organization_id)
+    return dict(((row.integrations or {}).get("portal_integrations") or {}))
+
+
+def _portal_config_item(db: Session, organization_id: UUID, request: Request, portal: str) -> dict:
+    config = dict(_portal_settings(db, organization_id).get(portal) or {})
+    return {
+        "key": portal,
+        "label": "OLX" if portal == "olx" else "ZAP Imóveis + Viva Real",
+        "status": str(config.get("status") or "not_configured"),
+        "notes": str(config.get("notes") or ""),
+        "last_validated_at": config.get("last_validated_at"),
+        "last_validation": config.get("last_validation"),
+        "feed_url": _feed_url(request, organization_id, portal),
+    }
 
 
 def _load_property(db: Session, organization_id: UUID, property_id: UUID) -> Property:
@@ -92,6 +126,96 @@ def _selection(item: Property) -> dict[str, bool]:
 def _feed_url(request: Request, organization_id: UUID, portal: str) -> str:
     base = str(request.base_url).rstrip("/")
     return f"{base}/api/public/feeds/{organization_id}/{portal}.xml"
+
+
+@router.get("/integrations/portals")
+def get_portal_integrations(
+    request: Request,
+    context: UserContext = Depends(require_permission("settings.view")),
+    db: Session = Depends(get_db),
+):
+    return {"channels": [_portal_config_item(db, context.user.organization_id, request, portal) for portal in PORTALS]}
+
+
+@router.put("/integrations/portals/{portal}")
+def update_portal_integration(
+    portal: str,
+    payload: PortalIntegrationConfigUpdate,
+    request: Request,
+    context: UserContext = Depends(require_permission("settings.company.manage")),
+    db: Session = Depends(get_db),
+):
+    if portal not in PORTALS:
+        raise HTTPException(status_code=404, detail="Portal não suportado.")
+    settings = _settings(db, context.user.organization_id)
+    integrations = dict(settings.integrations or {})
+    portal_integrations = dict(integrations.get("portal_integrations") or {})
+    before = dict(portal_integrations.get(portal) or {})
+    after = {**before, "status": payload.status, "notes": payload.notes.strip(), "updated_at": datetime.now(timezone.utc).isoformat()}
+    portal_integrations[portal] = after
+    integrations["portal_integrations"] = portal_integrations
+    settings.integrations = integrations
+    settings.updated_by_user_id = context.user.id
+    write_audit(
+        db,
+        context=context,
+        action="integrations.portal.updated",
+        module="settings",
+        entity_type="portal_integration",
+        entity_id=portal,
+        before_data=before,
+        after_data=after,
+        ip_address=request.headers.get("x-forwarded-for", "").split(",", 1)[0].strip() or (request.client.host if request.client else None),
+        user_agent=request.headers.get("user-agent"),
+    )
+    db.commit()
+    return _portal_config_item(db, context.user.organization_id, request, portal)
+
+
+@router.post("/integrations/portals/{portal}/validate")
+def validate_portal_integration(
+    portal: str,
+    request: Request,
+    context: UserContext = Depends(require_permission("settings.company.manage")),
+    db: Session = Depends(get_db),
+):
+    if portal not in PORTALS:
+        raise HTTPException(status_code=404, detail="Portal não suportado.")
+    selected = _selected_properties(db, context.user.organization_id, portal)
+    invalid = []
+    for item in selected:
+        problems = _issues(item, len(_photos(db, item.id)), portal)
+        if problems:
+            invalid.append({"code": f"IMO-{item.internal_number:06d}", "issues": problems})
+    response = olx_feed(context.user.organization_id, request, db) if portal == "olx" else vrsync_feed(context.user.organization_id, request, db)
+    xml_valid = False
+    xml_error = None
+    try:
+        ET.fromstring(response.body)
+        xml_valid = True
+    except ET.ParseError as exc:
+        xml_error = str(exc)
+    validation = {
+        "valid": xml_valid and not invalid and len(selected) > 0,
+        "xml_valid": xml_valid,
+        "xml_error": xml_error,
+        "selected_count": len(selected),
+        "invalid_count": len(invalid),
+        "invalid_properties": invalid[:20],
+        "checked_at": datetime.now(timezone.utc).isoformat(),
+    }
+    settings = _settings(db, context.user.organization_id)
+    integrations = dict(settings.integrations or {})
+    portal_integrations = dict(integrations.get("portal_integrations") or {})
+    current = dict(portal_integrations.get(portal) or {})
+    current["last_validated_at"] = validation["checked_at"]
+    current["last_validation"] = validation
+    portal_integrations[portal] = current
+    integrations["portal_integrations"] = portal_integrations
+    settings.integrations = integrations
+    settings.updated_by_user_id = context.user.id
+    db.commit()
+    return {**_portal_config_item(db, context.user.organization_id, request, portal), "validation": validation}
 
 
 @router.get("/properties/{property_id}/portal-publications")
