@@ -224,16 +224,27 @@ def _batch_response(db: Session, batch: CommissionPaymentBatch) -> dict:
     }
 
 
+def _paid_charge_window(competence: date) -> tuple[datetime, datetime]:
+    start = competence.replace(day=1)
+    next_month = _next_month_start(start)
+    return (
+        datetime(start.year, start.month, start.day, tzinfo=timezone.utc),
+        datetime(next_month.year, next_month.month, next_month.day, tzinfo=timezone.utc),
+    )
+
+
 def _eligible_batch_entries(db: Session, organization_id: UUID, competence: date) -> list[tuple[CommissionEntry, RentCharge]]:
-    start, end = competence.replace(day=1), _month_end(competence)
+    start_at, end_at = _paid_charge_window(competence)
     charges = db.scalars(
         select(RentCharge).where(
             RentCharge.organization_id == organization_id,
             RentCharge.status == "paid",
             RentCharge.paid_at.is_not(None),
+            RentCharge.paid_at >= start_at,
+            RentCharge.paid_at < end_at,
         )
     ).all()
-    paid = {charge.id: charge for charge in charges if start <= charge.paid_at.date() <= end}
+    paid = {charge.id: charge for charge in charges}
     if not paid:
         return []
     entries = db.scalars(
@@ -244,9 +255,11 @@ def _eligible_batch_entries(db: Session, organization_id: UUID, competence: date
             CommissionEntry.status.not_in(("paid", "cancelled")),
         )
     ).all()
+    if not entries:
+        return []
     already = set(db.scalars(select(CommissionPaymentBatchItem.commission_entry_id).where(
         CommissionPaymentBatchItem.organization_id == organization_id,
-        CommissionPaymentBatchItem.commission_entry_id.in_([entry.id for entry in entries] or [UUID(int=0)]),
+        CommissionPaymentBatchItem.commission_entry_id.in_([entry.id for entry in entries]),
     )).all())
     return [(entry, paid[entry.charge_id]) for entry in entries if entry.id not in already and entry.charge_id in paid]
 
@@ -256,18 +269,29 @@ def _ensure_batches(db: Session, context: UserContext, competence: date) -> list
     if date.today() <= _month_end(competence):
         raise HTTPException(409, "O lote só é liberado após o encerramento do mês de recebimento.")
     # garante que todo recebimento conciliado no mês tenha sua comissão materializada
+    start_at, end_at = _paid_charge_window(competence)
     charges = db.scalars(select(RentCharge).where(
         RentCharge.organization_id == context.user.organization_id,
         RentCharge.status == "paid",
         RentCharge.paid_at.is_not(None),
+        RentCharge.paid_at >= start_at,
+        RentCharge.paid_at < end_at,
     )).all()
-    start, end = competence, _month_end(competence)
-    settlements = {row.charge_id: row for row in db.scalars(select(FinancialSettlement).where(
-        FinancialSettlement.organization_id == context.user.organization_id
-    )).all()}
+    charge_ids = [charge.id for charge in charges]
+    settlements = {
+        row.charge_id: row
+        for row in (
+            db.scalars(select(FinancialSettlement).where(
+                FinancialSettlement.organization_id == context.user.organization_id,
+                FinancialSettlement.charge_id.in_(charge_ids),
+            )).all()
+            if charge_ids else []
+        )
+    }
     for charge in charges:
-        if start <= charge.paid_at.date() <= end and settlements.get(charge.id):
-            generate_commissions_for_charge(db, charge=charge, settlement=settlements[charge.id])
+        settlement = settlements.get(charge.id)
+        if settlement:
+            generate_commissions_for_charge(db, charge=charge, settlement=settlement)
     db.flush()
 
     organization = db.get(Organization, context.user.organization_id)
@@ -674,24 +698,33 @@ def generate_entries(
 ) -> list[CommissionEntryResponse]:
     if end_date < start_date:
         raise HTTPException(status_code=422, detail="Período inválido.")
+    start_at = datetime(start_date.year, start_date.month, start_date.day, tzinfo=timezone.utc)
+    end_exclusive_date = end_date + timedelta(days=1)
+    end_at = datetime(end_exclusive_date.year, end_exclusive_date.month, end_exclusive_date.day, tzinfo=timezone.utc)
     charges = db.scalars(
         select(RentCharge).where(
             RentCharge.organization_id == context.user.organization_id,
             RentCharge.status == "paid",
+            RentCharge.paid_at.is_not(None),
+            RentCharge.paid_at >= start_at,
+            RentCharge.paid_at < end_at,
         )
     ).all()
+    charge_ids = [charge.id for charge in charges]
     settlements = {
         item.charge_id: item
-        for item in db.scalars(
-            select(FinancialSettlement).where(
-                FinancialSettlement.organization_id == context.user.organization_id
-            )
-        ).all()
+        for item in (
+            db.scalars(
+                select(FinancialSettlement).where(
+                    FinancialSettlement.organization_id == context.user.organization_id,
+                    FinancialSettlement.charge_id.in_(charge_ids),
+                )
+            ).all()
+            if charge_ids else []
+        )
     }
     created: list[CommissionEntry] = []
     for charge in charges:
-        if not charge.paid_at or not (start_date <= charge.paid_at.date() <= end_date):
-            continue
         settlement = settlements.get(charge.id)
         if settlement:
             created.extend(generate_commissions_for_charge(db, charge=charge, settlement=settlement))
