@@ -59,7 +59,7 @@ def build_dre_pdf(report: DreReport, organization_name: str) -> bytes:
 
 
 def build_annual_income_pdf(report: AnnualIncomeReport, organization_name: str) -> bytes:
-    title = "Informe anual do proprietário" if report.party_type == "owner" else "Informe anual do locatário"
+    title = "Informe anual de rendimentos" if report.party_type == "owner" else "Comprovante anual de pagamentos"
     buffer, doc, story, styles = _base_document(title, organization_name)
     story.append(Paragraph(f"Ano-calendário: {report.year} · {report.person_name}", styles["Heading2"]))
     story.append(Paragraph(f"Critério de rateio: {report.allocation_method}", styles["SmallGray"]))

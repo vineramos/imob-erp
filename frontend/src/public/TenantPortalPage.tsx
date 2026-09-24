@@ -160,6 +160,10 @@ export function TenantPortalPage(){
     try{openBlob(await publicBlobRequest(`/tenant-portal/charges/${charge.id}/receipt.pdf`))}
     catch(cause){setFlash({kind:'danger',text:cause instanceof ApiError?cause.detail:'Não foi possível abrir o recibo.'})}
   }
+  async function openAnnualPayments(year:number){
+    try{openBlob(await publicBlobRequest(`/tenant-portal/reports/${year}/payments.pdf`))}
+    catch(cause){setFlash({kind:'danger',text:cause instanceof ApiError?cause.detail:'Não foi possível gerar o comprovante anual de pagamentos.'})}
+  }
 
   if(loading&&!data)return <main className="tenant-login-shell"><div className="tenant-loading"><div className="tenant-brand-mark">IM</div><strong>Preparando seu portal...</strong></div></main>
   if(!me||!data)return <main className="tenant-login-shell"><div className="tenant-loading"><div className="tenant-brand-mark">IM</div><strong>Sua sessão terminou.</strong><span>Voltando para a tela de acesso...</span></div></main>
@@ -169,6 +173,7 @@ export function TenantPortalPage(){
   const openCharges=[...data.charges].filter(item=>['generated','sent','overdue'].includes(item.status)).sort((a,b)=>a.due_date.localeCompare(b.due_date))
   const paidCharges=[...data.charges].filter(item=>item.status==='paid').sort((a,b)=>(b.paid_at||b.due_date).localeCompare(a.paid_at||a.due_date))
   const paidTotal=paidCharges.reduce((total,item)=>total+Number(item.paid_amount??item.amount??0),0)
+  const annualPaymentYears=[...new Set(paidCharges.map(item=>new Date(item.paid_at||item.due_date).getFullYear()))].sort((a,b)=>b-a)
   const plan=buildPaymentPlan(activeLease,data.charges,composition)
   const nextPlan=plan[0]||null
 
@@ -246,7 +251,9 @@ export function TenantPortalPage(){
         </>}
 
         {tab==='documents'&&<>
-          <div className="tenant-heading"><div><span className="tenant-eyebrow">Documentos</span><h1>Seus documentos</h1><p>Contrato e documentos de vistoria liberados para o seu vínculo.</p></div></div>
+          <div className="tenant-heading"><div><span className="tenant-eyebrow">Documentos</span><h1>Seus documentos</h1><p>Contratos, vistorias e comprovantes anuais disponíveis para autosserviço.</p></div></div>
+          {annualPaymentYears.length>0&&<><div className="tenant-card-section-head"><div><span className="tenant-section-kicker">Documentos anuais</span><h2>Comprovantes de pagamentos</h2><p>Baixe diretamente o consolidado de aluguéis e encargos pagos em cada ano.</p></div><CalendarDays size={19}/></div><div className="tenant-document-grid tenant-annual-documents">{annualPaymentYears.map(year=><article className="tenant-card tenant-document" key={year}><div className="tenant-document-icon"><ReceiptText size={18}/></div><div><small>Ano-calendário</small><strong>Comprovante anual de pagamentos</strong><span>{year}</span><em>Gerado com base nas cobranças efetivamente liquidadas.</em></div><button onClick={()=>void openAnnualPayments(year)}><Download size={13}/> Baixar PDF</button></article>)}</div></>}
+          <div className="tenant-card-section-head"><div><span className="tenant-section-kicker">Demais documentos</span><h2>Contratos e vistorias</h2></div><FileText size={19}/></div>
           {data.documents.length>0?<div className="tenant-document-grid">{data.documents.map(item=><article className="tenant-card tenant-document" key={item.key}><div className="tenant-document-icon"><FileText size={18}/></div><div><small>{documentCategory(item.category)}</small><strong>{item.title}</strong><span>{item.filename}</span><em>Atualizado em {dateTimeLabel(item.updated_at)}</em></div><button onClick={()=>void openDocument(item)}><Download size={13}/> Abrir</button></article>)}</div>:<EmptyState icon={FileText} title="Nenhum documento disponível" text="Os documentos do contrato e das vistorias aparecerão aqui quando forem liberados."/>}
         </>}
 

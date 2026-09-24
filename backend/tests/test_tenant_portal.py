@@ -1,5 +1,5 @@
 from app.api.routes import tenant_portal as tenant_portal_routes
-from tests.helpers import assert_response, build_signed_rental
+from tests.helpers import add_months, assert_response, build_signed_rental, midday
 
 
 def test_tenant_portal_login_overview_documents_and_maintenance(client, identity, monkeypatch):
@@ -146,3 +146,50 @@ def test_tenant_portal_password_reset_invalidates_session_and_revoke_blocks_acce
 
     assert_response(client.post(f"/api/finance/advanced/portal/access/{access['id']}/revoke"))
     assert client.get("/api/tenant-portal/me").status_code == 403
+
+
+def test_tenant_portal_downloads_annual_payment_statement(client):
+    journey = build_signed_rental(client, publish=False)
+    tenant = journey["tenant"]
+    competence = add_months(journey["start"], 1)
+    charge = assert_response(
+        client.post(
+            "/api/finance/charges/generate",
+            json={"competence": competence.isoformat(), "lease_contract_id": journey["lease"]["id"]},
+        )
+    ).json()["charges"][0]
+    assert_response(
+        client.post(
+            f"/api/finance/charges/{charge['id']}/payment",
+            json={
+                "paid_amount": "2000.00",
+                "paid_at": midday(competence.replace(day=10)).isoformat(),
+                "payment_method": "pix",
+                "payment_reference": "TENANT-ANNUAL-PDF",
+            },
+        )
+    )
+    access = assert_response(
+        client.post(
+            "/api/finance/advanced/portal/access",
+            json={"person_id": tenant["id"], "label": "Portal anual do inquilino"},
+        ),
+        201,
+    ).json()
+    assert_response(
+        client.post(
+            f"/api/finance/advanced/portal/access/{access['id']}/credentials",
+            json={"password": "SenhaAnual#2026"},
+        )
+    )
+    assert_response(
+        client.post(
+            "/api/tenant-portal/auth/login",
+            json={"email": tenant["email"], "password": "SenhaAnual#2026"},
+        )
+    )
+    annual = client.get(f"/api/tenant-portal/reports/{competence.year}/payments.pdf")
+    assert annual.status_code == 200
+    assert annual.headers["content-type"].startswith("application/pdf")
+    assert "comprovante-anual-pagamentos-" in annual.headers.get("content-disposition", "")
+    assert annual.content.startswith(b"%PDF")

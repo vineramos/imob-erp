@@ -65,6 +65,7 @@ from app.api.routes.tenant_portal_experience import router as tenant_portal_expe
 from app.api.routes.tenant_portal_passwords import admin_router as tenant_portal_password_admin_router
 from app.api.routes.tenant_portal_passwords import public_router as tenant_portal_password_router
 from app.api.routes.tenant_portal_recovery import router as tenant_portal_recovery_router
+from app.api.routes.tenant_portal_reports import router as tenant_portal_reports_router
 from app.domains.agenda.commercial_lead_rules import install_commercial_lead_agenda_rule
 from app.domains.agenda.communication_rules import install_communication_agenda_rule
 from app.domains.agenda.lease_handover_rules import install_lease_handover_agenda_rule
@@ -147,6 +148,7 @@ api_router.include_router(tenant_portal_account_router)
 api_router.include_router(tenant_portal_router)
 api_router.include_router(tenant_portal_charges_router)
 api_router.include_router(tenant_portal_experience_router)
+api_router.include_router(tenant_portal_reports_router)
 api_router.include_router(portal_context_router)
 api_router.include_router(owner_portal_router)
 api_router.include_router(owner_portal_reports_router)

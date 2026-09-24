@@ -111,3 +111,17 @@
 @media(max-width:560px){
   .reports-toolbar,.reports-toolbar-dimob{grid-template-columns:1fr}
 }
+
+/* Relatórios administrativos: foco em obrigação + autosserviço */
+.reports-admin-workspace{max-width:1180px;margin:0 auto;gap:12px}
+.reports-admin-grid{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(300px,.72fr);gap:12px;align-items:start}
+.reports-admin-primary,.reports-self-service-card{padding:15px;display:grid;gap:12px;box-shadow:none}
+.reports-admin-controls{display:grid;grid-template-columns:minmax(140px,220px) auto;gap:8px;align-items:end;padding:10px;border:1px solid var(--border);border-radius:9px;background:var(--surface-subtle)}
+.reports-admin-year{display:grid;gap:5px}.reports-admin-year span{font-size:8px;font-weight:750;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+.reports-admin-year select{height:34px;border:1px solid var(--border);border-radius:7px;background:var(--surface);padding:0 9px;color:inherit}
+.reports-admin-result{display:grid;gap:10px}.reports-admin-result .reports-dimob-metrics{grid-template-columns:repeat(4,1fr)}
+.reports-self-service-list{display:grid;gap:8px}.reports-self-service-list>div{display:flex;gap:9px;align-items:flex-start;padding:10px;border:1px solid var(--border);border-radius:9px;background:var(--surface-subtle)}
+.reports-self-service-list span{display:grid;gap:2px}.reports-self-service-list strong{font-size:10px}.reports-self-service-list small,.reports-self-service-note{font-size:8.5px;color:var(--muted);line-height:1.45}
+.reports-self-service-note{margin:0;padding-top:4px}
+@media(max-width:900px){.reports-admin-grid{grid-template-columns:1fr}.reports-admin-result .reports-dimob-metrics{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:560px){.reports-admin-controls{grid-template-columns:1fr}}
