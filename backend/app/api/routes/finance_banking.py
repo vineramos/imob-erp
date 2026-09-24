@@ -11,7 +11,7 @@ from pathlib import Path
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
-from sqlalchemy import select
+from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.database import get_db
@@ -125,16 +125,23 @@ def _load_transaction(db: Session, organization_id: UUID, transaction_id: UUID) 
 
 
 def _account_balance(db: Session, account: BankAccount) -> Decimal:
-    transactions = db.scalars(
-        select(BankTransaction).where(BankTransaction.bank_account_id == account.id)
-    ).all()
-    balance = money(account.opening_balance)
-    for item in transactions:
-        balance += money(item.amount) if item.direction == "credit" else -money(item.amount)
-    return money(balance)
+    movement_total = db.scalar(
+        select(
+            func.coalesce(
+                func.sum(
+                    case(
+                        (BankTransaction.direction == "credit", BankTransaction.amount),
+                        else_=-BankTransaction.amount,
+                    )
+                ),
+                0,
+            )
+        ).where(BankTransaction.bank_account_id == account.id)
+    )
+    return money(money(account.opening_balance) + money(movement_total))
 
 
-def _account_response(db: Session, item: BankAccount) -> BankAccountResponse:
+def _account_response(db: Session, item: BankAccount, *, current_balance: Decimal | None = None) -> BankAccountResponse:
     return BankAccountResponse(
         id=item.id,
         code=f"BCO-{item.internal_number:04d}",
@@ -149,7 +156,7 @@ def _account_response(db: Session, item: BankAccount) -> BankAccountResponse:
         provider=item.provider,
         pix_key=item.pix_key,
         opening_balance=money(item.opening_balance),
-        current_balance=_account_balance(db, item),
+        current_balance=current_balance if current_balance is not None else _account_balance(db, item),
         is_active=item.is_active,
         last_sync_at=item.last_sync_at,
         created_at=item.created_at,
@@ -1041,7 +1048,36 @@ def list_bank_accounts(
         .where(BankAccount.organization_id == context.user.organization_id)
         .order_by(BankAccount.is_active.desc(), BankAccount.internal_number.asc())
     ).all()
-    return [_account_response(db, item) for item in items]
+    if not items:
+        return []
+    movement_rows = db.execute(
+        select(
+            BankTransaction.bank_account_id,
+            func.coalesce(
+                func.sum(
+                    case(
+                        (BankTransaction.direction == "credit", BankTransaction.amount),
+                        else_=-BankTransaction.amount,
+                    )
+                ),
+                0,
+            ),
+        )
+        .where(
+            BankTransaction.organization_id == context.user.organization_id,
+            BankTransaction.bank_account_id.in_([item.id for item in items]),
+        )
+        .group_by(BankTransaction.bank_account_id)
+    ).all()
+    movement_by_account = {account_id: money(total) for account_id, total in movement_rows}
+    return [
+        _account_response(
+            db,
+            item,
+            current_balance=money(money(item.opening_balance) + movement_by_account.get(item.id, Decimal("0.00"))),
+        )
+        for item in items
+    ]
 
 
 @router.post("/accounts", response_model=BankAccountResponse)
