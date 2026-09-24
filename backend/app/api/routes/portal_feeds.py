@@ -60,7 +60,7 @@ def _settings(db: Session, organization_id: UUID) -> OrganizationSettings:
 
 def _portal_settings(db: Session, organization_id: UUID) -> dict:
     row = _settings(db, organization_id)
-    return dict(((row.integrations or {}).get("portal_integrations") or {}))
+    return dict(row.portal_integrations or {})
 
 
 def _portal_config_item(db: Session, organization_id: UUID, request: Request, portal: str) -> dict:
@@ -148,13 +148,11 @@ def update_portal_integration(
     if portal not in PORTALS:
         raise HTTPException(status_code=404, detail="Portal não suportado.")
     settings = _settings(db, context.user.organization_id)
-    integrations = dict(settings.integrations or {})
-    portal_integrations = dict(integrations.get("portal_integrations") or {})
+    portal_integrations = dict(settings.portal_integrations or {})
     before = dict(portal_integrations.get(portal) or {})
     after = {**before, "status": payload.status, "notes": payload.notes.strip(), "updated_at": datetime.now(timezone.utc).isoformat()}
     portal_integrations[portal] = after
-    integrations["portal_integrations"] = portal_integrations
-    settings.integrations = integrations
+    settings.portal_integrations = portal_integrations
     settings.updated_by_user_id = context.user.id
     write_audit(
         db,
@@ -205,14 +203,12 @@ def validate_portal_integration(
         "checked_at": datetime.now(timezone.utc).isoformat(),
     }
     settings = _settings(db, context.user.organization_id)
-    integrations = dict(settings.integrations or {})
-    portal_integrations = dict(integrations.get("portal_integrations") or {})
+    portal_integrations = dict(settings.portal_integrations or {})
     current = dict(portal_integrations.get(portal) or {})
     current["last_validated_at"] = validation["checked_at"]
     current["last_validation"] = validation
     portal_integrations[portal] = current
-    integrations["portal_integrations"] = portal_integrations
-    settings.integrations = integrations
+    settings.portal_integrations = portal_integrations
     settings.updated_by_user_id = context.user.id
     db.commit()
     return {**_portal_config_item(db, context.user.organization_id, request, portal), "validation": validation}
