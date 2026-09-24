@@ -1,4 +1,4 @@
-import { CheckCircle2, Download, FileSpreadsheet, FileText, RefreshCw, ShieldCheck, TriangleAlert } from 'lucide-react'
+import { CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Download, FileSpreadsheet, FileText, RefreshCw, ShieldCheck, TriangleAlert } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { ApiError, apiBlobRequest, apiRequest } from '../../api/client'
 import './reports.css'
@@ -28,6 +28,19 @@ function downloadBlob(blob: Blob, filename: string) {
   anchor.click()
   anchor.remove()
   setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
+
+function YearField({ label, value, onChange, min = 2000, max = 2200 }: { label: string; value: string; onChange: (value: string) => void; min?: number; max?: number }) {
+  const numeric = Number(value) || min
+  const move = (step: number) => onChange(String(Math.min(max, Math.max(min, numeric + step))))
+  return <div className="reports-year-field">
+    <span className="reports-field-label">{label}</span>
+    <div className="reports-year-control">
+      <button type="button" onClick={() => move(-1)} disabled={numeric <= min} aria-label={`Diminuir ${label.toLowerCase()}`}><ChevronLeft size={13}/></button>
+      <div className="reports-year-value"><CalendarDays size={13}/><strong>{value}</strong></div>
+      <button type="button" onClick={() => move(1)} disabled={numeric >= max} aria-label={`Aumentar ${label.toLowerCase()}`}><ChevronRight size={13}/></button>
+    </div>
+  </div>
 }
 
 export function ReportsPage({ permissions }: { permissions: string[] }) {
@@ -118,7 +131,7 @@ export function ReportsPage({ permissions }: { permissions: string[] }) {
         <div className="reports-form-grid reports-toolbar">
           <label><span>Parte</span><select value={party} onChange={event => setParty(event.target.value as 'tenant' | 'owner')}><option value="owner">Proprietário</option><option value="tenant">Locatário</option></select></label>
           <label><span>Pessoa</span><select value={personId} onChange={event => { setPersonId(event.target.value); setAnnual(null) }}><option value="">Selecione...</option>{people.map(person => <option key={person.id} value={person.id}>{person.name}</option>)}</select></label>
-          <label><span>Ano</span><input type="number" min="2000" max="2200" value={annualYear} onChange={event => { setAnnualYear(event.target.value); setAnnual(null) }}/></label>
+          <YearField label="Ano do informe" value={annualYear} onChange={value => { setAnnualYear(value); setAnnual(null) }}/>
           <button className="button primary reports-generate" type="button" disabled={!personId || loadingAnnual} onClick={() => void generateAnnual()}>{loadingAnnual ? <RefreshCw className="spin" size={14}/> : <FileText size={14}/>} Gerar</button>
         </div>
         {selectedPerson && <div className="reports-person-line"><strong>{selectedPerson.name}</strong><span>{selectedPerson.document_number || 'Documento não informado'}</span></div>}
@@ -130,7 +143,7 @@ export function ReportsPage({ permissions }: { permissions: string[] }) {
           <div><span className="eyebrow">DIMOB</span><h2>Pré-validação da base</h2><p>Confere os dados mínimos da operação antes da etapa de geração do arquivo oficial.</p></div>
           <ShieldCheck size={22}/>
         </div>
-        <div className="reports-dimob-controls reports-toolbar reports-toolbar-dimob"><label><span>Ano-calendário</span><input type="number" min="2000" max="2200" value={dimobYear} onChange={event => { setDimobYear(event.target.value); setDimob(null) }}/></label><button className="button primary" type="button" disabled={loadingDimob} onClick={() => void validateDimob()}>{loadingDimob ? <RefreshCw className="spin" size={14}/> : <ShieldCheck size={14}/>} Validar base</button></div>
+        <div className="reports-dimob-controls reports-toolbar reports-toolbar-dimob"><YearField label="Ano-calendário" value={dimobYear} onChange={value => { setDimobYear(value); setDimob(null) }}/><button className="button primary" type="button" disabled={loadingDimob} onClick={() => void validateDimob()}>{loadingDimob ? <RefreshCw className="spin" size={14}/> : <ShieldCheck size={14}/>} Validar base</button></div>
 
       </article>
     </div>

@@ -81,3 +81,33 @@
   .reports-annual-result .reports-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}
   .reports-dimob-result .reports-issues{grid-template-columns:1fr}
 }
+
+/* Relatórios — terceira passada: seletores de ano e cards naturais */
+.reports-grid-refined{align-items:start}
+.reports-launcher-card{height:auto!important}
+.reports-card-primary .reports-person-line{margin-top:0}
+.reports-card-secondary .reports-toolbar-dimob{margin-top:0}
+.reports-card-primary{min-height:0!important}
+.reports-card-secondary{min-height:0!important}
+.reports-card-secondary .reports-card-head{margin-bottom:0}
+
+.reports-year-field{display:grid;gap:4px;min-width:0}
+.reports-field-label{font-size:7.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.045em}
+.reports-year-control{height:33px;display:grid;grid-template-columns:28px minmax(68px,1fr) 28px;align-items:center;border:1px solid var(--border);border-radius:8px;background:var(--surface);overflow:hidden}
+.reports-year-control>button{height:31px;border:0;background:transparent;color:var(--muted);display:grid;place-items:center;cursor:pointer}
+.reports-year-control>button:hover:not(:disabled){background:var(--surface-subtle);color:var(--text)}
+.reports-year-control>button:disabled{opacity:.32;cursor:default}
+.reports-year-value{height:31px;display:flex;align-items:center;justify-content:center;gap:6px;border-left:1px solid var(--border);border-right:1px solid var(--border);font-variant-numeric:tabular-nums}
+.reports-year-value svg{color:var(--muted)}
+.reports-year-value strong{font-size:10px;letter-spacing:.02em}
+.reports-toolbar{grid-template-columns:125px minmax(190px,1fr) 130px auto}
+.reports-toolbar-dimob{grid-template-columns:minmax(145px,1fr) auto}
+.reports-card-secondary .reports-toolbar-dimob{padding:8px}
+.reports-card-secondary .reports-toolbar-dimob .button{min-height:33px}
+@media(max-width:760px){
+  .reports-toolbar{grid-template-columns:1fr 1fr}
+  .reports-toolbar-dimob{grid-template-columns:1fr auto}
+}
+@media(max-width:560px){
+  .reports-toolbar,.reports-toolbar-dimob{grid-template-columns:1fr}
+}
