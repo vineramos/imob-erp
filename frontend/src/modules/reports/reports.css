@@ -57,3 +57,27 @@
   .reports-toolbar,.reports-toolbar-dimob{grid-template-columns:1fr}
   .reports-card-secondary .reports-dimob-metrics{grid-template-columns:1fr 1fr}
 }
+
+/* Relatórios operacionais — launchers compactos + resultados em largura total */
+.reports-grid-refined{grid-template-columns:minmax(0,1.45fr) minmax(330px,.72fr);align-items:stretch}
+.reports-launcher-card{min-height:0!important;height:100%;justify-content:flex-start}
+.reports-card-primary,.reports-card-secondary{min-height:0}
+.reports-card-primary .reports-person-line{margin-top:auto}
+.reports-card-secondary .reports-toolbar-dimob{margin-top:auto}
+
+.reports-result-card{display:grid;gap:12px;padding:14px;border-radius:11px;box-shadow:none}
+.reports-result-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding-bottom:9px;border-bottom:1px solid var(--border)}
+.reports-result-head h2{margin:2px 0 3px;font-size:14px}
+.reports-result-head p{margin:0;font-size:8.5px;color:var(--muted);line-height:1.4}
+.reports-result-head>svg{color:var(--muted)}
+.reports-annual-result .reports-metrics{grid-template-columns:repeat(5,minmax(0,1fr))}
+.reports-annual-result .reports-table-wrap{max-height:340px}
+.reports-dimob-result{grid-template-columns:minmax(0,1fr)}
+.reports-dimob-result .reports-status{margin-top:0}
+.reports-dimob-result .reports-dimob-metrics{grid-template-columns:repeat(4,minmax(0,1fr))}
+.reports-dimob-result .reports-issues{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}
+.reports-dimob-result .reports-official-note{margin-top:0}
+@media(max-width:900px){
+  .reports-annual-result .reports-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .reports-dimob-result .reports-issues{grid-template-columns:1fr}
+}

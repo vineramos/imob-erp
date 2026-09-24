@@ -110,7 +110,7 @@ export function ReportsPage({ permissions }: { permissions: string[] }) {
     {error && <div className="form-alert danger-alert">{error}</div>}
 
     <div className="reports-grid reports-grid-refined">
-      <article className="panel reports-card reports-annual-card reports-card-primary">
+      <article className="panel reports-card reports-annual-card reports-card-primary reports-launcher-card">
         <div className="reports-card-head">
           <div><span className="eyebrow">Informe anual</span><h2>Proprietário e locatário</h2><p>Consolida pagamentos por ano a partir das cobranças liquidadas.</p></div>
           <FileText size={22}/>
@@ -122,7 +122,21 @@ export function ReportsPage({ permissions }: { permissions: string[] }) {
           <button className="button primary reports-generate" type="button" disabled={!personId || loadingAnnual} onClick={() => void generateAnnual()}>{loadingAnnual ? <RefreshCw className="spin" size={14}/> : <FileText size={14}/>} Gerar</button>
         </div>
         {selectedPerson && <div className="reports-person-line"><strong>{selectedPerson.name}</strong><span>{selectedPerson.document_number || 'Documento não informado'}</span></div>}
-        {annual && <>
+
+      </article>
+
+      <article className="panel reports-card reports-card-secondary reports-launcher-card">
+        <div className="reports-card-head">
+          <div><span className="eyebrow">DIMOB</span><h2>Pré-validação da base</h2><p>Confere os dados mínimos da operação antes da etapa de geração do arquivo oficial.</p></div>
+          <ShieldCheck size={22}/>
+        </div>
+        <div className="reports-dimob-controls reports-toolbar reports-toolbar-dimob"><label><span>Ano-calendário</span><input type="number" min="2000" max="2200" value={dimobYear} onChange={event => { setDimobYear(event.target.value); setDimob(null) }}/></label><button className="button primary" type="button" disabled={loadingDimob} onClick={() => void validateDimob()}>{loadingDimob ? <RefreshCw className="spin" size={14}/> : <ShieldCheck size={14}/>} Validar base</button></div>
+
+      </article>
+    </div>
+
+    {annual && <article className="panel reports-result-card reports-annual-result">
+          <div className="reports-result-head"><div><span className="eyebrow">Resultado do informe</span><h2>{selectedPerson?.name || 'Informe anual'} · {annualYear}</h2><p>Consolidação dos pagamentos liquidados no período selecionado.</p></div><FileText size={19}/></div>
           <div className="reports-metrics">
             <div><span>Aluguel</span><strong>{money(annual.total_rent)}</strong></div>
             <div><span>Encargos</span><strong>{money(annual.total_additional_charges)}</strong></div>
@@ -133,24 +147,16 @@ export function ReportsPage({ permissions }: { permissions: string[] }) {
           <div className="reports-allocation">Critério: {annual.allocation_method}.</div>
           <div className="reports-table-wrap"><table className="reports-table"><thead><tr><th>Competência</th><th>Imóvel</th><th>Cobrança</th><th>Pagamento</th><th className="number">Total</th></tr></thead><tbody>{annual.lines.length === 0 ? <tr><td colSpan={5} className="reports-empty">Nenhum pagamento encontrado nesse ano.</td></tr> : annual.lines.map((line, index) => <tr key={`${line.charge_code}-${index}`}><td>{monthLabel(line.competence)}</td><td>{line.property_code}</td><td>{line.charge_code}</td><td>{line.payment_date ? new Date(`${line.payment_date}T12:00:00`).toLocaleDateString('pt-BR') : '—'}</td><td className="number">{money(line.total_amount)}</td></tr>)}</tbody></table></div>
           {canExport ? <div className="reports-actions"><button className="button secondary compact" type="button" onClick={() => void exportAnnual('pdf')}><Download size={13}/> PDF</button><button className="button secondary compact" type="button" onClick={() => void exportAnnual('csv')}><FileSpreadsheet size={13}/> CSV</button></div> : <div className="reports-permission-note">Seu perfil permite consultar, mas não exportar relatórios.</div>}
-        </>}
-      </article>
+      </article>}
 
-      <article className="panel reports-card reports-card-secondary">
-        <div className="reports-card-head">
-          <div><span className="eyebrow">DIMOB</span><h2>Pré-validação da base</h2><p>Confere os dados mínimos da operação antes da etapa de geração do arquivo oficial.</p></div>
-          <ShieldCheck size={22}/>
-        </div>
-        <div className="reports-dimob-controls reports-toolbar reports-toolbar-dimob"><label><span>Ano-calendário</span><input type="number" min="2000" max="2200" value={dimobYear} onChange={event => { setDimobYear(event.target.value); setDimob(null) }}/></label><button className="button primary" type="button" disabled={loadingDimob} onClick={() => void validateDimob()}>{loadingDimob ? <RefreshCw className="spin" size={14}/> : <ShieldCheck size={14}/>} Validar base</button></div>
-        {dimob && <>
+    {dimob && <article className="panel reports-result-card reports-dimob-result">
+          <div className="reports-result-head"><div><span className="eyebrow">Resultado DIMOB</span><h2>Pré-validação · {dimob.year}</h2><p>Diagnóstico da base antes da revisão e geração do arquivo oficial.</p></div><ShieldCheck size={19}/></div>
           <div className={`reports-status ${dimob.status}`}>
             {dimob.status === 'ready_for_review' ? <CheckCircle2 size={18}/> : <TriangleAlert size={18}/>}<div><strong>{dimob.status === 'ready_for_review' ? 'Base pronta para revisão' : dimob.status === 'no_operations' ? 'Sem operações no ano' : 'Há pendências para corrigir'}</strong><span>{dimob.error_count} erro(s) · {dimob.warning_count} aviso(s)</span></div>
           </div>
           <div className="reports-dimob-metrics"><div><span>Pagamentos</span><strong>{dimob.operation_count}</strong></div><div><span>Contratos</span><strong>{dimob.lease_count}</strong></div><div><span>Proprietários</span><strong>{dimob.owner_count}</strong></div><div><span>Locatários</span><strong>{dimob.tenant_count}</strong></div></div>
           <div className="reports-issues">{dimob.issues.length === 0 ? <div className="reports-ok"><CheckCircle2 size={16}/> Nenhuma inconsistência encontrada nessa pré-validação.</div> : dimob.issues.map((issue, index) => <div className={`reports-issue ${issue.severity}`} key={`${issue.code}-${issue.reference || index}`}><TriangleAlert size={15}/><div><strong>{issue.reference || 'Cadastro'}</strong><span>{issue.message}</span></div></div>)}</div>
           <div className="reports-official-note"><FileSpreadsheet size={16}/><div><strong>Arquivo oficial ainda não liberado</strong><span>{dimob.note}</span></div></div>
-        </>}
-      </article>
-    </div>
+      </article>}
   </section>
 }
