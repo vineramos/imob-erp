@@ -154,7 +154,7 @@ export function PropertyLifecyclePanel({ permissions, propertyId }: { permission
               <div className="property-lifecycle-event-meta">
                 <time>{dateLabel(event.occurred_at)}</time>
                 {event.status && <i className={'status-badge ' + (['paid','signed','accepted','completed','finalized','won','active','available'].includes(event.status) ? 'success' : ['cancelled','rejected','lost','overdue'].includes(event.status) ? 'danger' : 'neutral')}>{label(event.status)}</i>}
-                {event.route && <button type="button" onClick={() => navigate(event.route)} title="Abrir registro"><ExternalLink size={13}/></button>}
+                {event.route && <button type="button" onClick={() => navigate(event.route!)} title="Abrir registro"><ExternalLink size={13}/></button>}
               </div>
             </article>)}
             {visibleEvents.length === 0 && <div className="property-lifecycle-empty"><History size={20}/><strong>Nenhum evento nesta categoria.</strong><span>Os próximos registros vinculados ao imóvel aparecerão automaticamente aqui.</span></div>}
