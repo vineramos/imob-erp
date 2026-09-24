@@ -68,3 +68,45 @@
   .finance-dashboard-controls{align-items:stretch;flex-wrap:wrap}
   .finance-competence-control{width:100%}
 }
+
+/* Dashboard financeiro — segunda passada: menos altura e menos competição visual */
+.finance-dashboard{padding-top:2px}
+.finance-dashboard-heading{margin-bottom:10px}
+.finance-dashboard-copy h1{font-size:24px}
+.finance-dashboard-copy p{max-width:620px;font-size:9px}
+.finance-dashboard-controls{transform:translateY(-1px)}
+.finance-competence-control{height:34px;border-radius:9px}
+.finance-competence-control>.icon-button{width:30px;height:32px}
+.finance-dashboard .finance-month{height:32px;padding:0 8px}
+.finance-dashboard .finance-month>span{font-size:7px}
+.finance-dashboard .finance-month input{width:110px;font-size:9px}
+.finance-refresh{min-height:34px;padding-inline:10px;font-size:8px}
+
+.finance-dashboard-metrics{gap:7px;margin-bottom:8px}
+.finance-dashboard-metrics .finance-metric{min-height:68px;padding:9px 11px 8px;border-radius:9px}
+.finance-dashboard-metrics .finance-metric:before{top:10px;bottom:10px}
+.finance-dashboard-metrics .finance-metric span{font-size:7.2px}
+.finance-dashboard-metrics .finance-metric strong{font-size:15px}
+.finance-dashboard-metrics .finance-metric small{font-size:7.3px}
+.finance-dashboard-metrics .finance-metric:first-child{background:var(--surface)}
+.finance-dashboard-metrics .finance-metric:first-child strong{font-size:16px}
+
+.finance-dashboard-lower{grid-template-columns:minmax(0,1.95fr) minmax(270px,.67fr);gap:8px}
+.finance-dashboard-alerts{min-height:142px;padding:11px 13px}
+.finance-dashboard-alerts .finance-advanced-card-head{margin-bottom:6px;padding-bottom:6px}
+.finance-dashboard-alerts .finance-advanced-card-head h2{font-size:12px}
+.finance-dashboard-alerts .finance-advanced-card-head p{font-size:7.4px}
+.finance-dashboard-alerts .finance-compact-list:has(.finance-compact-row.muted){min-height:74px;display:grid;place-items:center}
+.finance-dashboard-alerts .finance-compact-row.muted{padding:8px 0!important;opacity:.7}
+.finance-dashboard-alerts .finance-compact-row.muted strong{font-size:9.5px}
+.finance-dashboard-alerts .finance-compact-row.muted span{font-size:7.3px}
+
+.finance-dashboard-summary .finance-core-detail-head{padding:8px 10px}
+.finance-dashboard-summary .finance-core-detail-head h2{font-size:10.5px}
+.finance-dashboard-summary .finance-core-detail-head p{font-size:7px}
+.finance-dashboard-summary .finance-core-detail-grid{padding:1px 9px}
+.finance-dashboard-summary .finance-core-detail-grid>div{padding:6px 2px}
+.finance-dashboard-summary .finance-core-detail-grid span{font-size:6.2px}
+.finance-dashboard-summary .finance-core-detail-grid strong{font-size:8px}
+.finance-dashboard-summary .finance-core-detail-actions{padding:7px 9px}
+.finance-dashboard-summary .finance-core-detail-actions .button{min-height:27px;font-size:7px;padding:0 7px}

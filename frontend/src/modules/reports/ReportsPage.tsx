@@ -98,7 +98,7 @@ export function ReportsPage({ permissions }: { permissions: string[] }) {
     }
   }
 
-  return <section className="workspace reports-workspace">
+  return <section className="workspace reports-workspace reports-workspace-refined">
     <div className="page-heading reports-heading">
       <div>
         <span className="eyebrow">Relatórios</span>
@@ -109,13 +109,13 @@ export function ReportsPage({ permissions }: { permissions: string[] }) {
 
     {error && <div className="form-alert danger-alert">{error}</div>}
 
-    <div className="reports-grid">
-      <article className="panel reports-card reports-annual-card">
+    <div className="reports-grid reports-grid-refined">
+      <article className="panel reports-card reports-annual-card reports-card-primary">
         <div className="reports-card-head">
           <div><span className="eyebrow">Informe anual</span><h2>Proprietário e locatário</h2><p>Consolida pagamentos por ano a partir das cobranças liquidadas.</p></div>
           <FileText size={22}/>
         </div>
-        <div className="reports-form-grid">
+        <div className="reports-form-grid reports-toolbar">
           <label><span>Parte</span><select value={party} onChange={event => setParty(event.target.value as 'tenant' | 'owner')}><option value="owner">Proprietário</option><option value="tenant">Locatário</option></select></label>
           <label><span>Pessoa</span><select value={personId} onChange={event => { setPersonId(event.target.value); setAnnual(null) }}><option value="">Selecione...</option>{people.map(person => <option key={person.id} value={person.id}>{person.name}</option>)}</select></label>
           <label><span>Ano</span><input type="number" min="2000" max="2200" value={annualYear} onChange={event => { setAnnualYear(event.target.value); setAnnual(null) }}/></label>
@@ -136,12 +136,12 @@ export function ReportsPage({ permissions }: { permissions: string[] }) {
         </>}
       </article>
 
-      <article className="panel reports-card">
+      <article className="panel reports-card reports-card-secondary">
         <div className="reports-card-head">
           <div><span className="eyebrow">DIMOB</span><h2>Pré-validação da base</h2><p>Confere os dados mínimos da operação antes da etapa de geração do arquivo oficial.</p></div>
           <ShieldCheck size={22}/>
         </div>
-        <div className="reports-dimob-controls"><label><span>Ano-calendário</span><input type="number" min="2000" max="2200" value={dimobYear} onChange={event => { setDimobYear(event.target.value); setDimob(null) }}/></label><button className="button primary" type="button" disabled={loadingDimob} onClick={() => void validateDimob()}>{loadingDimob ? <RefreshCw className="spin" size={14}/> : <ShieldCheck size={14}/>} Validar base</button></div>
+        <div className="reports-dimob-controls reports-toolbar reports-toolbar-dimob"><label><span>Ano-calendário</span><input type="number" min="2000" max="2200" value={dimobYear} onChange={event => { setDimobYear(event.target.value); setDimob(null) }}/></label><button className="button primary" type="button" disabled={loadingDimob} onClick={() => void validateDimob()}>{loadingDimob ? <RefreshCw className="spin" size={14}/> : <ShieldCheck size={14}/>} Validar base</button></div>
         {dimob && <>
           <div className={`reports-status ${dimob.status}`}>
             {dimob.status === 'ready_for_review' ? <CheckCircle2 size={18}/> : <TriangleAlert size={18}/>}<div><strong>{dimob.status === 'ready_for_review' ? 'Base pronta para revisão' : dimob.status === 'no_operations' ? 'Sem operações no ano' : 'Há pendências para corrigir'}</strong><span>{dimob.error_count} erro(s) · {dimob.warning_count} aviso(s)</span></div>
