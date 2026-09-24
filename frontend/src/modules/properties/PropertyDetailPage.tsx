@@ -15,13 +15,14 @@ import { StatusBadge } from '../../components/ui/StatusBadge'
 import { EntityDocumentsPanel } from '../documents/EntityDocumentsPanel'
 import { PropertyGallery } from './PropertyGallery'
 import { PropertyLifecyclePanel } from './PropertyLifecyclePanel'
+import { PropertyPortalPublicationPanel } from './PropertyPortalPublicationPanel'
 import { PropertyMaintenancePanel } from './PropertyMaintenancePanel'
 import { PropertyAdditionalChargesPanel } from './PropertyAdditionalChargesPanel'
 import { formatBedroomSummary } from '../../utils/propertyRooms'
 import './property-detail-v81.css'
 import './property-detail-v81-fidelity.css'
 
-export type PropertyDetailTab = 'overview' | 'finance' | 'contracts' | 'documents' | 'traceability' | 'inspections' | 'maintenance' | 'features' | 'location'
+export type PropertyDetailTab = 'overview' | 'publications' | 'finance' | 'contracts' | 'documents' | 'traceability' | 'inspections' | 'maintenance' | 'features' | 'location'
 export type PropertyLease = { id:string; code:string; property_id:string; tenants:Array<{name:string}>; status:string; rent_amount:number; start_date:string; end_date:string; archive_status:string; final_document_hash:string|null; signed_at:string|null }
 export type PropertyInspection = { id:string; code:string; property_id:string; lease_code:string; status:string; inspector_name:string|null; scheduled_at:string|null; performed_at:string|null; finalized_at:string|null; report_hash:string|null; key_handover:{handed_over_at:string;recipient_name:string}|null }
 export type PropertyCommercialProfile = { property_id:string; status:'draft'|'available'|'inactive'; purpose:string; public_title:string; public_description:string; rent_amount:number|null; condo_amount:number|null; iptu_amount:number|null; publication_enabled:boolean }
@@ -61,7 +62,7 @@ type Props = {
 }
 
 const tabs = [
-  { key:'overview', label:'Visão Geral' }, { key:'finance', label:'Financeiro' },
+  { key:'overview', label:'Visão Geral' }, { key:'publications', label:'Publicações' }, { key:'finance', label:'Financeiro' },
   { key:'contracts', label:'Contratos' }, { key:'documents', label:'Documentos' },
   { key:'traceability', label:'Rastreabilidade' }, { key:'inspections', label:'Vistorias' },
   { key:'maintenance', label:'Manutenções' }, { key:'features', label:'Características' },
@@ -160,6 +161,7 @@ export function PropertyDetailPage(props:Props){
       </main>
     </div>}
 
+    {activeTab==='publications'&&<PropertyPortalPublicationPanel propertyId={property.id} permissions={permissions}/>}
     {activeTab==='finance'&&<section className="property-surface property-tab-surface"><div className="property-section-heading"><div><span>FINANCEIRO</span><h2>Valores e vínculo de locação</h2></div></div><div className="property-finance-wide"><div><span>Aluguel</span><strong>{money(property.rent_amount)}</strong></div><div><span>Condomínio</span><strong>{money(property.condo_amount)}</strong></div><div><span>IPTU</span><strong>{money(property.iptu_amount)}</strong></div><div><span>Locação vigente</span><strong>{latestLease?`${latestLease.code} · ${money(latestLease.rent_amount)}`:'Nenhuma'}</strong></div></div><PropertyAdditionalChargesPanel property={property} canEdit={props.permissions.includes('properties.edit')} onUpdated={props.onAdditionalChargesUpdated} hasSignedLease={props.leases.some(lease=>['signed','active'].includes(lease.status))}/></section>}
     {activeTab==='contracts'&&<section className="property-surface property-tab-surface"><div className="property-section-heading"><div><span>CONTRATOS</span><h2>Instrumentos vinculados ao imóvel</h2></div></div><div className="property-linked-groups"><div><h3>Administração</h3>{administrationContracts.length?administrationContracts.map(item=><article className="property-linked-row" key={item.id}><FileText size={18}/><div><strong>{item.code}</strong><span>Plano {item.plan} · taxa {item.admin_fee_type==='percent'?`${item.admin_fee_percent}%`:money(item.admin_fee_amount)}</span></div><StatusBadge tone={statusTone(item.status)}>{contractStatusLabels[item.status]??item.status}</StatusBadge></article>):<EmptyState compact title="Nenhum contrato de administração"/>}</div><div><h3>Locação</h3>{leases.length?leases.map(item=><article className="property-linked-row" key={item.id}><Home size={18}/><div><strong>{item.code}</strong><span>{item.tenants.map(tenant=>tenant.name).join(' · ')||'Sem locatário'} · {money(item.rent_amount)}</span></div><StatusBadge tone={statusTone(item.status)}>{contractStatusLabels[item.status]??item.status}</StatusBadge></article>):<EmptyState compact title="Nenhum contrato de locação"/>}</div></div></section>}
     {activeTab==='documents'&&<EntityDocumentsPanel entityType="property" entityId={property.id} entityLabel={`Imóvel ${property.code}`} permissions={permissions}/>} 
