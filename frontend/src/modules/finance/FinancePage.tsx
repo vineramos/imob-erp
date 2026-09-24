@@ -75,20 +75,22 @@ function FinanceDashboardPanel({onNavigate,month,setMonth}:{onNavigate:(area:Are
     pendingCommissions.length>0?{key:'commissions',title:`${pendingCommissions.length} comissão(ões) pendente(s)`,detail:`${money(pendingCommissionAmount)} ainda não concluídos no fluxo financeiro.`,target:'commissions' as Area,tone:'warning'}:null,
   ].filter(Boolean) as {key:string;title:string;detail:string;target:Area;tone:string}[]:[]
 
-  return <section className="workspace finance-workspace">
-    <div className="page-heading finance-heading">
-      <div><span className="eyebrow">Financeiro · Visão geral</span><h1>Dashboard financeiro</h1><p>Leitura executiva do caixa operacional, inadimplência, repasses e comissões com dados reais do ERP.</p></div>
-      <div className="heading-actions">
-        <button className="icon-button" type="button" onClick={()=>moveMonth(-1)} aria-label="Competência anterior"><ChevronLeft size={16}/></button>
-        <label className="finance-month"><CalendarDays size={15}/><input type="month" value={month} onChange={event=>setMonth(event.target.value)}/></label>
-        <button className="icon-button" type="button" onClick={()=>moveMonth(1)} aria-label="Próxima competência"><ChevronRight size={16}/></button>
-        <button className="button secondary" type="button" onClick={()=>void load()} disabled={loading}><RefreshCw size={14}/> Atualizar</button>
+  return <section className="workspace finance-workspace finance-dashboard">
+    <div className="page-heading finance-heading finance-dashboard-heading">
+      <div className="finance-dashboard-copy"><span className="eyebrow">Financeiro · Visão geral</span><h1>Dashboard financeiro</h1><p>Caixa, inadimplência, repasses e comissões em uma leitura operacional da competência.</p></div>
+      <div className="heading-actions finance-dashboard-controls">
+        <div className="finance-competence-control">
+          <button className="icon-button" type="button" onClick={()=>moveMonth(-1)} aria-label="Competência anterior"><ChevronLeft size={15}/></button>
+          <label className="finance-month"><CalendarDays size={14}/><span>Competência</span><input type="month" value={month} onChange={event=>setMonth(event.target.value)}/></label>
+          <button className="icon-button" type="button" onClick={()=>moveMonth(1)} aria-label="Próxima competência"><ChevronRight size={15}/></button>
+        </div>
+        <button className="button secondary finance-refresh" type="button" onClick={()=>void load()} disabled={loading}><RefreshCw size={14}/> Atualizar</button>
       </div>
     </div>
 
     {error&&<div className="form-alert danger-alert">{error}</div>}
     {loading&&!dashboard?<article className="panel settings-loading">Carregando dashboard financeiro...</article>:dashboard&&<>
-      <div className="finance-metrics">
+      <div className="finance-metrics finance-dashboard-metrics">
         <article className="panel finance-metric"><span>Recebimentos do mês</span><strong>{money(dashboard.received_amount)}</strong><small>{monthLabel(month)}</small></article>
         <article className="panel finance-metric"><span>Valores em aberto</span><strong>{money(dashboard.open_amount)}</strong><small>{dashboard.charges_open} cobrança(s)</small></article>
         <article className={`panel finance-metric ${dashboard.charges_overdue?'critical':''}`}><span>Inadimplência</span><strong>{money(dashboard.overdue_amount)}</strong><small>{dashboard.charges_overdue} cobrança(s) vencida(s)</small></article>
@@ -97,8 +99,8 @@ function FinanceDashboardPanel({onNavigate,month,setMonth}:{onNavigate:(area:Are
         <article className="panel finance-metric"><span>Comissões pendentes</span><strong>{money(pendingCommissionAmount)}</strong><small>{pendingCommissions.length} comissão(ões)</small></article>
       </div>
 
-      <div className="finance-core-master-detail">
-        <article className="panel finance-advanced-card">
+      <div className="finance-core-master-detail finance-dashboard-lower">
+        <article className="panel finance-advanced-card finance-dashboard-alerts">
           <div className="finance-advanced-card-head"><div><span className="eyebrow">Atenção operacional</span><h2>Alertas críticos</h2><p>Somente pendências que exigem ação financeira ou acompanhamento.</p></div><AlertTriangle size={20}/></div>
           <div className="finance-compact-list">
             {alerts.map(alert=><button type="button" className="finance-compact-row" key={alert.key} onClick={()=>onNavigate(alert.target)} style={{width:'100%',border:0,textAlign:'left',cursor:'pointer'}}>
@@ -108,7 +110,7 @@ function FinanceDashboardPanel({onNavigate,month,setMonth}:{onNavigate:(area:Are
           </div>
         </article>
 
-        <aside className="panel finance-core-detail">
+        <aside className="panel finance-core-detail finance-dashboard-summary">
           <div className="finance-core-detail-head"><div><span className="eyebrow">Competência</span><h2>{monthLabel(month)}</h2><p>Resumo operacional consolidado</p></div><CircleDollarSign size={19}/></div>
           <div className="finance-core-detail-grid">
             <div><span>Cobranças abertas</span><strong>{dashboard.charges_open}</strong></div>
