@@ -112,6 +112,7 @@ class OrganizationSettings(Base):
     site_theme: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, nullable=False)
     operational_defaults: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, nullable=False)
     integrations: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, nullable=False)
+    portal_integrations: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, nullable=False)
     updated_by_user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("app_users.id"))
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
