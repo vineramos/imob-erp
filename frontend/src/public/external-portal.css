@@ -47,3 +47,20 @@
 .external-empty-state strong{font-size:10px;color:#334155}
 .external-empty-state span{font-size:8.5px;line-height:1.35;color:#94a3b8}
 @media(max-width:800px){.external-portal-hero{min-height:0;padding:18px}.external-portal-hero h1{font-size:25px}}
+
+/* Empty finance states: override generic list-row distribution. */
+.external-portal-list>.external-empty-state{
+  min-height:68px!important;
+  display:flex!important;
+  justify-content:center!important;
+  align-items:center!important;
+  border-bottom:0!important;
+  padding:12px 10px!important;
+  gap:9px!important;
+}
+.external-portal-list>.external-empty-state>div{
+  display:grid!important;
+  justify-items:start!important;
+  text-align:left!important;
+  gap:2px!important;
+}

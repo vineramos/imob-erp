@@ -120,7 +120,9 @@ export function EntityDeepLink({ route }: Props) {
   }
 
   function isCopyablePersonDetail(label: string) {
-    return record?.kind === 'person' && ['CPF/CNPJ', 'CPF', 'CNPJ', 'E-mail', 'Telefone', 'Endereço'].includes(label)
+    if (record?.kind !== 'person') return false
+    const normalized = label.trim().toLocaleLowerCase('pt-BR')
+    return !['papéis', 'papeis', 'cadastro', 'código', 'codigo'].includes(normalized)
   }
 
   async function copyDetail(label: string, value: string) {

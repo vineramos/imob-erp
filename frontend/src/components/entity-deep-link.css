@@ -92,3 +92,18 @@
 .entity-deep-link-copy-detail:hover{background:var(--surface-soft,#f8fafc);color:var(--text-strong,#111827)}
 .entity-deep-link-copy-detail span{font-size:9px!important;color:inherit!important}
 @media(max-width:720px){.entity-deep-link-detail-value{align-items:center}.entity-deep-link-copy-detail span{display:none}}
+
+/* Ensure quick-copy affordances are always visible in person detail rows. */
+.entity-deep-link-person .entity-deep-link-detail-value{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto;
+  align-items:center;
+  gap:8px;
+}
+.entity-deep-link-person .entity-deep-link-copy-detail{
+  opacity:1;
+  visibility:visible;
+  min-width:66px;
+  justify-content:center;
+}
+.entity-deep-link-person .entity-deep-link-copy-detail svg{flex:0 0 auto}
