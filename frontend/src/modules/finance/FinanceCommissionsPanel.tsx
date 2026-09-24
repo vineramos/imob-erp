@@ -8,7 +8,7 @@ import { shiftMonth } from './finance-period'
 import './finance-advanced.css'
 
 type Rule={id:string;code:string;name:string;event_type:string;basis:string;calculation_type:string;value:number;beneficiary_type:string;beneficiary_person_id:string;beneficiary_name:string;due_days:number;priority:number;is_active:boolean;notes:string|null}
-type Entry={id:string;code:string;source_code:string;beneficiary_name:string;beneficiary_type:string;competence:string;basis_amount:number;amount:number;due_date:string;status:string;financial_title_id:string|null;paid_at:string|null}
+type Entry={id:string;code:string;rule_id:string;source_code:string;beneficiary_name:string;beneficiary_type:string;competence:string;basis_amount:number;amount:number;due_date:string;status:string;financial_title_id:string|null;paid_at:string|null}
 type BatchItem={id:string;commission_entry_id:string;amount:number;snapshot:Record<string,unknown>}
 type Batch={id:string;code:string;beneficiary_person_id:string;beneficiary_name:string;competence:string;status:string;total_amount:number;broker_legal_name:string|null;broker_document_number:string|null;organization_legal_name:string;organization_document_number:string|null;service_description:string;report_issued_at:string|null;invoice_filename:string|null;invoice_uploaded_at:string|null;finance_review_notes:string|null;approved_at:string|null;payment_due_date:string|null;paid_at:string|null;payment_reference:string|null;items:BatchItem[]}
 const money=(v:number)=>Number(v||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'})
