@@ -30,3 +30,25 @@
 .maintenance-cost span,.maintenance-cost small{font-size:7.5px}.maintenance-cost strong{font-size:9.5px}
 .maintenance-detail{padding:10px 12px 13px;gap:9px}
 @media(max-width:1100px){.maintenance-card-head{grid-template-columns:85px minmax(220px,1fr) 150px auto}.maintenance-cost{display:none}}
+
+/* Manutenções v9 — master/detail operacional */
+.maintenance-master-detail{display:grid;grid-template-columns:350px minmax(0,1fr);gap:10px;align-items:start}
+.maintenance-master-list{padding:0;overflow:hidden;position:sticky;top:78px;max-height:calc(100vh - 96px);box-shadow:none}
+.maintenance-master-head{padding:11px 12px;border-bottom:1px solid var(--border);background:var(--surface-muted)}
+.maintenance-master-head>div{display:flex;align-items:center;justify-content:space-between}.maintenance-master-head strong{font-size:9px}
+.maintenance-master-scroll{overflow:auto;max-height:calc(100vh - 145px)}
+.maintenance-master-row{width:100%;padding:11px 12px 11px 14px;border:0;border-bottom:1px solid var(--border);background:var(--surface);color:inherit;text-align:left;display:grid;gap:4px;cursor:pointer;position:relative}
+.maintenance-master-row:before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--border)}
+.maintenance-master-row.priority-high:before{background:var(--warning)}.maintenance-master-row.priority-urgent:before{background:var(--danger)}
+.maintenance-master-row:hover{background:var(--surface-muted)}
+.maintenance-master-row.active{background:color-mix(in srgb,var(--brand-primary) 6%,var(--surface))}
+.maintenance-master-row.active:after{content:"";position:absolute;right:0;top:0;bottom:0;width:2px;background:var(--brand-primary)}
+.maintenance-master-row-top{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.maintenance-master-row-top>span{font-size:7.5px;font-weight:800;color:var(--text-muted);letter-spacing:.05em}
+.maintenance-master-row>strong{font-size:10.5px}.maintenance-master-row>small,.maintenance-master-row>em{font-size:8px;color:var(--text-muted);font-style:normal;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.maintenance-detail-workspace{padding:14px;display:grid;gap:10px;min-height:430px;box-shadow:none}
+.maintenance-detail-header{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding-bottom:10px;border-bottom:1px solid var(--border)}
+.maintenance-detail-header h2{margin:2px 0 2px;font-size:17px}.maintenance-detail-header p{margin:0;font-size:8.5px;color:var(--text-muted)}
+.maintenance-detail-header>div:last-child{display:flex;align-items:center;gap:7px;flex-wrap:wrap;justify-content:flex-end}
+.maintenance-detail-workspace>.maintenance-detail{border:0;padding:0;background:transparent}
+@media(max-width:1080px){.maintenance-master-detail{grid-template-columns:1fr}.maintenance-master-list{position:static;max-height:none}.maintenance-master-scroll{max-height:320px}}

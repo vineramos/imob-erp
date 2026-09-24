@@ -18,3 +18,25 @@
 .inspection-expanded{gap:8px;padding:10px}
 .inspection-detail-panel{padding:10px}
 @media(max-width:900px){.inspection-card-main{grid-template-columns:1fr}.inspection-strip{grid-template-columns:1fr}.inspection-strip>div{border-right:0;border-bottom:1px solid var(--border)}.inspection-strip>div:last-child{border-bottom:0}}
+
+/* Vistorias v9 — master/detail operacional */
+.inspection-master-detail{display:grid;grid-template-columns:330px minmax(0,1fr);gap:10px;align-items:start}
+.inspection-master-list{padding:0;overflow:hidden;position:sticky;top:78px;max-height:calc(100vh - 96px);box-shadow:none}
+.inspection-master-head{padding:11px 12px;border-bottom:1px solid var(--border);background:var(--surface-muted)}
+.inspection-master-head>div{display:flex;align-items:center;justify-content:space-between}.inspection-master-head strong{font-size:9px}
+.inspection-master-scroll{overflow:auto;max-height:calc(100vh - 145px)}
+.inspection-master-row{width:100%;padding:11px 12px;border:0;border-bottom:1px solid var(--border);background:var(--surface);color:inherit;text-align:left;display:grid;gap:4px;cursor:pointer;position:relative}
+.inspection-master-row:hover{background:var(--surface-muted)}
+.inspection-master-row.active{background:color-mix(in srgb,var(--brand-primary) 6%,var(--surface));box-shadow:inset 3px 0 0 var(--brand-primary)}
+.inspection-master-row-top{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.inspection-master-row-top>span{font-size:7.5px;font-weight:800;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em}
+.inspection-master-row>strong{font-size:10.5px}.inspection-master-row>small,.inspection-master-row>em{font-size:8px;color:var(--text-muted);font-style:normal;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.inspection-detail-workspace{padding:14px;display:grid;gap:10px;box-shadow:none;min-height:420px}
+.inspection-detail-header{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding-bottom:10px;border-bottom:1px solid var(--border)}
+.inspection-detail-header h2{margin:2px 0 2px;font-size:17px}.inspection-detail-header p{margin:0;font-size:8.5px;color:var(--text-muted)}
+.inspection-detail-kpis{display:grid;grid-template-columns:repeat(3,1fr);border:1px solid var(--border);border-radius:9px;overflow:hidden}
+.inspection-detail-kpis>div{padding:9px 10px;display:grid;grid-template-columns:auto 1fr;gap:2px 7px;align-items:center;border-right:1px solid var(--border)}
+.inspection-detail-kpis>div:last-child{border-right:0}.inspection-detail-kpis svg{grid-row:1/3;color:var(--brand-primary)}.inspection-detail-kpis span{font-size:7px;color:var(--text-muted)}.inspection-detail-kpis strong{font-size:9px}
+.inspection-detail-actions{display:flex;justify-content:flex-end;gap:6px;flex-wrap:wrap}.inspection-detail-actions .button{min-height:30px;font-size:8px;padding:0 9px}
+.inspection-detail-workspace>.inspection-expanded{border:0;padding:0;background:transparent;grid-template-columns:repeat(3,minmax(0,1fr))}
+@media(max-width:1050px){.inspection-master-detail{grid-template-columns:1fr}.inspection-master-list{position:static;max-height:none}.inspection-master-scroll{max-height:320px}.inspection-detail-workspace>.inspection-expanded{grid-template-columns:1fr}}
