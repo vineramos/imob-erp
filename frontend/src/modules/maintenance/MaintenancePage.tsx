@@ -4,10 +4,28 @@ import { ApiError, apiRequest } from '../../api/client'
 import { MaintenanceCallModal } from './MaintenanceCallModal'
 import { MaintenanceDetail } from './MaintenanceDetail'
 import { MaintenancePartners } from './MaintenancePartners'
-import { Maintenance, MaintenanceForm, Partner, Person, Property, Lease, address, blankMaintenance, priorities, statusClass, statuses } from './types'
+import { Maintenance, MaintenanceForm, Partner, Person, Property, Lease, address, blankMaintenance, money, priorities, responsibilities, statusClass, statuses } from './types'
 import './maintenance.css'
 
 type FilterKey='all'|'open'|'awaiting_approval'|'execution'|'urgent'|'completed'|'cancelled'
+
+function nextMaintenanceAction(item:Maintenance){
+  if(item.status==='requested')return 'Iniciar triagem'
+  if(item.status==='triage')return item.services.length?'Liberar orçamentos':'Definir serviços'
+  if(item.status==='awaiting_quote')return item.quotes.length?'Selecionar orçamento':'Aguardar orçamento'
+  if(item.status==='awaiting_approval')return 'Aprovar execução'
+  if(item.status==='approved')return 'Agendar serviço'
+  if(item.status==='scheduled')return 'Iniciar serviço'
+  if(item.status==='in_progress')return 'Concluir serviço'
+  if(item.status==='completed')return 'Encerrado'
+  return 'Sem próxima ação'
+}
+function maintenanceCost(item:Maintenance){
+  if(item.client_charge_total!=null)return money(item.client_charge_total)
+  if(item.partner_cost_total!=null)return money(item.partner_cost_total)
+  const selected=item.quotes.find(q=>q.id===item.selected_quote_id)
+  return selected?money(selected.client_price_total??selected.amount):'Sem orçamento'
+}
 
 export function MaintenancePage({permissions}:{permissions:string[]}){
   const canManage=permissions.includes('maintenance.manage')
@@ -95,9 +113,9 @@ export function MaintenancePage({permissions}:{permissions:string[]}){
           <div className="maintenance-master-row-top"><span>{item.code}</span><i className={`status-badge ${statusClass(item.status)}`}>{statuses[item.status]??item.status}</i></div>
           <strong>{item.title}</strong>
           <small>Imóvel {item.property_code} · {item.property_title}</small>
-          <em>{priorities[item.priority]} · {item.services.length} serviço(s) · {item.quotes.length} orçamento(s)</em>
+          <div className="maintenance-row-summary"><span>{priorities[item.priority]}</span><span>{item.requester_name||responsibilities[item.responsibility]||'Sem responsável'}</span><span>{maintenanceCost(item)}</span><span className="next">{nextMaintenanceAction(item)}</span></div>
         </button>)}</div></aside>
-        {selectedMaintenance&&<section className="panel maintenance-detail-workspace"><div className="maintenance-detail-header"><div><span className="eyebrow">Chamado · {selectedMaintenance.code}</span><h2>{selectedMaintenance.title}</h2><p>Imóvel {selectedMaintenance.property_code} · {selectedMaintenance.property_title} · {address(selectedMaintenance.property_address)}</p></div><div><i className={`status-badge ${statusClass(selectedMaintenance.status)}`}>{statuses[selectedMaintenance.status]??selectedMaintenance.status}</i><span className={`maintenance-priority ${selectedMaintenance.priority}`}>{priorities[selectedMaintenance.priority]}</span></div></div><MaintenanceDetail item={selectedMaintenance} partners={partners} canManage={canManage} onRefresh={refreshItem} onError={setError} onSuccess={setSuccess} onEdit={()=>openEdit(selectedMaintenance)}/></section>}
+        {selectedMaintenance&&<section className="panel maintenance-detail-workspace"><div className="maintenance-detail-header"><div><span className="eyebrow">Chamado · {selectedMaintenance.code}</span><h2>{selectedMaintenance.title}</h2><p>Imóvel {selectedMaintenance.property_code} · {selectedMaintenance.property_title} · {address(selectedMaintenance.property_address)}</p></div><div><i className={`status-badge ${statusClass(selectedMaintenance.status)}`}>{statuses[selectedMaintenance.status]??selectedMaintenance.status}</i><span className={`maintenance-priority ${selectedMaintenance.priority}`}>{priorities[selectedMaintenance.priority]}</span></div></div><div className="maintenance-detail-quick"><div><span>Responsável</span><strong>{selectedMaintenance.requester_name||responsibilities[selectedMaintenance.responsibility]||'Não definido'}</strong></div><div><span>Custo / cobrança</span><strong>{maintenanceCost(selectedMaintenance)}</strong></div><div><span>Agendamento</span><strong>{selectedMaintenance.scheduled_at?new Date(selectedMaintenance.scheduled_at).toLocaleString('pt-BR'):'Não agendado'}</strong></div><div className="next"><span>Próxima ação</span><strong>{nextMaintenanceAction(selectedMaintenance)}</strong></div></div><MaintenanceDetail item={selectedMaintenance} partners={partners} canManage={canManage} onRefresh={refreshItem} onError={setError} onSuccess={setSuccess} onEdit={()=>openEdit(selectedMaintenance)}/></section>}
       </div>}
     </>:<MaintenancePartners partners={partners} canManage={canManage} onReload={load} onSuccess={setSuccess}/>} 
 
