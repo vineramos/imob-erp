@@ -102,6 +102,24 @@ def _digits(value: str | None) -> str:
     return "".join(ch for ch in (value or "") if ch.isdigit())
 
 
+def _meta_recipient_phone(value: str | None) -> str:
+    """Return the E.164 digits Meta expects for outbound delivery.
+
+    WhatsApp inbound wa_id values for Brazilian mobiles can arrive without
+    the ninth mobile digit. Meta's test-recipient allowlist, however, is
+    registered with the full E.164 mobile number. Reinsert the ninth digit
+    only for the unambiguous BR mobile shape: 55 + DDD + 8-digit mobile
+    starting in 6-9. Landlines and all other countries are left untouched.
+    """
+    digits = _digits(value)
+    if len(digits) == 12 and digits.startswith("55"):
+        ddd = digits[2:4]
+        local = digits[4:]
+        if len(ddd) == 2 and len(local) == 8 and local[:1] in {"6", "7", "8", "9"}:
+            return f"55{ddd}9{local}"
+    return digits
+
+
 def _extract_inbound_messages(payload: dict) -> list[dict]:
     result: list[dict] = []
     if payload.get("object") != "whatsapp_business_account":
@@ -238,7 +256,7 @@ def _meta_send_text(db: Session, organization_id: UUID, recipient: str, body: st
             json={
                 "messaging_product": "whatsapp",
                 "recipient_type": "individual",
-                "to": _digits(recipient),
+                "to": _meta_recipient_phone(recipient),
                 "type": "text",
                 "text": {"preview_url": False, "body": body.strip()},
             },
