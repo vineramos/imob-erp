@@ -19,7 +19,7 @@ from app.integrations.document_storage import DocumentStorageError, get_document
 
 router = APIRouter(tags=["portal-feeds"])
 
-PORTALS = ("olx", "vrsync")
+PORTALS = ("olx", "vrsync", "imovelweb", "chaves")
 
 OLX_TYPE = {
     "apartment": "Apartamento Padrão",
@@ -42,18 +42,35 @@ VRSYNC_TYPE = {
     "land": "Residential / Land Lot",
     "commercial": "Commercial / Office",
 }
+OPENNAVENT_TYPE = {
+    "house": ("1", "5", "Casa"),
+    "apartment": ("2", "1", "Apartamento"),
+    "studio": ("2", "2", "Apartamento"),
+    "land": ("1003", "8", "Terreno"),
+    "commercial": ("1005", "16", "Comercial"),
+}
+CHAVES_TYPE = {
+    "apartment": "Apartamento",
+    "studio": "Kitnet / Studio",
+    "house": "Casa / Sobrado",
+    "land": "Terreno / Lote",
+    "commercial": "Conjunto Comercial / Sala",
+}
 
 
 class PortalSelection(BaseModel):
     model_config = ConfigDict(extra="forbid")
     olx: bool = False
     vrsync: bool = False
+    imovelweb: bool = False
+    chaves: bool = False
 
 
 class PortalIntegrationConfigUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
     status: str = Field(pattern="^(not_configured|pending_homologation|active|rejected)$")
     notes: str = Field(default="", max_length=1000)
+    external_code: str = Field(default="", max_length=120)
 
 
 def _settings(db: Session, organization_id: UUID) -> OrganizationSettings:
@@ -72,11 +89,18 @@ def _portal_settings(db: Session, organization_id: UUID) -> dict:
 
 def _portal_config_item(db: Session, organization_id: UUID, request: Request, portal: str) -> dict:
     config = dict(_portal_settings(db, organization_id).get(portal) or {})
+    labels = {
+        "olx": "OLX",
+        "vrsync": "ZAP Imóveis + Viva Real",
+        "imovelweb": "Imovelweb",
+        "chaves": "Chaves na Mão",
+    }
     return {
         "key": portal,
-        "label": "OLX" if portal == "olx" else "ZAP Imóveis + Viva Real",
+        "label": labels[portal],
         "status": str(config.get("status") or "not_configured"),
         "notes": str(config.get("notes") or ""),
+        "external_code": str(config.get("external_code") or ""),
         "last_validated_at": config.get("last_validated_at"),
         "last_validation": config.get("last_validation"),
         "feed_url": _feed_url(request, organization_id, portal),
@@ -103,7 +127,8 @@ def _issues(item: Property, photo_count: int, portal: str) -> list[str]:
     issues: list[str] = []
     if item.status != "available":
         issues.append("O imóvel precisa estar com status Disponível.")
-    if item.property_type not in (OLX_TYPE if portal == "olx" else VRSYNC_TYPE):
+    type_map = OLX_TYPE if portal == "olx" else OPENNAVENT_TYPE if portal == "imovelweb" else CHAVES_TYPE if portal == "chaves" else VRSYNC_TYPE
+    if item.property_type not in type_map:
         issues.append("Tipo de imóvel ainda não mapeado para este portal.")
     if not (item.public_title or "").strip():
         issues.append("Informe o título público.")
@@ -118,8 +143,17 @@ def _issues(item: Property, photo_count: int, portal: str) -> list[str]:
         issues.append("Informe um valor de aluguel maior que zero.")
     if item.purpose == "sale" and not (item.rent_amount and item.rent_amount > 0):
         issues.append("Informe o valor comercial do imóvel.")
-    if portal == "vrsync" and photo_count < 5:
-        issues.append("ZAP/Viva Real exigem ao menos 5 fotos.")
+    if portal in {"vrsync", "imovelweb"} and photo_count < 5:
+        issues.append(("Imovelweb/OpenNavent" if portal == "imovelweb" else "ZAP/Viva Real") + " exige ao menos 5 fotos.")
+    if portal == "imovelweb":
+        if len((item.public_title or "").strip()) > 80:
+            issues.append("Imovelweb/OpenNavent aceita título com até 80 caracteres.")
+        if len((item.public_description or "").strip()) < 50:
+            issues.append("Imovelweb/OpenNavent exige descrição com ao menos 50 caracteres.")
+        if not item.area_m2 or item.area_m2 <= 0:
+            issues.append("Informe a área do imóvel para o feed OpenNavent.")
+    if portal == "chaves" and photo_count < 1:
+        issues.append("Adicione ao menos uma foto para o Chaves na Mão.")
     if portal == "olx":
         subtype = OLX_TYPE.get(item.property_type)
         if subtype and subtype not in OLX_SUBTYPE_ALLOWED.get(item.property_type, set()):
@@ -184,7 +218,7 @@ def update_portal_integration(
     settings = _settings(db, context.user.organization_id)
     portal_integrations = dict(settings.portal_integrations or {})
     before = dict(portal_integrations.get(portal) or {})
-    after = {**before, "status": payload.status, "notes": payload.notes.strip(), "updated_at": datetime.now(timezone.utc).isoformat()}
+    after = {**before, "status": payload.status, "notes": payload.notes.strip(), "external_code": payload.external_code.strip(), "updated_at": datetime.now(timezone.utc).isoformat()}
     portal_integrations[portal] = after
     settings.portal_integrations = portal_integrations
     settings.updated_by_user_id = context.user.id
@@ -219,7 +253,14 @@ def validate_portal_integration(
         problems = _issues(item, len(_photos(db, item.id)), portal)
         if problems:
             invalid.append({"code": f"IMO-{item.internal_number:06d}", "issues": problems})
-    response = olx_feed(context.user.organization_id, request, db) if portal == "olx" else vrsync_feed(context.user.organization_id, request, db)
+    if portal == "olx":
+        response = olx_feed(context.user.organization_id, request, db)
+    elif portal == "vrsync":
+        response = vrsync_feed(context.user.organization_id, request, db)
+    elif portal == "imovelweb":
+        response = imovelweb_feed(context.user.organization_id, request, db)
+    else:
+        response = chaves_feed(context.user.organization_id, request, db)
     xml_valid = False
     xml_error = None
     document_issues: list[str] = []
@@ -228,6 +269,10 @@ def validate_portal_integration(
         xml_valid = True
         if portal == "olx":
             document_issues = _validate_olx_document(response.body)
+        elif portal == "imovelweb":
+            config = (_portal_settings(db, context.user.organization_id).get("imovelweb") or {})
+            if not str(config.get("external_code") or "").strip():
+                document_issues.append("Informe o código da imobiliária fornecido pelo Imovelweb antes da homologação.")
     except ET.ParseError as exc:
         xml_error = str(exc)
     validation = {
@@ -238,17 +283,13 @@ def validate_portal_integration(
         "selected_count": len(selected),
         "invalid_count": len(invalid),
         "invalid_properties": invalid[:20],
-        "compliance_profile": "OLX Imóveis XML" if portal == "olx" else "VRSync",
-        "requirements_checked": [
-            "XML bem-formado",
-            "URL pública HTTPS",
-            "Código do imóvel",
-            "Subtipo aceito",
-            "CEP",
-            "Descrição",
-            "Preço",
-            "Campos obrigatórios da subcategoria",
-        ] if portal == "olx" else ["XML bem-formado", "URL pública HTTPS", "campos mínimos VRSync"],
+        "compliance_profile": {"olx": "OLX Imóveis XML", "vrsync": "VRSync", "imovelweb": "OpenNavent", "chaves": "XML Chaves na Mão"}[portal],
+        "requirements_checked": {
+            "olx": ["XML bem-formado", "URL pública HTTPS", "Código do imóvel", "Subtipo aceito", "CEP", "Descrição", "Preço", "Campos obrigatórios da subcategoria"],
+            "vrsync": ["XML bem-formado", "URL pública HTTPS", "campos mínimos VRSync"],
+            "imovelweb": ["XML bem-formado", "OpenNavent", "5 fotos", "título", "descrição", "área", "código da imobiliária"],
+            "chaves": ["XML bem-formado", "tipo aceito", "finalidade", "localização", "preço"],
+        }[portal],
         "checked_at": datetime.now(timezone.utc).isoformat(),
     }
     settings = _settings(db, context.user.organization_id)
@@ -278,7 +319,7 @@ def get_portal_publications(
         issues = _issues(item, photo_count, portal)
         channels.append({
             "key": portal,
-            "label": "OLX" if portal == "olx" else "ZAP Imóveis + Viva Real",
+            "label": {"olx": "OLX", "vrsync": "ZAP Imóveis + Viva Real", "imovelweb": "Imovelweb", "chaves": "Chaves na Mão"}[portal],
             "enabled": selected[portal],
             "ready": not issues,
             "issues": issues,
@@ -303,7 +344,8 @@ def update_portal_publications(
         if enabled:
             issues = _issues(item, photo_count, portal)
             if issues:
-                raise HTTPException(status_code=422, detail=f"{'OLX' if portal == 'olx' else 'ZAP/Viva Real'}: " + " ".join(issues))
+                portal_label = {"olx": "OLX", "vrsync": "ZAP/Viva Real", "imovelweb": "Imovelweb", "chaves": "Chaves na Mão"}[portal]
+                raise HTTPException(status_code=422, detail=f"{portal_label}: " + " ".join(issues))
         next_value[portal] = {
             "enabled": enabled,
             "updated_at": datetime.now(timezone.utc).isoformat(),
@@ -446,6 +488,130 @@ def olx_feed(organization_id: UUID, request: Request, db: Session = Depends(get_
             if photo.is_cover:
                 ET.SubElement(photo_node, "Principal").text = "1"
             ET.SubElement(photo_node, "URLArquivo").text = url
+    xml = ET.tostring(root, encoding="utf-8", xml_declaration=True)
+    return Response(content=xml, media_type="application/xml; charset=utf-8", headers={"Cache-Control": "public, max-age=300"})
+
+
+
+@router.get("/public/feeds/{organization_id}/imovelweb.xml")
+def imovelweb_feed(organization_id: UUID, request: Request, db: Session = Depends(get_db)) -> Response:
+    organization = db.get(Organization, organization_id)
+    if organization is None or not organization.is_active:
+        raise HTTPException(status_code=404, detail="Feed não encontrado.")
+    config = (_portal_settings(db, organization_id).get("imovelweb") or {})
+    publisher_code = str(config.get("external_code") or "").strip() or str(organization_id)
+    root = ET.Element("OpenNavent")
+    ET.SubElement(root, "dataModificacao").text = datetime.now(timezone.utc).isoformat()
+    properties = ET.SubElement(root, "Imoveis")
+    for item in _selected_properties(db, organization_id, "imovelweb"):
+        photos = _photos(db, item.id)
+        if _issues(item, len(photos), "imovelweb"):
+            continue
+        address = item.address or {}
+        type_id, subtype_id, type_name = OPENNAVENT_TYPE[item.property_type]
+        node = ET.SubElement(properties, "Imovel")
+        ET.SubElement(node, "codigoAnuncio").text = f"IMO-{item.internal_number:06d}"
+        ET.SubElement(node, "codigoReferencia").text = f"IMO-{item.internal_number:06d}"
+        prop_type = ET.SubElement(node, "tipoPropriedade")
+        ET.SubElement(prop_type, "idTipo").text = type_id
+        ET.SubElement(prop_type, "idSubTipo").text = subtype_id
+        ET.SubElement(prop_type, "tipo").text = type_name
+        ET.SubElement(node, "titulo").text = (item.public_title or f"Imóvel {item.internal_number:06d}")[:80]
+        ET.SubElement(node, "descricao").text = (item.public_description or "")[:10000]
+        prices = ET.SubElement(node, "precos")
+        price = ET.SubElement(prices, "preco")
+        ET.SubElement(price, "quantidade").text = _money_int(item.rent_amount)
+        ET.SubElement(price, "moeda").text = "BRL"
+        ET.SubElement(price, "operacao").text = "ALQUILER" if item.purpose == "rent" else "VENTA"
+        publication = ET.SubElement(node, "publicacao")
+        ET.SubElement(publication, "tipoPublicacao").text = "SIMPLE"
+        publisher = ET.SubElement(node, "publicador")
+        ET.SubElement(publisher, "codigoImobiliaria").text = publisher_code
+        if organization.contact_email:
+            ET.SubElement(publisher, "emailContato").text = organization.contact_email
+        ET.SubElement(publisher, "nomeContato").text = organization.display_name
+        if organization.contact_phone:
+            ET.SubElement(publisher, "telefoneContato").text = organization.contact_phone
+        location = ET.SubElement(node, "localizacao")
+        street = str(address.get("street") or "").strip()
+        number = str(address.get("number") or "").strip()
+        complement = str(address.get("complement") or "").strip()
+        full_address = ", ".join(part for part in (street, number) if part)
+        if complement:
+            full_address = f"{full_address} - {complement}" if full_address else complement
+        ET.SubElement(location, "endereco").text = full_address or str(address.get("neighborhood") or "")
+        locality = ",".join(str(address.get(key) or "").replace(",", " ").strip() for key in ("neighborhood", "city", "state") if str(address.get(key) or "").strip())
+        if locality:
+            ET.SubElement(location, "localidade").text = locality + ",Brasil"
+        ET.SubElement(location, "codigoPostal").text = "".join(ch for ch in str(address.get("postal_code") or "") if ch.isdigit())
+        ET.SubElement(location, "mostrarMapa").text = "APROXIMADO"
+        media = ET.SubElement(node, "multimidia")
+        images = ET.SubElement(media, "imagens")
+        for photo, url in _photo_urls(request, organization_id, item, photos[:50]):
+            image = ET.SubElement(images, "imagem")
+            ET.SubElement(image, "urlImagem").text = url
+            if photo.caption:
+                ET.SubElement(image, "titulo").text = photo.caption[:80]
+        features = ET.SubElement(node, "caracteristicas")
+        for feature_id, name, value in (
+            ("CFT2", "PRINCIPALES|QUARTO", item.bedrooms),
+            ("CFT4", "PRINCIPALES|SUITE", item.suites),
+            ("CFT3", "PRINCIPALES|BANHEIRO", item.bathrooms),
+            ("CFT7", "PRINCIPALES|VAGA", item.parking_spaces),
+            ("CFT101", "MEDIDAS|AREA_UTIL", int(item.area_m2 or 0)),
+        ):
+            feature = ET.SubElement(features, "caracteristica")
+            ET.SubElement(feature, "id").text = feature_id
+            ET.SubElement(feature, "nome").text = name
+            ET.SubElement(feature, "valor").text = str(int(value or 0))
+        unit = ET.SubElement(features, "caracteristica")
+        ET.SubElement(unit, "id").text = "CON1"
+        ET.SubElement(unit, "nome").text = "MEDIDAS|UNIDAD_DE_MEDIDA"
+        ET.SubElement(unit, "idValor").text = "M2"
+        if item.iptu_amount:
+            feature = ET.SubElement(features, "caracteristica")
+            ET.SubElement(feature, "id").text = "CFT400"
+            ET.SubElement(feature, "nome").text = "PRINCIPALES|IPTU"
+            ET.SubElement(feature, "valor").text = _money_int(item.iptu_amount)
+        if item.condo_amount:
+            feature = ET.SubElement(features, "caracteristica")
+            ET.SubElement(feature, "id").text = "CFT6"
+            ET.SubElement(feature, "nome").text = "PRINCIPALES|CONDOMINIO"
+            ET.SubElement(feature, "valor").text = _money_int(item.condo_amount)
+    xml = ET.tostring(root, encoding="utf-8", xml_declaration=True)
+    return Response(content=xml, media_type="application/xml; charset=utf-8", headers={"Cache-Control": "public, max-age=300"})
+
+
+@router.get("/public/feeds/{organization_id}/chaves.xml")
+def chaves_feed(organization_id: UUID, request: Request, db: Session = Depends(get_db)) -> Response:
+    organization = db.get(Organization, organization_id)
+    if organization is None or not organization.is_active:
+        raise HTTPException(status_code=404, detail="Feed não encontrado.")
+    root = ET.Element("Imoveis")
+    for item in _selected_properties(db, organization_id, "chaves"):
+        photos = _photos(db, item.id)
+        if _issues(item, len(photos), "chaves"):
+            continue
+        address = item.address or {}
+        node = ET.SubElement(root, "Imovel")
+        ET.SubElement(node, "Codigo").text = f"IMO-{item.internal_number:06d}"
+        ET.SubElement(node, "Tipo").text = CHAVES_TYPE[item.property_type]
+        ET.SubElement(node, "Finalidade").text = "Aluguel" if item.purpose == "rent" else "Venda"
+        ET.SubElement(node, "Titulo").text = (item.public_title or f"Imóvel {item.internal_number:06d}")[:100]
+        ET.SubElement(node, "Descricao").text = (item.public_description or "")[:6000]
+        ET.SubElement(node, "Preco").text = _money_int(item.rent_amount)
+        ET.SubElement(node, "CEP").text = "".join(ch for ch in str(address.get("postal_code") or "") if ch.isdigit())
+        ET.SubElement(node, "Bairro").text = str(address.get("neighborhood") or "")
+        ET.SubElement(node, "Cidade").text = str(address.get("city") or "")
+        ET.SubElement(node, "Estado").text = str(address.get("state") or "")
+        if item.area_m2:
+            ET.SubElement(node, "Area").text = str(int(item.area_m2))
+        ET.SubElement(node, "Quartos").text = str(int(item.bedrooms or 0))
+        ET.SubElement(node, "Banheiros").text = str(int(item.bathrooms or 0))
+        ET.SubElement(node, "Vagas").text = str(int(item.parking_spaces or 0))
+        images = ET.SubElement(node, "Fotos")
+        for _, url in _photo_urls(request, organization_id, item, photos):
+            ET.SubElement(images, "Foto").text = url
     xml = ET.tostring(root, encoding="utf-8", xml_declaration=True)
     return Response(content=xml, media_type="application/xml; charset=utf-8", headers={"Cache-Control": "public, max-age=300"})
 
