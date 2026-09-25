@@ -40,6 +40,10 @@ class WhatsAppConfigurationResponse(BaseModel):
     checked_at: datetime | None = None
     reachable: bool | None = None
     message: str = ""
+    last_webhook_at: datetime | None = None
+    last_webhook_status: str = "never"
+    last_webhook_message_count: int = 0
+    last_webhook_error: str = ""
 
 
 class WhatsAppConfigurationUpdate(BaseModel):
@@ -280,6 +284,10 @@ def _response(db: Session, organization_id: UUID, request: Request) -> WhatsAppC
         checked_at=None,
         reachable=None,
         message="Configuração pronta para testar." if configured else "Cadastre o Phone Number ID, Access Token e Verify Token da Meta.",
+        last_webhook_at=config.get("last_webhook_at"),
+        last_webhook_status=str(config.get("last_webhook_status") or "never"),
+        last_webhook_message_count=int(config.get("last_webhook_message_count") or 0),
+        last_webhook_error=str(config.get("last_webhook_error") or ""),
     )
 
 
@@ -436,10 +444,19 @@ async def receive_whatsapp_webhook(
     secrets = _secrets(row, organization_id)
     app_secret = str(secrets.get("app_secret") or "")
     body = await request.body()
+    diagnostics = dict(row.non_secret_config or {})
+    diagnostics["last_webhook_at"] = datetime.now(timezone.utc).isoformat()
+    diagnostics["last_webhook_status"] = "received"
+    diagnostics["last_webhook_message_count"] = 0
+    diagnostics["last_webhook_error"] = ""
     if app_secret:
         supplied = request.headers.get("x-hub-signature-256", "")
         expected = "sha256=" + hmac.new(app_secret.encode(), body, hashlib.sha256).hexdigest()
         if not supplied or not hmac.compare_digest(supplied, expected):
+            diagnostics["last_webhook_status"] = "rejected_signature"
+            diagnostics["last_webhook_error"] = "Assinatura HMAC inválida ou ausente."
+            row.non_secret_config = diagnostics
+            db.commit()
             raise HTTPException(status_code=401, detail="Assinatura do webhook inválida.")
 
     try:
@@ -447,10 +464,19 @@ async def receive_whatsapp_webhook(
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise HTTPException(status_code=400, detail="Payload inválido do WhatsApp.") from exc
     if not isinstance(payload, dict):
+        diagnostics["last_webhook_status"] = "rejected_payload"
+        diagnostics["last_webhook_error"] = "Payload recebido não é um objeto JSON."
+        row.non_secret_config = diagnostics
+        db.commit()
         raise HTTPException(status_code=400, detail="Payload inválido do WhatsApp.")
 
+    incoming_messages = _extract_inbound_messages(payload)
+    diagnostics["last_webhook_message_count"] = len(incoming_messages)
+    diagnostics["last_webhook_status"] = "processed" if incoming_messages else "processed_no_messages"
+    row.non_secret_config = diagnostics
+
     created = 0
-    for incoming in _extract_inbound_messages(payload):
+    for incoming in incoming_messages:
         dedupe_key = f"whatsapp-in:{incoming['id']}"
         duplicate = db.scalar(
             select(CommunicationMessage.id).where(
