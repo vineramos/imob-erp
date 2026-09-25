@@ -168,6 +168,43 @@ def _extract_inbound_messages(payload: dict) -> list[dict]:
     return result
 
 
+def _extract_message_statuses(payload: dict) -> list[dict]:
+    result: list[dict] = []
+    if payload.get("object") != "whatsapp_business_account":
+        return result
+    for entry in payload.get("entry") or []:
+        if not isinstance(entry, dict):
+            continue
+        for change in entry.get("changes") or []:
+            if not isinstance(change, dict):
+                continue
+            value = change.get("value")
+            if not isinstance(value, dict):
+                continue
+            for status_item in value.get("statuses") or []:
+                if not isinstance(status_item, dict):
+                    continue
+                message_id = str(status_item.get("id") or "").strip()
+                status_name = str(status_item.get("status") or "").strip().lower()
+                if not message_id or not status_name:
+                    continue
+                errors = status_item.get("errors") if isinstance(status_item.get("errors"), list) else []
+                error = errors[0] if errors and isinstance(errors[0], dict) else {}
+                error_code = str(error.get("code") or "").strip()
+                error_title = str(error.get("title") or "").strip()
+                error_message = str(error.get("message") or "").strip()
+                error_details = str(((error.get("error_data") or {}).get("details") or "")).strip() if isinstance(error.get("error_data"), dict) else ""
+                detail = " · ".join(part for part in (error_code, error_title or error_message, error_details) if part)
+                result.append({
+                    "id": message_id,
+                    "status": status_name,
+                    "timestamp": str(status_item.get("timestamp") or ""),
+                    "recipient_id": str(status_item.get("recipient_id") or ""),
+                    "error": detail[:1000] or None,
+                })
+    return result
+
+
 def _find_person_by_phone(db: Session, organization_id: UUID, phone: str) -> Person | None:
     return db.scalar(
         select(Person).where(
@@ -581,9 +618,33 @@ async def receive_whatsapp_webhook(
         raise HTTPException(status_code=400, detail="Payload inválido do WhatsApp.")
 
     incoming_messages = _extract_inbound_messages(payload)
+    status_updates = _extract_message_statuses(payload)
     diagnostics["last_webhook_message_count"] = len(incoming_messages)
-    diagnostics["last_webhook_status"] = "processed" if incoming_messages else "processed_no_messages"
+    diagnostics["last_webhook_status"] = "processed" if incoming_messages or status_updates else "processed_no_messages"
     row.non_secret_config = diagnostics
+
+    status_matched = 0
+    for provider_status in status_updates:
+        message = db.scalar(
+            select(CommunicationMessage).where(
+                CommunicationMessage.organization_id == organization_id,
+                CommunicationMessage.provider_name == "meta_whatsapp_cloud",
+                CommunicationMessage.provider_message_id == provider_status["id"],
+            ).limit(1)
+        )
+        if message is None:
+            continue
+        status_name = provider_status["status"]
+        status_matched += 1
+        if status_name == "failed":
+            message.status = "failed"
+            message.failed_at = datetime.now(timezone.utc)
+            message.error_message = provider_status.get("error") or "A Meta informou falha na entrega da mensagem."
+        elif status_name in {"sent", "delivered", "read"}:
+            message.status = status_name
+            message.error_message = None
+            message.failed_at = None
+            message.sent_at = message.sent_at or datetime.now(timezone.utc)
 
     created = 0
     for incoming in incoming_messages:
@@ -633,7 +694,7 @@ async def receive_whatsapp_webhook(
         ))
         created += 1
     db.commit()
-    return {"received": True, "messages_created": created}
+    return {"received": True, "messages_created": created, "status_updates": len(status_updates), "status_matched": status_matched}
 
 
 @router.get("/crm/site-inquiries/{inquiry_id}/whatsapp/messages")
@@ -662,7 +723,9 @@ def list_inquiry_whatsapp_messages(
         "body": item.body,
         "status": item.status,
         "provider_message_id": item.provider_message_id,
+        "error_message": item.error_message,
         "created_at": item.created_at,
+        "updated_at": item.updated_at,
         "sent_at": item.sent_at,
     } for item in rows]
 
@@ -696,7 +759,7 @@ def reply_inquiry_whatsapp(
         origin="manual",
         subject="WhatsApp enviado",
         body=payload.body.strip(),
-        status="sent",
+        status="accepted",
         source_module="crm",
         source_type="public_site_inquiry",
         source_id=str(inquiry.id),
@@ -725,7 +788,9 @@ def reply_inquiry_whatsapp(
         "body": item.body,
         "status": item.status,
         "provider_message_id": message_id,
+        "error_message": item.error_message,
         "wa_id": wa_id,
         "created_at": item.created_at,
+        "updated_at": item.updated_at,
         "sent_at": item.sent_at,
     }
