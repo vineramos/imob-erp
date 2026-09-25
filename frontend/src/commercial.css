@@ -171,3 +171,19 @@
   .commercial-toolbar-v82 .portfolio-tabs,
   .commercial-toolbar-v82 .portfolio-search { grid-column:auto; }
 }
+
+
+.crm-whatsapp-section{display:grid;gap:12px}
+.crm-whatsapp-thread{display:grid;gap:8px;max-height:300px;overflow:auto;padding:4px 2px}
+.crm-whatsapp-message{display:flex}
+.crm-whatsapp-message>div{display:grid;gap:3px;max-width:min(78%,620px);padding:9px 11px;border:1px solid var(--border-subtle);border-radius:12px;background:var(--surface-soft)}
+.crm-whatsapp-message.inbound{justify-content:flex-start}
+.crm-whatsapp-message.outbound{justify-content:flex-end}
+.crm-whatsapp-message.outbound>div{background:var(--surface-strong)}
+.crm-whatsapp-message strong{font-size:11px}
+.crm-whatsapp-message span{font-size:12px;line-height:1.45;white-space:pre-wrap;word-break:break-word}
+.crm-whatsapp-message small{font-size:10px;opacity:.66}
+.crm-whatsapp-reply{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:end}
+.crm-whatsapp-reply .field{margin:0}
+.crm-whatsapp-reply textarea{min-height:64px;resize:vertical}
+@media(max-width:760px){.crm-whatsapp-reply{grid-template-columns:1fr}.crm-whatsapp-message>div{max-width:90%}}
