@@ -36,11 +36,14 @@ export function WhatsAppIntegrationSettingsPanel({canEdit}:{canEdit:boolean}){
   const [loading,setLoading]=useState(true)
   const [saving,setSaving]=useState(false)
   const [testing,setTesting]=useState(false)
+  const [subscribing,setSubscribing]=useState(false)
+  const [subscription,setSubscription]=useState<{subscribed:boolean;message:string}|null>(null)
   const [error,setError]=useState('')
   const [success,setSuccess]=useState('')
   const [copied,setCopied]=useState(false)
 
   useEffect(()=>{let active=true;void apiRequest<WhatsAppConfig>('/meta-whatsapp/config').then(data=>{if(active)setConfig(data)}).catch(cause=>{if(active)setError(cause instanceof ApiError?cause.detail:'Não foi possível carregar o WhatsApp.')}).finally(()=>{if(active)setLoading(false)});return()=>{active=false}},[])
+  useEffect(()=>{let active=true;void apiRequest<{subscribed:boolean;message:string}>('/meta-whatsapp/subscription').then(data=>{if(active)setSubscription(data)}).catch(()=>{if(active)setSubscription(null)});return()=>{active=false}},[])
 
   async function save(){
     if(!canEdit)return
@@ -70,6 +73,16 @@ export function WhatsAppIntegrationSettingsPanel({canEdit}:{canEdit:boolean}){
       setSuccess(result.message+(result.verified_name?' Conta: '+result.verified_name+'.':''))
     }catch(cause){setError(cause instanceof ApiError?cause.detail:'Não foi possível validar a conexão com a Meta.')}
     finally{setTesting(false)}
+  }
+
+  async function subscribe(){
+    if(!canEdit)return
+    setSubscribing(true);setError('');setSuccess('')
+    try{
+      const result=await apiRequest<{subscribed:boolean;message:string}>('/meta-whatsapp/subscription',{method:'POST'})
+      setSubscription(result);setSuccess(result.message)
+    }catch(cause){setError(cause instanceof ApiError?cause.detail:'Não foi possível inscrever o app na WABA.')}
+    finally{setSubscribing(false)}
   }
 
   async function copyWebhook(){
@@ -114,6 +127,14 @@ export function WhatsAppIntegrationSettingsPanel({canEdit}:{canEdit:boolean}){
             {config.last_webhook_error&&<small>{config.last_webhook_error}</small>}
           </div>
         </div>
+      </div>
+
+      <div className="integration-health">
+        <div className="integration-health-copy">
+          {subscription?.subscribed?<CheckCircle2 size={16}/>:<CircleAlert size={16}/>}
+          <div><strong>Assinatura da conta WhatsApp</strong><span>{subscription?.message||'Ainda não foi possível confirmar se o app está inscrito na WABA.'}</span></div>
+        </div>
+        <button className="button secondary compact-button" type="button" disabled={!canEdit||subscribing||!config.configured} onClick={()=>void subscribe()}>{subscribing?'Ativando...':subscription?.subscribed?'Revalidar assinatura':'Ativar recebimento'}</button>
       </div>
 
       <div className="smtp-test-row">
