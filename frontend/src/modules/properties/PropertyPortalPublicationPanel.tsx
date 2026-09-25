@@ -4,7 +4,7 @@ import { ApiError, apiRequest } from '../../api/client'
 import './property-portal-publication.css'
 
 type Channel = {
-  key: 'olx' | 'vrsync'
+  key: 'olx' | 'vrsync' | 'imovelweb' | 'chaves'
   label: string
   enabled: boolean
   ready: boolean
@@ -33,7 +33,7 @@ export function PropertyPortalPublicationPanel({ propertyId, permissions }: { pr
     if(!canPublish||saving)return
     const next=!(channel.enabled)
     if(next&&!channel.ready){setError(`${channel.label}: revise as pendências antes de ativar.`);return}
-    const current=Object.fromEntries((data?.channels||[]).map(item=>[item.key,item.enabled])) as Record<'olx'|'vrsync',boolean>
+    const current=Object.fromEntries((data?.channels||[]).map(item=>[item.key,item.enabled])) as Record<Channel['key'],boolean>
     current[channel.key]=next
     setSaving(channel.key);setError('')
     try{
@@ -53,15 +53,15 @@ export function PropertyPortalPublicationPanel({ propertyId, permissions }: { pr
     </div>
     {error&&<div className="form-alert danger-alert">{error}</div>}
     <div className="portal-publication-summary">
-      <article><span>Canais ativos</span><strong>{active}</strong><small>de {data?.channels.length||2} disponíveis</small></article>
+      <article><span>Canais ativos</span><strong>{active}</strong><small>de {data?.channels.length||4} disponíveis</small></article>
       <article><span>Integração</span><strong>XML</strong><small>sem cadastro manual anúncio a anúncio</small></article>
       <article><span>Atualização</span><strong>Automática</strong><small>o portal relê o feed periodicamente</small></article>
     </div>
     {loading?<div className="portal-publication-loading">Carregando configuração dos portais...</div>:<div className="portal-publication-channels">
       {data?.channels.map(channel=><article key={channel.key} className={'portal-channel-card '+(channel.enabled?'enabled ':'')+(channel.ready?'ready':'blocked')}>
-        <div className={'portal-channel-mark '+channel.key}>{channel.key==='olx'?'OLX':'ZAP + VR'}</div>
+        <div className={'portal-channel-mark '+channel.key}>{channel.key==='olx'?'OLX':channel.key==='vrsync'?'ZAP + VR':channel.key==='imovelweb'?'IMW':'CNM'}</div>
         <div className="portal-channel-main">
-          <div className="portal-channel-title"><div><strong>{channel.label}</strong><small>{channel.key==='olx'?'Feed XML específico da OLX':'Um único feed VRSync para ZAP Imóveis e Viva Real'}</small></div><i className={'status-badge '+(channel.enabled?'success':channel.ready?'neutral':'warning')}>{channel.enabled?'Ativo':channel.ready?'Pronto para ativar':'Com pendências'}</i></div>
+          <div className="portal-channel-title"><div><strong>{channel.label}</strong><small>{channel.key==='olx'?'Feed XML específico da OLX':channel.key==='vrsync'?'Um único feed VRSync para ZAP Imóveis e Viva Real':channel.key==='imovelweb'?'Feed OpenNavent para Imovelweb':'Feed XML dedicado ao Chaves na Mão'}</small></div><i className={'status-badge '+(channel.enabled?'success':channel.ready?'neutral':'warning')}>{channel.enabled?'Ativo':channel.ready?'Pronto para ativar':'Com pendências'}</i></div>
           {channel.issues.length?<div className="portal-channel-issues"><CircleAlert size={14}/><div>{channel.issues.map(issue=><span key={issue}>{issue}</span>)}</div></div>:<div className="portal-channel-ok"><CheckCircle2 size={14}/><span>Imóvel atende aos requisitos básicos deste feed.</span></div>}
           <div className="portal-channel-feed"><RadioTower size={13}/><code>{channel.feed_url}</code><button type="button" onClick={()=>void copyFeed(channel)}><Copy size={12}/>{copied===channel.key?'Copiado':'Copiar XML'}</button><a href={channel.feed_url} target="_blank" rel="noreferrer" title="Abrir feed XML"><ExternalLink size={12}/></a></div>
         </div>
