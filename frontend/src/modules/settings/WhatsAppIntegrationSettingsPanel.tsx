@@ -36,13 +36,13 @@ export function WhatsAppIntegrationSettingsPanel({canEdit}:{canEdit:boolean}){
   const [success,setSuccess]=useState('')
   const [copied,setCopied]=useState(false)
 
-  useEffect(()=>{let active=true;void apiRequest<WhatsAppConfig>('/whatsapp/config').then(data=>{if(active)setConfig(data)}).catch(cause=>{if(active)setError(cause instanceof ApiError?cause.detail:'Não foi possível carregar o WhatsApp.')}).finally(()=>{if(active)setLoading(false)});return()=>{active=false}},[])
+  useEffect(()=>{let active=true;void apiRequest<WhatsAppConfig>('/meta-whatsapp/config').then(data=>{if(active)setConfig(data)}).catch(cause=>{if(active)setError(cause instanceof ApiError?cause.detail:'Não foi possível carregar o WhatsApp.')}).finally(()=>{if(active)setLoading(false)});return()=>{active=false}},[])
 
   async function save(){
     if(!canEdit)return
     setSaving(true);setError('');setSuccess('')
     try{
-      const updated=await apiRequest<WhatsAppConfig>('/whatsapp/config',{method:'PUT',body:JSON.stringify({
+      const updated=await apiRequest<WhatsAppConfig>('/meta-whatsapp/config',{method:'PUT',body:JSON.stringify({
         graph_version:config.graph_version,
         business_account_id:config.business_account_id,
         phone_number_id:config.phone_number_id,
@@ -61,7 +61,7 @@ export function WhatsAppIntegrationSettingsPanel({canEdit}:{canEdit:boolean}){
     if(!canEdit)return
     setTesting(true);setError('');setSuccess('')
     try{
-      const result=await apiRequest<{reachable:boolean;verified_name:string|null;display_phone_number:string|null;message:string}>('/whatsapp/test',{method:'POST'})
+      const result=await apiRequest<{reachable:boolean;verified_name:string|null;display_phone_number:string|null;message:string}>('/meta-whatsapp/test',{method:'POST'})
       setConfig(current=>({...current,reachable:result.reachable,display_phone_number:result.display_phone_number||current.display_phone_number}))
       setSuccess(result.message+(result.verified_name?' Conta: '+result.verified_name+'.':''))
     }catch(cause){setError(cause instanceof ApiError?cause.detail:'Não foi possível validar a conexão com a Meta.')}
