@@ -14,10 +14,11 @@ type Validation = {
   checked_at:string
 }
 type Channel = {
-  key:'olx'|'vrsync'
+  key:'olx'|'vrsync'|'imovelweb'|'chaves'
   label:string
   status:'not_configured'|'pending_homologation'|'active'|'rejected'
   notes:string
+  external_code:string
   last_validated_at:string|null
   last_validation:Validation|null
   feed_url:string
@@ -55,7 +56,7 @@ export function PortalIntegrationsSettingsPanel({canEdit}:{canEdit:boolean}){
     if(!canEdit)return
     setSaving(channel.key);setError('');setSuccess('')
     try{
-      const updated=await apiRequest<Channel>(`/integrations/portals/${channel.key}`,{method:'PUT',body:JSON.stringify({status:channel.status,notes:channel.notes})})
+      const updated=await apiRequest<Channel>(`/integrations/portals/${channel.key}`,{method:'PUT',body:JSON.stringify({status:channel.status,notes:channel.notes,external_code:channel.external_code||''})})
       patch(channel.key,updated)
       setSuccess(`${channel.label}: status de homologação salvo.`)
     }catch(cause){setError(cause instanceof ApiError?cause.detail:'Não foi possível salvar o portal.')}
@@ -89,9 +90,9 @@ export function PortalIntegrationsSettingsPanel({canEdit}:{canEdit:boolean}){
       {channels.map(channel=>{
         const validation=channel.last_validation
         return <section className="portal-settings-channel" key={channel.key}>
-          <div className={'portal-settings-mark '+channel.key}>{channel.key==='olx'?'OLX':'ZAP + VR'}</div>
+          <div className={'portal-settings-mark '+channel.key}>{channel.key==='olx'?'OLX':channel.key==='vrsync'?'ZAP + VR':channel.key==='imovelweb'?'IMW':'CNM'}</div>
           <div className="portal-settings-main">
-            <div className="portal-settings-title"><div><strong>{channel.label}</strong><small>{channel.key==='olx'?'Feed XML OLX · homologação própria':'VRSync compartilhado entre ZAP Imóveis e Viva Real'}</small></div>{badge(channel)}</div>
+            <div className="portal-settings-title"><div><strong>{channel.label}</strong><small>{channel.key==='olx'?'Feed XML OLX · homologação própria':channel.key==='vrsync'?'VRSync compartilhado entre ZAP Imóveis e Viva Real':channel.key==='imovelweb'?'OpenNavent XML · integração Imovelweb':'XML dedicado · homologação com Chaves na Mão'}</small></div>{badge(channel)}</div>
             <div className="portal-settings-feed"><code>{channel.feed_url}</code><button type="button" onClick={()=>void copy(channel)}><Copy size={12}/>{copied===channel.key?'Copiado':'Copiar'}</button><a href={channel.feed_url} target="_blank" rel="noreferrer"><ExternalLink size={12}/></a></div>
             <div className="portal-settings-validation">
               {validation?.valid?<CheckCircle2 size={14}/>:<CircleAlert size={14}/>}
@@ -101,6 +102,7 @@ export function PortalIntegrationsSettingsPanel({canEdit}:{canEdit:boolean}){
             {validation&&validation.invalid_properties.length>0&&<div className="portal-settings-invalids">{validation.invalid_properties.slice(0,4).map(item=><div key={item.code}><strong>{item.code}</strong><span>{item.issues.join(' ')}</span></div>)}</div>}
             {validation?.document_issues&&validation.document_issues.length>0&&<div className="portal-settings-invalids">{validation.document_issues.slice(0,6).map((issue,index)=><div key={issue+index}><strong>XML OLX</strong><span>{issue}</span></div>)}</div>}
             <div className="portal-settings-form">
+              {channel.key==='imovelweb'&&<label className="field"><span>Código da imobiliária</span><input disabled={!canEdit} maxLength={120} placeholder="Fornecido pelo Imovelweb na integração" value={channel.external_code||''} onChange={e=>patch(channel.key,{external_code:e.target.value})}/></label>}
               <label className="field"><span>Status da homologação</span><select disabled={!canEdit} value={channel.status} onChange={e=>patch(channel.key,{status:e.target.value as Channel['status']})}>{Object.entries(statusLabel).map(([value,label])=><option value={value} key={value}>{label}</option>)}</select></label>
               <label className="field"><span>Observações / protocolo</span><input disabled={!canEdit} maxLength={1000} placeholder="Ex.: chamado aberto, protocolo, retorno do portal..." value={channel.notes} onChange={e=>patch(channel.key,{notes:e.target.value})}/></label>
               <button className="button primary compact-button" disabled={!canEdit||Boolean(saving)} type="button" onClick={()=>void save(channel)}><Save size={13}/>{saving===channel.key?'Salvando...':'Salvar'}</button>
@@ -109,6 +111,6 @@ export function PortalIntegrationsSettingsPanel({canEdit}:{canEdit:boolean}){
         </section>
       })}
     </div>}
-    <div className="portal-settings-foot"><strong>Importante</strong><span>“Feed validado” confirma a consistência técnica gerada pelo ERP. “Ativo no portal” deve ser marcado após a homologação externa da OLX ou do Canal Pro.</span></div>
+    <div className="portal-settings-foot"><strong>Importante</strong><span>“Feed validado” confirma a consistência técnica gerada pelo ERP. “Ativo no portal” deve ser marcado somente após a homologação externa de cada canal.</span></div>
   </article>
 }
