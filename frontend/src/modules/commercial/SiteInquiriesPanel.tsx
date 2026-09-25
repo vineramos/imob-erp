@@ -95,6 +95,7 @@ type LeaseCharge = {
 type LeaseComposition = { proposal_id:string; rent_amount:number; start_date:string; end_date:string; monthly_charges:LeaseCharge[]; tenant_monthly_total:number }
 type CrmResponsible = { id:string; name:string; email:string|null }
 type CommercialTimelineEvent = { kind:string; label:string; detail:string|null; at:string; author_name?:string|null }
+type WhatsAppConversationMessage = { id:string; direction:'inbound'|'outbound'; body:string; status:string; provider_message_id:string|null; created_at:string; sent_at:string|null }
 type CommercialFunnel = {
   inquiry: SiteInquiry
   responsible: CrmResponsible | null
@@ -203,6 +204,10 @@ export function SiteInquiriesPanel({ permissions }: Props) {
   const [workflowNotes,setWorkflowNotes]=useState('')
   const [manualHistoryTitle,setManualHistoryTitle]=useState('')
   const [manualHistoryNotes,setManualHistoryNotes]=useState('')
+  const [whatsappMessages,setWhatsappMessages]=useState<WhatsAppConversationMessage[]>([])
+  const [whatsappReply,setWhatsappReply]=useState('')
+  const [whatsappLoading,setWhatsappLoading]=useState(false)
+  const [whatsappSending,setWhatsappSending]=useState(false)
   const [busy, setBusy] = useState(false)
 
   const load = useCallback(async () => {
@@ -243,11 +248,18 @@ export function SiteInquiriesPanel({ permissions }: Props) {
   async function loadFunnel(inquiryId: string, resetMessage = true) {
     if (resetMessage) { setModalError(''); setModalSuccess('') }
     setModalLoading(true)
-    try { const next = await apiRequest<CommercialFunnel>(`/crm/site-inquiries/${inquiryId}/funnel`); setFunnel(next); setItems((current) => current.map((row) => row.id === inquiryId ? { ...row, ...next.inquiry } : row)); setWorkflowStage(next.inquiry.status==='converted'?'proposal':next.inquiry.status as FunnelStageStatus);setWorkflowResponsible(next.inquiry.responsible_user_id||'');setWorkflowAction(next.inquiry.next_action_title||'');setWorkflowAt(toLocalInput(next.inquiry.next_action_at));setWorkflowNotes(next.inquiry.next_action_notes||''); if (resetMessage) setProposalRent(next.suggested_rent_amount == null ? null : Number(next.suggested_rent_amount)) }
+    try {
+      const [next,messages]=await Promise.all([
+        apiRequest<CommercialFunnel>(`/crm/site-inquiries/${inquiryId}/funnel`),
+        apiRequest<WhatsAppConversationMessage[]>(`/crm/site-inquiries/${inquiryId}/whatsapp/messages`).catch(()=>[]),
+      ])
+      setFunnel(next);setWhatsappMessages(messages)
+      setItems((current) => current.map((row) => row.id === inquiryId ? { ...row, ...next.inquiry } : row)); setWorkflowStage(next.inquiry.status==='converted'?'proposal':next.inquiry.status as FunnelStageStatus);setWorkflowResponsible(next.inquiry.responsible_user_id||'');setWorkflowAction(next.inquiry.next_action_title||'');setWorkflowAt(toLocalInput(next.inquiry.next_action_at));setWorkflowNotes(next.inquiry.next_action_notes||''); if (resetMessage) setProposalRent(next.suggested_rent_amount == null ? null : Number(next.suggested_rent_amount))
+    }
     catch (cause) { setModalError(cause instanceof ApiError ? cause.detail : 'Não foi possível abrir o atendimento comercial.') }
     finally { setModalLoading(false) }
   }
-  async function openFunnel(inquiryId: string) { setSelectedId(inquiryId); setFunnel(null); setVisitOpen(false); setProposalOpen(false); setProposalRent(null); setCompositionProposal(null); setComposition(null); await loadFunnel(inquiryId) }
+  async function openFunnel(inquiryId: string) { setSelectedId(inquiryId); setFunnel(null); setWhatsappMessages([]); setWhatsappReply(''); setVisitOpen(false); setProposalOpen(false); setProposalRent(null); setCompositionProposal(null); setComposition(null); await loadFunnel(inquiryId) }
   async function changeStatus(item: SiteInquiry, nextStatus: InquiryStatus) { if (!canManage || nextStatus === item.status || !manualStatusOptions.includes(nextStatus)) return; setUpdatingId(item.id); setError(''); try { const updated = await apiRequest<SiteInquiry>(`/crm/site-inquiries/${item.id}`, { method: 'PATCH', body: JSON.stringify({ status: nextStatus }) }); setItems((current) => current.map((row) => row.id === item.id ? updated : row)) } catch (cause) { setError(cause instanceof ApiError ? cause.detail : 'Não foi possível atualizar o atendimento.') } finally { setUpdatingId(null) } }
 
   async function saveWorkflow() {
@@ -274,6 +286,19 @@ export function SiteInquiriesPanel({ permissions }: Props) {
       await loadFunnel(selectedId,false)
     }catch(cause){setModalError(cause instanceof ApiError?cause.detail:'Não foi possível adicionar o andamento ao histórico.')}
     finally{setBusy(false)}
+  }
+
+  async function sendWhatsAppReply(event: FormEvent) {
+    event.preventDefault()
+    if(!selectedId||!canManage||!whatsappReply.trim())return
+    setWhatsappSending(true);setModalError('');setModalSuccess('')
+    try{
+      const sent=await apiRequest<WhatsAppConversationMessage>(`/crm/site-inquiries/${selectedId}/whatsapp/messages`,{method:'POST',body:JSON.stringify({body:whatsappReply.trim()})})
+      setWhatsappMessages(current=>[...current,sent]);setWhatsappReply('')
+      setModalSuccess('Mensagem enviada pelo WhatsApp Business.')
+      await loadFunnel(selectedId,false)
+    }catch(cause){setModalError(cause instanceof ApiError?cause.detail:'Não foi possível enviar a mensagem pelo WhatsApp.')}
+    finally{setWhatsappSending(false)}
   }
 
   async function scheduleVisit(event: FormEvent) {
@@ -349,6 +374,11 @@ export function SiteInquiriesPanel({ permissions }: Props) {
             {visitOpen && <form className="funnel-inline-form" onSubmit={(event) => void scheduleVisit(event)}><div className="funnel-inline-heading"><div><span className="eyebrow">Visita</span><strong>Agendar no calendário comercial</strong></div><button type="button" className="portfolio-modal-close" onClick={() => setVisitOpen(false)}><X size={15}/></button></div><div className="funnel-form-grid"><label className="field"><span>Data e hora</span><input required type="datetime-local" value={visitStartsAt} onChange={(event) => setVisitStartsAt(event.target.value)}/></label><label className="field"><span>Duração</span><select value={visitDuration} onChange={(event) => setVisitDuration(Number(event.target.value))}><option value={30}>30 min</option><option value={45}>45 min</option><option value={60}>1 hora</option><option value={90}>1h30</option><option value={120}>2 horas</option></select></label></div><label className="field"><span>Observações</span><textarea rows={2} maxLength={2000} value={visitNotes} onChange={(event) => setVisitNotes(event.target.value)} placeholder="Orientações para a visita..."/></label><div className="funnel-inline-actions"><button className="button primary" disabled={busy} type="submit"><CalendarCheck2 size={14}/> Confirmar visita</button></div></form>}
 
             {proposalOpen && <form className="funnel-inline-form" onSubmit={(event) => void createProposal(event)}><div className="funnel-inline-heading"><div><span className="eyebrow">Proposta</span><strong>Condições comerciais</strong></div><button type="button" className="portfolio-modal-close" onClick={() => setProposalOpen(false)}><X size={15}/></button></div><div className="funnel-form-grid proposal-grid"><label className="field"><span>Aluguel proposto</span><input required min="0.01" step="0.01" type="number" value={proposalRent ?? ''} onChange={(event) => setProposalRent(event.target.value ? Number(event.target.value) : null)}/></label><label className="field"><span>Início pretendido</span><input required type="date" value={proposalStart} onChange={(event) => setProposalStart(event.target.value)}/></label><label className="field"><span>Prazo</span><select value={proposalTerm} onChange={(event) => setProposalTerm(Number(event.target.value))}><option value={12}>12 meses</option><option value={24}>24 meses</option><option value={30}>30 meses</option><option value={36}>36 meses</option></select></label><label className="field"><span>Garantia</span><select value={proposalGuarantee} onChange={(event) => setProposalGuarantee(event.target.value as CommercialProposal['guarantee_type'])}>{Object.entries(guaranteeLabels).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label></div><label className="field"><span>Observações</span><textarea rows={2} maxLength={3000} value={proposalNotes} onChange={(event) => setProposalNotes(event.target.value)} placeholder="Condições adicionais da proposta..."/></label><div className="funnel-inline-actions"><button className="button primary" disabled={busy} type="submit"><FileCheck2 size={14}/> Criar proposta</button></div></form>}
+
+            <section className="canonical-modal-section funnel-section crm-whatsapp-section"><div className="funnel-section-heading"><div><span className="eyebrow">WhatsApp</span><h3>Conversa com o lead</h3></div><span>{whatsappMessages.length}</span></div>
+              <div className="crm-whatsapp-thread">{whatsappMessages.length===0?<p className="funnel-empty-copy">Ainda não há mensagens vinculadas a este atendimento.</p>:whatsappMessages.map(message=><article key={message.id} className={'crm-whatsapp-message '+message.direction}><div><strong>{message.direction==='inbound'?'Cliente':'Imobiliária'}</strong><span>{message.body}</span><small>{dateTime(message.sent_at||message.created_at)} · {message.status}</small></div></article>)}</div>
+              {canManage&&funnel.inquiry.phone&&<form className="crm-whatsapp-reply" onSubmit={(event)=>void sendWhatsAppReply(event)}><label className="field"><span>Responder pelo WhatsApp Business</span><textarea rows={2} maxLength={4096} value={whatsappReply} onChange={event=>setWhatsappReply(event.target.value)} placeholder="Digite a mensagem para o cliente..."/></label><button className="button primary" type="submit" disabled={whatsappSending||!whatsappReply.trim()}><Send size={14}/>{whatsappSending?'Enviando...':'Enviar WhatsApp'}</button></form>}
+            </section>
 
             <section className="canonical-modal-section funnel-section"><div className="funnel-section-heading"><div><span className="eyebrow">Visitas</span><h3>Histórico de visitas</h3></div><span>{funnel.visits.length}</span></div>{funnel.visits.length === 0 ? <p className="funnel-empty-copy">Nenhuma visita agendada.</p> : <div className="funnel-timeline">{funnel.visits.map((visit) => <article key={visit.id}><div><strong>{visit.code} · {dateTime(visit.starts_at)}</strong><span>{visit.responsible_name || 'Responsável comercial'} · {visitStatusLabels[visit.status]}</span>{visit.notes && <small>{visit.notes}</small>}</div>{canManage && visit.status === 'scheduled' && <div className="funnel-row-actions"><button type="button" className="mini-action success" disabled={busy} onClick={() => void closeVisit(visit, 'completed')}><Check size={13}/> Realizada</button><button type="button" className="mini-action" disabled={busy} onClick={() => void closeVisit(visit, 'no_show')}>Não compareceu</button><button type="button" className="mini-action danger" disabled={busy} onClick={() => void closeVisit(visit, 'cancelled')}>Cancelar</button></div>}</article>)}</div>}</section>
 
