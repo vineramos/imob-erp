@@ -151,6 +151,7 @@ function maskKind(input: HTMLInputElement): MaskKind | null {
   if (/^\s*(buscar|pesquisar|search)/i.test(input.placeholder || '')) return null
 
   const explicit = input.dataset.format
+  if (explicit === 'raw' || explicit === 'none') return null
   if (explicit === 'cpf-cnpj' || explicit === 'document') return 'document'
   if (explicit === 'phone') return 'phone'
   if (explicit === 'cep') return 'cep'
