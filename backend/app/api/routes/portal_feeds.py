@@ -222,15 +222,19 @@ def validate_portal_integration(
     response = olx_feed(context.user.organization_id, request, db) if portal == "olx" else vrsync_feed(context.user.organization_id, request, db)
     xml_valid = False
     xml_error = None
+    document_issues: list[str] = []
     try:
         ET.fromstring(response.body)
         xml_valid = True
+        if portal == "olx":
+            document_issues = _validate_olx_document(response.body)
     except ET.ParseError as exc:
         xml_error = str(exc)
     validation = {
-        "valid": xml_valid and not invalid and len(selected) > 0,
+        "valid": xml_valid and not invalid and not document_issues and len(selected) > 0,
         "xml_valid": xml_valid,
         "xml_error": xml_error,
+        "document_issues": document_issues,
         "selected_count": len(selected),
         "invalid_count": len(invalid),
         "invalid_properties": invalid[:20],
@@ -349,6 +353,62 @@ def _money_int(value: Decimal | None) -> str:
     return str(int(value or 0))
 
 
+def _validate_olx_document(xml_body: bytes) -> list[str]:
+    issues: list[str] = []
+    try:
+        root = ET.fromstring(xml_body)
+    except ET.ParseError as exc:
+        return [f"XML inválido: {exc}"]
+    if root.tag != "Carga":
+        issues.append("A raiz do XML da OLX deve ser <Carga>.")
+        return issues
+    imoveis = root.find("Imoveis")
+    if imoveis is None:
+        issues.append("O XML da OLX precisa conter <Imoveis>.")
+        return issues
+    allowed_subtypes = set().union(*OLX_SUBTYPE_ALLOWED.values())
+    for index, node in enumerate(imoveis.findall("Imovel"), start=1):
+        prefix = f"Imóvel #{index}"
+        def text_of(tag: str) -> str:
+            child = node.find(tag)
+            return (child.text or "").strip() if child is not None else ""
+        code = text_of("CodigoImovel")
+        subtype = text_of("SubTipoImovel")
+        cep = "".join(ch for ch in text_of("CEP") if ch.isdigit())
+        description = text_of("Observacao")
+        title = text_of("TituloAnuncio") or text_of("Titulo")
+        if not code:
+            issues.append(f"{prefix}: <CodigoImovel> é obrigatório.")
+        elif len(code) > 20:
+            issues.append(f"{prefix}: <CodigoImovel> excede 20 caracteres.")
+        if subtype not in allowed_subtypes:
+            issues.append(f"{prefix}: <SubTipoImovel> não está na taxonomia oficial.")
+        if len(cep) != 8:
+            issues.append(f"{prefix}: <CEP> deve conter 8 dígitos.")
+        if not description:
+            issues.append(f"{prefix}: <Observacao> é obrigatória.")
+        elif len(description) > 6000:
+            issues.append(f"{prefix}: <Observacao> excede 6.000 caracteres.")
+        if title and len(title) > 90:
+            issues.append(f"{prefix}: título excede 90 caracteres.")
+        prices = [text_of("PrecoVenda"), text_of("PrecoLocacao"), text_of("PrecoLocacaoTemporada")]
+        if not any(prices):
+            issues.append(f"{prefix}: informe ao menos um preço de venda ou locação.")
+        for tag in ("PrecoVenda", "PrecoLocacao", "PrecoLocacaoTemporada", "PrecoCondominio", "ValorIPTU", "AreaTotal", "AreaUtil"):
+            value = text_of(tag)
+            if value and not value.isdigit():
+                issues.append(f"{prefix}: <{tag}> deve ser número inteiro sem separadores.")
+        if subtype in OLX_SUBTYPE_ALLOWED["apartment"] or subtype in OLX_SUBTYPE_ALLOWED["studio"] or subtype in OLX_SUBTYPE_ALLOWED["house"]:
+            bedrooms = text_of("QtdDormitorios")
+            if bedrooms not in {"0", "1", "2", "3", "4", "5"}:
+                issues.append(f"{prefix}: <QtdDormitorios> deve ser um valor de 0 a 5.")
+        for photo in node.findall("./Fotos/Foto"):
+            url = (photo.findtext("URLArquivo") or "").strip()
+            if url and not url.startswith("https://"):
+                issues.append(f"{prefix}: URL de foto deve ser pública em HTTPS.")
+    return issues
+
+
 @router.get("/public/feeds/{organization_id}/olx.xml")
 def olx_feed(organization_id: UUID, request: Request, db: Session = Depends(get_db)) -> Response:
     organization = db.get(Organization, organization_id)
@@ -378,7 +438,7 @@ def olx_feed(organization_id: UUID, request: Request, db: Session = Depends(get_
             ET.SubElement(node, "QtdBanheiros").text = str(min(int(item.bathrooms or 0), 5))
         ET.SubElement(node, "QtdVagas").text = str(min(int(item.parking_spaces or 0), 5))
         if item.area_m2:
-            ET.SubElement(node, "AreaUtil").text = str(int(item.area_m2))
+            ET.SubElement(node, "AreaTotal" if item.property_type == "land" else "AreaUtil").text = str(int(item.area_m2))
         ET.SubElement(node, "Observacao").text = (item.public_description or "")[:6000]
         photo_root = ET.SubElement(node, "Fotos")
         for photo, url in _photo_urls(request, organization_id, item, photos):
