@@ -1,0 +1,163 @@
+.field textarea {
+  width: 100%;
+  min-height: 88px;
+  padding: 10px 11px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: #fff;
+  outline: 0;
+  color: var(--text);
+  resize: vertical;
+  font: inherit;
+}
+
+.field textarea:focus {
+  border-color: var(--brand-primary);
+  box-shadow: 0 0 0 3px var(--brand-primary-soft);
+}
+
+.field textarea:disabled { cursor: not-allowed; opacity: .72; }
+
+.checkbox-field {
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 9px;
+  min-height: 40px;
+}
+
+.checkbox-field input[type='checkbox'] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--brand-primary);
+}
+
+.checkbox-field > span { margin: 0; }
+
+.governance-note-card {
+  padding: 20px;
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  background: linear-gradient(180deg, var(--surface), var(--brand-primary-soft));
+}
+
+.governance-note-card > svg { flex: 0 0 auto; color: var(--brand-primary); margin-top: 2px; }
+.governance-note-card h2 { margin-top: 4px; }
+.governance-note-card p { margin: 9px 0 0; color: var(--text-muted); font-size: 12px; line-height: 1.65; }
+.settings-save-button { width: 100%; min-height: 43px; }
+
+.integrations-layout { grid-template-columns: minmax(0, 1.35fr) minmax(300px, .65fr); }
+.integration-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) minmax(150px, .45fr) auto;
+  align-items: center;
+  gap: 13px;
+  padding: 15px 17px;
+}
+.integration-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  background: var(--brand-primary-soft);
+  color: var(--brand-primary);
+}
+.integration-content strong, .integration-content span { display: block; }
+.integration-content strong { font-size: 12px; }
+.integration-content span { color: var(--text-muted); font-size: 10px; margin-top: 3px; }
+.integration-card select {
+  width: 100%;
+  height: 36px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  padding: 0 9px;
+  font-size: 11px;
+}
+
+.approval-layout { grid-template-columns: minmax(320px, .8fr) minmax(440px, 1.2fr); }
+.approval-list-panel { padding: 18px; }
+.approval-rule-list { display: grid; }
+.approval-rule-row {
+  width: 100%;
+  min-height: 68px;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  padding: 10px 8px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+.approval-rule-row:last-child { border-bottom: 0; }
+.approval-rule-row:hover { background: var(--surface-muted); }
+.approval-rule-row.selected { background: var(--brand-primary-soft); }
+.approval-rule-row strong, .approval-rule-row span { display: block; }
+.approval-rule-row strong { font-size: 12px; }
+.approval-rule-row > div:first-child span { color: var(--text-muted); font-size: 10px; margin-top: 4px; }
+.approval-rule-meta { text-align: right; display: grid; justify-items: end; gap: 5px; }
+.approval-rule-meta > span { color: var(--text-muted); font-size: 9px; }
+.approval-editor { align-self: start; }
+.approval-range-preview {
+  margin: 16px 0;
+  padding: 11px 12px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface-muted);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.approval-range-preview span { color: var(--text-muted); font-size: 10px; }
+.approval-range-preview strong { font-size: 11px; }
+
+.user-row-actions { grid-template-columns: minmax(260px, 1.4fr) minmax(180px, 1fr) 110px 98px; }
+.compact-button { min-height: 32px; padding: 0 10px; font-size: 10px; }
+.user-manager-panel { margin-bottom: 16px; }
+.user-manager-grid { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(280px, .75fr); gap: 20px; }
+.field-section-label { display: block; margin-bottom: 9px; color: var(--text-muted); font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; }
+.role-checkbox-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.role-checkbox { border: 1px solid var(--border); border-radius: 9px; padding: 10px; display: flex; align-items: flex-start; gap: 9px; cursor: pointer; background: var(--surface); }
+.role-checkbox:has(input:checked) { border-color: var(--brand-primary); background: var(--brand-primary-soft); }
+.role-checkbox input {
+  width: 16px !important;
+  min-width: 16px;
+  height: 16px;
+  margin: 1px 0 0;
+  flex: 0 0 16px;
+  accent-color: var(--brand-primary);
+}
+.role-checkbox > span { min-width: 0; }
+.role-checkbox strong, .role-checkbox small { display: block; }
+.role-checkbox strong { font-size: 11px; }
+.role-checkbox small { color: var(--text-muted); font-size: 9px; line-height: 1.45; margin-top: 3px; }
+.smtp-config-panel { grid-column: 1 / -1; border-top: 1px solid var(--border); padding-top: 14px; display: grid; gap: 12px; }
+.smtp-config-grid { grid-template-columns: minmax(220px, 1.4fr) 110px minmax(180px, 1fr) minmax(190px, 1fr); gap: 11px; }
+.smtp-config-grid .field:nth-child(5), .smtp-config-grid .field:nth-child(6) { grid-column: span 2; }
+.smtp-security-options { display: flex; align-items: center; gap: 18px; }
+.smtp-security-options .checkbox-field { min-height: 28px; }
+.smtp-test-row { display: grid; grid-template-columns: minmax(220px, 1fr) auto auto; align-items: end; gap: 9px; }
+.smtp-security-note { color: var(--text-muted); font-size: 9px; }
+.danger-button { border-color: #efd0d0; background: #fff3f3; color: #9f3030; }
+.danger-button:hover { background: #ffeaea; }
+
+@media (max-width: 1100px) {
+  .integrations-layout, .approval-layout, .user-manager-grid { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 760px) {
+  .integration-card { grid-template-columns: auto minmax(0, 1fr); }
+  .integration-card select, .integration-card > .status-badge { grid-column: 2; }
+  .approval-rule-row { grid-template-columns: 1fr; }
+  .approval-rule-meta { text-align: left; justify-items: start; }
+  .role-checkbox-grid { grid-template-columns: 1fr; }
+  .smtp-config-grid, .smtp-test-row { grid-template-columns: 1fr; }
+  .smtp-config-grid .field:nth-child(5), .smtp-config-grid .field:nth-child(6) { grid-column: auto; }
+  .smtp-security-options { align-items: flex-start; flex-direction: column; gap: 4px; }
+}

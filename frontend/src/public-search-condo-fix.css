@@ -1,0 +1,5 @@
+/* Legacy condo-range compatibility layer retired.
+ * The current public rent filter uses .public-rent-range-editor and owns its
+ * layout in public-search-modal.css. Keeping the previous !important rules
+ * here caused the compact hero card to overflow and overlap its toggle.
+ */

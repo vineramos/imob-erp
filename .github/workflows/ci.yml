@@ -1,0 +1,405 @@
+name: CI
+
+# CI refresh marker: 2026-09-19 deploy
+
+on:
+  push:
+    branches: [main, sprint-1-foundation]
+  pull_request:
+    branches: [main]
+    types: [opened, reopened, ready_for_review, synchronize]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  public-safety:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+      - name: Scan reachable Git history for credential artifacts
+        run: python scripts/check_public_repo_safety.py
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install
+      - run: npm run typecheck
+      - run: npm run build
+
+  backend:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_DB: imob_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d imob_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      APP_ENV: test
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/imob_test
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+      - run: pip install -r requirements.txt
+      - run: pip check
+      - run: python -m compileall app tests
+      - run: python -c "from sqlalchemy.orm import configure_mappers; import app.domains.foundation.models; configure_mappers()"
+      - run: python -c "from app.main import app; assert app.title"
+      - run: alembic heads
+      - name: Prepare isolated test database
+        run: alembic upgrade head
+      - name: Critical business journeys
+        run: pytest -q
+
+  container:
+    runs-on: ubuntu-latest
+    needs: [public-safety, frontend, backend]
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build --tag imob-erp:ci .
+
+  deploy:
+    if: >-
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
+      vars.GCP_WIF_READY == 'true'
+    runs-on: ubuntu-latest
+    needs: [frontend, backend, container]
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v3
+        with:
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_WIF_SERVICE_ACCOUNT }}
+
+      - name: Set up Google Cloud SDK
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Build and push image
+        env:
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          REGION: ${{ vars.GCP_REGION }}
+          REPOSITORY: ${{ vars.GCP_ARTIFACT_REPOSITORY }}
+          SERVICE: ${{ vars.GCP_SERVICE }}
+        run: |
+          IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPOSITORY}/${SERVICE}:${GITHUB_SHA}"
+          echo "IMAGE=${IMAGE}" >> "$GITHUB_ENV"
+          gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
+          docker build --tag "$IMAGE" .
+          docker push "$IMAGE"
+
+      - name: Deploy to Cloud Run
+        env:
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          REGION: ${{ vars.GCP_REGION }}
+          SERVICE: ${{ vars.GCP_SERVICE }}
+          DOCUMENT_BUCKET: ${{ vars.GCP_DOCUMENT_BUCKET }}
+        run: |
+          STORAGE_ARGS=()
+          if [[ -n "$DOCUMENT_BUCKET" ]]; then
+            STORAGE_ARGS+=(--update-env-vars "DOCUMENT_STORAGE_BUCKET=${DOCUMENT_BUCKET},DOCUMENT_STORAGE_MIGRATE_ON_START=false")
+          fi
+          gcloud run deploy "$SERVICE" \
+            --project "$PROJECT_ID" \
+            --region "$REGION" \
+            --image "$IMAGE" \
+            --update-env-vars "IMOB_RELEASE_SHA=${GITHUB_SHA}" \
+            "${STORAGE_ARGS[@]}" \
+            --quiet
+
+      - name: Smoke test application health
+        env:
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          REGION: ${{ vars.GCP_REGION }}
+          SERVICE: ${{ vars.GCP_SERVICE }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          SERVICE_URL="$(gcloud run services describe "$SERVICE" --project "$PROJECT_ID" --region "$REGION" --format='value(status.url)')"
+          HEALTH_FILE="$(mktemp)"
+          READY_FILE="$(mktemp)"
+          trap 'rm -f "$HEALTH_FILE" "$READY_FILE"' EXIT
+          curl --silent --show-error --fail --max-time 20 "${SERVICE_URL}/api/health" > "$HEALTH_FILE"
+          curl --silent --show-error --fail --max-time 20 "${SERVICE_URL}/api/health/ready" > "$READY_FILE"
+          python - "$HEALTH_FILE" "$READY_FILE" "$GITHUB_SHA" <<'PY'
+          import json
+          import sys
+
+          health_path, ready_path, expected_release = sys.argv[1:]
+          health = json.load(open(health_path, encoding="utf-8"))
+          ready = json.load(open(ready_path, encoding="utf-8"))
+          assert health["status"] == "ok"
+          assert ready["status"] == "ready"
+          assert ready["database"] == "ok"
+          assert health["release"] == expected_release
+          assert ready["release"] == expected_release
+          PY
+          echo "Application health/readiness/release: SUCCESS"
+
+      - name: Smoke test Neon Auth
+        env:
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          REGION: ${{ vars.GCP_REGION }}
+          SERVICE: ${{ vars.GCP_SERVICE }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          SERVICE_URL="$(gcloud run services describe "$SERVICE" --project "$PROJECT_ID" --region "$REGION" --format='value(status.url)')"
+          CONFIG_FILE="$(mktemp)"
+          AUTH_FILE="$(mktemp)"
+          HEADER_FILE="$(mktemp)"
+          POST_HEADER_FILE="$(mktemp)"
+          POST_BODY_FILE="$(mktemp)"
+          PROXY_BODY_FILE="$(mktemp)"
+          trap 'rm -f "$CONFIG_FILE" "$AUTH_FILE" "$HEADER_FILE" "$POST_HEADER_FILE" "$POST_BODY_FILE" "$PROXY_BODY_FILE" /tmp/imob-auth-body.json' EXIT
+
+          curl --silent --show-error --fail --max-time 15 "${SERVICE_URL}/runtime-config.js" > "$CONFIG_FILE"
+          python - "$CONFIG_FILE" "$AUTH_FILE" <<'PY'
+          import json
+          import sys
+
+          config_path, auth_path = sys.argv[1:]
+          raw = open(config_path, encoding="utf-8").read().strip()
+          prefix = "window.__IMOB_CONFIG__ = "
+          if not raw.startswith(prefix):
+              raise SystemExit("runtime-config.js inválido")
+          payload = raw[len(prefix):].rstrip(";\n ")
+          config = json.loads(payload)
+          auth_url = str(config.get("neonAuthUrl") or "").strip().rstrip("/")
+          if not auth_url:
+              raise SystemExit("NEON_AUTH_URL não está configurado no Cloud Run")
+          open(auth_path, "w", encoding="utf-8").write(auth_url)
+          PY
+
+          AUTH_URL="$(cat "$AUTH_FILE")"
+          SESSION_CODE="$(curl --silent --show-error --output /tmp/imob-auth-body.json --write-out '%{http_code}' --max-time 20 "${AUTH_URL}/get-session" || true)"
+          if [[ -z "$SESSION_CODE" || "$SESSION_CODE" == "000" ]]; then
+            echo "Neon Auth reachability: FAILED (network/DNS/timeout)"
+            exit 1
+          fi
+          echo "Neon Auth reachability: SUCCESS (HTTP ${SESSION_CODE})"
+
+          PREFLIGHT_CODE="$(curl --silent --show-error --output /dev/null --dump-header "$HEADER_FILE" --write-out '%{http_code}' --max-time 15 -X OPTIONS \
+            "${AUTH_URL}/sign-in/email" \
+            -H "Origin: ${SERVICE_URL}" \
+            -H 'Access-Control-Request-Method: POST' \
+            -H 'Access-Control-Request-Headers: content-type' || true)"
+          ALLOW_ORIGIN="$(awk 'BEGIN{IGNORECASE=1} /^access-control-allow-origin:/ {sub(/\r$/, "", $2); print $2}' "$HEADER_FILE" | tail -n 1)"
+          ALLOW_CREDENTIALS="$(awk 'BEGIN{IGNORECASE=1} /^access-control-allow-credentials:/ {sub(/\r$/, "", $2); print tolower($2)}' "$HEADER_FILE" | tail -n 1)"
+
+          if [[ "$PREFLIGHT_CODE" == "000" || -z "$PREFLIGHT_CODE" ]]; then
+            echo "Neon Auth CORS preflight: FAILED (network/DNS/timeout)"
+            exit 1
+          fi
+          if [[ "$ALLOW_ORIGIN" != "$SERVICE_URL" && "$ALLOW_ORIGIN" != "*" ]]; then
+            echo "Neon Auth CORS preflight: FAILED (Cloud Run origin is not allowed; HTTP ${PREFLIGHT_CODE})"
+            exit 1
+          fi
+          if [[ "$ALLOW_CREDENTIALS" != "true" ]]; then
+            echo "Neon Auth CORS credentials: FAILED (Access-Control-Allow-Credentials missing)"
+            exit 1
+          fi
+          echo "Neon Auth CORS preflight: SUCCESS (HTTP ${PREFLIGHT_CODE}, credentials allowed)"
+
+          SIGNIN_CODE="$(curl --silent --show-error --output "$POST_BODY_FILE" --dump-header "$POST_HEADER_FILE" --write-out '%{http_code}' --max-time 15 \
+            -X POST "${AUTH_URL}/sign-in/email" \
+            -H "Origin: ${SERVICE_URL}" \
+            -H 'Content-Type: application/json' \
+            --data '{"email":"imob-auth-smoke@example.invalid","password":"invalid-smoke-password-123"}' || true)"
+          POST_ALLOW_ORIGIN="$(awk 'BEGIN{IGNORECASE=1} /^access-control-allow-origin:/ {sub(/\r$/, "", $2); print $2}' "$POST_HEADER_FILE" | tail -n 1)"
+          POST_ALLOW_CREDENTIALS="$(awk 'BEGIN{IGNORECASE=1} /^access-control-allow-credentials:/ {sub(/\r$/, "", $2); print tolower($2)}' "$POST_HEADER_FILE" | tail -n 1)"
+
+          if [[ -z "$SIGNIN_CODE" || "$SIGNIN_CODE" == "000" ]]; then
+            echo "Neon Auth sign-in endpoint: FAILED (network/DNS/timeout)"
+            exit 1
+          fi
+          if [[ "$SIGNIN_CODE" -ge 500 ]]; then
+            echo "Neon Auth sign-in endpoint: FAILED (HTTP ${SIGNIN_CODE})"
+            exit 1
+          fi
+          if [[ "$POST_ALLOW_ORIGIN" != "$SERVICE_URL" && "$POST_ALLOW_ORIGIN" != "*" ]]; then
+            echo "Neon Auth sign-in response CORS: FAILED"
+            exit 1
+          fi
+          if [[ "$POST_ALLOW_CREDENTIALS" != "true" ]]; then
+            echo "Neon Auth sign-in response credentials: FAILED"
+            exit 1
+          fi
+          echo "Neon Auth sign-in endpoint: SUCCESS (expected auth rejection HTTP ${SIGNIN_CODE})"
+
+          PROXY_CODE="$(curl --silent --show-error --output "$PROXY_BODY_FILE" --write-out '%{http_code}' --max-time 25 \
+            -X POST "${SERVICE_URL}/api/auth/sign-in" \
+            -H 'Content-Type: application/json' \
+            --data '{"email":"imob-auth-smoke@example.invalid","password":"invalid-smoke-password-123"}' || true)"
+          if [[ "$PROXY_CODE" != "401" ]]; then
+            echo "Imob same-origin Auth proxy: FAILED (HTTP ${PROXY_CODE})"
+            exit 1
+          fi
+          echo "Imob same-origin Auth proxy: SUCCESS (expected auth rejection HTTP 401)"
+
+      - name: Smoke test Clicksign configuration
+        env:
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          REGION: ${{ vars.GCP_REGION }}
+          SERVICE: ${{ vars.GCP_SERVICE }}
+        shell: bash
+        run: |
+          set -u
+          SERVICE_JSON="$(mktemp)"
+          TOKEN_FILE="$(mktemp)"
+          META_FILE="$(mktemp)"
+          trap 'rm -f "$SERVICE_JSON" "$TOKEN_FILE" "$META_FILE" /tmp/clicksign-response.json' EXIT
+          chmod 600 "$TOKEN_FILE"
+
+          gcloud run services describe "$SERVICE" \
+            --project "$PROJECT_ID" \
+            --region "$REGION" \
+            --format=json > "$SERVICE_JSON"
+
+          python - "$SERVICE_JSON" "$TOKEN_FILE" "$META_FILE" <<'PY'
+          import json
+          import sys
+
+          service_path, token_path, meta_path = sys.argv[1:]
+          data = json.load(open(service_path, encoding="utf-8"))
+
+          env_entries = []
+          def walk(node):
+              if isinstance(node, dict):
+                  env = node.get("env")
+                  if isinstance(env, list) and all(isinstance(item, dict) for item in env):
+                      env_entries.extend(env)
+                  for value in node.values():
+                      walk(value)
+              elif isinstance(node, list):
+                  for value in node:
+                      walk(value)
+          walk(data)
+
+          by_name = {str(item.get("name") or ""): item for item in env_entries if item.get("name")}
+          token = by_name.get("CLICKSIGN_ACCESS_TOKEN") or {}
+          environment = by_name.get("CLICKSIGN_ENVIRONMENT") or {}
+          webhook = by_name.get("CLICKSIGN_WEBHOOK_SECRET") or {}
+
+          token_value = token.get("value")
+          token_source = "none"
+          secret_name = ""
+          secret_version = "latest"
+          if isinstance(token_value, str) and token_value.strip():
+              token_source = "plain"
+              open(token_path, "w", encoding="utf-8").write(token_value.strip())
+          else:
+              ref = token.get("valueFrom") or token.get("value_from") or {}
+              secret_ref = ref.get("secretKeyRef") or ref.get("secret_key_ref") or {}
+              secret_name = str(secret_ref.get("name") or secret_ref.get("secret") or "").strip()
+              secret_version = str(secret_ref.get("key") or secret_ref.get("version") or "latest").strip() or "latest"
+              if secret_name:
+                  token_source = "secret"
+
+          env_value = str(environment.get("value") or "sandbox").strip().lower() or "sandbox"
+          webhook_configured = bool(
+              str(webhook.get("value") or "").strip()
+              or ((webhook.get("valueFrom") or webhook.get("value_from") or {}).get("secretKeyRef") or (webhook.get("valueFrom") or webhook.get("value_from") or {}).get("secret_key_ref"))
+          )
+
+          with open(meta_path, "w", encoding="utf-8") as fh:
+              fh.write(f"TOKEN_SOURCE={token_source}\n")
+              fh.write(f"CLICK_ENV={env_value}\n")
+              fh.write(f"WEBHOOK_CONFIGURED={'true' if webhook_configured else 'false'}\n")
+              fh.write(f"SECRET_NAME={secret_name}\n")
+              fh.write(f"SECRET_VERSION={secret_version}\n")
+          PY
+
+          # shellcheck disable=SC1090
+          source "$META_FILE"
+          echo "Clicksign environment: ${CLICK_ENV}"
+          echo "Clicksign credential configured: $([[ "$TOKEN_SOURCE" != "none" ]] && echo yes || echo no)"
+          echo "Clicksign webhook secret configured: $([[ "$WEBHOOK_CONFIGURED" == "true" ]] && echo yes || echo no)"
+
+          if [[ "$TOKEN_SOURCE" == "secret" ]]; then
+            if gcloud secrets versions access "$SECRET_VERSION" \
+              --secret "$SECRET_NAME" \
+              --project "$PROJECT_ID" > "$TOKEN_FILE" 2>/tmp/clicksign-secret-error.log; then
+              echo "Clicksign credential source: Secret Manager (readable by deploy identity for smoke test)"
+            else
+              echo "Clicksign credential source: Secret Manager"
+              echo "Clicksign API authentication test: not executed (deploy identity cannot read the secret; runtime may still have access)."
+              exit 0
+            fi
+          elif [[ "$TOKEN_SOURCE" == "plain" ]]; then
+            echo "Clicksign credential source: Cloud Run environment"
+          else
+            echo "Clicksign API authentication test: NOT CONFIGURED"
+            exit 0
+          fi
+
+          if [[ ! -s "$TOKEN_FILE" ]]; then
+            echo "Clicksign API authentication test: NOT CONFIGURED"
+            exit 0
+          fi
+
+          case "$CLICK_ENV" in
+            production) BASE_URL="https://app.clicksign.com/api/v3" ;;
+            *) BASE_URL="https://sandbox.clicksign.com/api/v3" ;;
+          esac
+
+          HTTP_CODE="$(curl --silent --show-error \
+            --output /tmp/clicksign-response.json \
+            --write-out '%{http_code}' \
+            --max-time 15 \
+            --get "${BASE_URL}/envelopes" \
+            --data-urlencode 'page[size]=1' \
+            --header "Authorization: Bearer $(cat "$TOKEN_FILE")" \
+            --header 'Accept: application/vnd.api+json' || true)"
+
+          if [[ "$HTTP_CODE" == "200" ]]; then
+            echo "Clicksign API authentication test: SUCCESS (HTTP 200)"
+          elif [[ -n "$HTTP_CODE" && "$HTTP_CODE" != "000" ]]; then
+            echo "Clicksign API authentication test: FAILED (HTTP ${HTTP_CODE})"
+          else
+            echo "Clicksign API authentication test: FAILED (network/timeout)"
+          fi
+
+      - name: Show service URL
+        env:
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          REGION: ${{ vars.GCP_REGION }}
+          SERVICE: ${{ vars.GCP_SERVICE }}
+        run: |
+          gcloud run services describe "$SERVICE" \
+            --project "$PROJECT_ID" \
+            --region "$REGION" \
+            --format='value(status.url)'

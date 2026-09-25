@@ -1,0 +1,30 @@
+.cashflow-workspace{min-width:0;max-width:100%;width:100%}
+.cashflow-daily-wrap{display:grid;gap:10px;min-width:0;max-width:100%;width:100%;overflow:hidden}
+.cashflow-daily-matrix{min-width:0;max-width:100%;width:100%;overflow:hidden;padding:0}
+.cashflow-daily-caption{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;padding:11px 13px;border-bottom:1px solid var(--border);background:var(--surface)}
+.cashflow-daily-caption>div{display:grid;gap:3px;min-width:0}.cashflow-daily-caption strong{font-size:10.5px}.cashflow-daily-caption span,.cashflow-daily-caption small{font-size:8.7px;color:var(--text-muted)}.cashflow-daily-caption small{white-space:nowrap}
+.cashflow-daily-scroll{display:block;width:100%;max-width:100%;min-width:0;overflow-x:auto;overflow-y:hidden;overscroll-behavior-x:contain;scrollbar-gutter:stable}
+.cashflow-daily-table{border-collapse:separate;border-spacing:0;width:max-content;min-width:100%;font-size:9px;table-layout:auto}
+.cashflow-daily-table th,.cashflow-daily-table td{min-width:96px;padding:8px 9px;text-align:right;white-space:nowrap;border-right:1px solid var(--border);border-bottom:1px solid var(--border);background:var(--surface);vertical-align:middle}
+.cashflow-daily-table th:last-child,.cashflow-daily-table td:last-child{border-right:0}
+.cashflow-daily-table thead th{position:sticky;top:0;z-index:3;text-align:center;background:var(--surface-soft);color:var(--text-muted);font-weight:800}
+.cashflow-daily-table .daily-label{position:sticky;left:0;z-index:2;min-width:220px;max-width:220px;text-align:left;background:var(--surface);box-shadow:1px 0 0 var(--border)}
+.cashflow-daily-table thead .daily-label{z-index:5;background:var(--surface-soft)}
+.cashflow-daily-table thead th strong,.cashflow-daily-table thead th span{display:block}.cashflow-daily-table thead th strong{font-size:10px;color:var(--text)}.cashflow-daily-table thead th span{margin-top:2px;font-size:8px;color:var(--text-muted)}
+.cashflow-daily-table thead th.today{background:var(--primary-soft);color:var(--primary-strong)}.cashflow-daily-table thead th.today strong{color:var(--primary-strong)}
+.cashflow-daily-group th{position:static!important;min-width:0!important;max-width:none!important;padding:7px 10px!important;text-align:left!important;background:var(--surface-soft)!important;color:var(--text-muted);font-size:8px;font-weight:850;letter-spacing:.08em;text-transform:uppercase;box-shadow:none!important}
+.cashflow-daily-group.outgoing th{border-top:2px solid var(--border)}
+.cashflow-daily-row .daily-label{font-weight:700;color:var(--text)}.cashflow-daily-row.muted th,.cashflow-daily-row.muted td{color:var(--text-muted)}
+.cashflow-daily-row:hover th,.cashflow-daily-row:hover td{background:color-mix(in srgb,var(--surface-soft) 55%,var(--surface))}.cashflow-daily-row:hover .daily-label{background:color-mix(in srgb,var(--surface-soft) 55%,var(--surface))}
+.cashflow-daily-total th,.cashflow-daily-total td{font-weight:800;background:color-mix(in srgb,var(--surface-soft) 82%,var(--surface))}.cashflow-daily-total .daily-label{background:var(--surface-soft)}
+.cashflow-daily-balance th,.cashflow-daily-balance td{font-weight:800;background:var(--surface)}.cashflow-daily-balance .daily-label{font-weight:850}
+.cashflow-daily-balance.accumulated th,.cashflow-daily-balance.accumulated td{background:var(--primary-soft)}.cashflow-daily-balance.accumulated .daily-label{background:var(--primary-soft);color:var(--primary-strong)}
+.cashflow-daily-zero{color:var(--text-muted)}
+.cashflow-daily-value{border:0;background:transparent;color:var(--text);font:inherit;font-weight:750;padding:4px 6px;margin:-4px -6px;border-radius:6px;cursor:pointer;white-space:nowrap;transition:background .12s ease,box-shadow .12s ease}
+.cashflow-daily-value:hover,.cashflow-daily-value.selected{background:var(--primary-soft);box-shadow:inset 0 0 0 1px var(--primary)}
+.cashflow-daily-balance.accumulated .cashflow-daily-value:hover,.cashflow-daily-balance.accumulated .cashflow-daily-value.selected{background:var(--surface);box-shadow:inset 0 0 0 1px var(--primary)}
+.cashflow-create-actions{display:flex;align-items:center;gap:7px;padding:0 2px;min-width:0}.cashflow-create-actions>div{display:grid;gap:1px;margin-right:auto;min-width:0}.cashflow-create-actions strong{font-size:9.5px}.cashflow-create-actions span{font-size:8.5px;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis}.cashflow-create-actions .button{flex:0 0 auto}
+.cashflow-daily-drilldown{padding:13px 14px;display:grid;gap:10px;min-width:0}.cashflow-daily-drilldown-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}.cashflow-daily-drilldown-head>div{display:grid;gap:2px}.cashflow-daily-drilldown-head span{font-size:8.5px;color:var(--text-muted);font-weight:750}.cashflow-daily-drilldown-head h3{margin:0;font-size:13px}.cashflow-daily-drilldown-head p{margin:0;color:var(--text-muted);font-size:9px}.cashflow-daily-drilldown .cashflow-movement-group{grid-template-columns:repeat(auto-fit,minmax(280px,1fr));display:grid;gap:6px}.cashflow-daily-drilldown .cashflow-movement-group-title{grid-column:1/-1}
+.cashflow-calendar-day>.balance{color:var(--text);font-weight:800}
+@media(max-width:1180px){.cashflow-daily-table .daily-label{min-width:200px;max-width:200px}}
+@media(max-width:760px){.cashflow-daily-caption{align-items:flex-start;flex-direction:column}.cashflow-daily-caption small{white-space:normal}.cashflow-daily-table .daily-label{min-width:175px;max-width:175px}.cashflow-daily-table th,.cashflow-daily-table td{min-width:88px;padding:8px}.cashflow-create-actions{align-items:stretch;flex-direction:column}.cashflow-create-actions>div{margin-right:0}.cashflow-create-actions .button{width:100%}.cashflow-daily-drilldown-head{flex-direction:column}}

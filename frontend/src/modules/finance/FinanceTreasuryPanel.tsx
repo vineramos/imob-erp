@@ -1,0 +1,132 @@
+import {
+  CalendarDays,
+  CheckCircle2,
+  ListChecks,
+  PlayCircle,
+  RefreshCw,
+  ShieldCheck,
+  TrendingUp,
+  WalletCards,
+  XCircle,
+} from 'lucide-react'
+import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react'
+import { ApiError, apiRequest } from '../../api/client'
+import { FinanceCashFlowPanel } from './FinanceCashFlowPanel'
+import './finance-treasury.css'
+
+type Scope = 'operating'|'third_party'
+type TreasuryArea = 'cashflow'|'payments'|'repasses'
+type BankAccount = {id:string;code:string;name:string;bank_name:string;fund_scope:Scope;current_balance:number;is_active:boolean;provider:string}
+type PaymentCandidate = {target_type:'owner_repasse'|'maintenance'|'manual';target_id:string;target_code:string;description:string;counterparty_name:string;due_date:string|null;fund_scope:Scope;remaining_amount:number;overdue:boolean}
+type PaymentBatchItem = {id:string;target_type:string;target_id:string;target_code:string;description:string;counterparty_name:string;due_date:string|null;fund_scope:Scope;amount:number;status:string;bank_transaction_id:string|null}
+type OwnerRepasse = {id:string;charge_id:string;charge_code:string;lease_contract_id:string;lease_code:string;property_id:string;property_code:string;competence:string;owner_person_id:string;owner_name:string;ownership_percent:number;amount:number;due_date:string;status:string;paid_at:string|null;payment_reference:string|null}
+type PaymentBatch = {id:string;code:string;bank_account_id:string;bank_account_name:string;name:string;scheduled_date:string;fund_scope:Scope;payment_method:string;status:string;total_amount:number;item_count:number;notes:string|null;provider_batch_id:string|null;provider_status:string|null;execution_reference:string|null;created_by_user_id:string|null;created_by_name:string|null;prepared_by_user_id:string|null;prepared_by_name:string|null;approved_by_user_id:string|null;approved_by_name:string|null;executed_by_user_id:string|null;executed_by_name:string|null;cancelled_by_user_id:string|null;cancelled_by_name:string|null;prepared_at:string|null;approved_at:string|null;executed_at:string|null;cancelled_at:string|null;created_at:string;items:PaymentBatchItem[]}
+type Me={id:string;name:string}
+
+const batchStatus:Record<string,string> = {draft:'Rascunho',ready:'Preparado',approved:'Aprovado',executed:'Executado',cancelled:'Cancelado'}
+const sourceLabels:Record<string,string> = {owner_repasse:'Repasse',maintenance:'Manutenção',manual:'Manual'}
+const paymentMethodLabels:Record<string,string> = {pix:'Pix',transfer:'Transferência',boleto:'Boleto',other:'Outro'}
+function money(value:number|null|undefined){return Number(value||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'})}
+function dateLabel(value:string|null|undefined){if(!value)return '—';return new Date(`${value.slice(0,10)}T12:00:00`).toLocaleDateString('pt-BR')}
+function todayInput(){const now=new Date();const offset=now.getTimezoneOffset();return new Date(now.getTime()-offset*60000).toISOString().slice(0,10)}
+function candidateKey(item:Pick<PaymentCandidate,'target_type'|'target_id'>){return `${item.target_type}:${item.target_id}`}
+
+export function FinanceTreasuryPanel({permissions}:{permissions:string[]}){
+  const canPrepare=permissions.includes('finance.payment.prepare')
+  const canApprove=permissions.includes('finance.payment.approve')
+  const canExecute=permissions.includes('finance.payment.execute')
+  const canOverrideSod=permissions.includes('finance.sod.override')
+  const [area,setArea]=useState<TreasuryArea>('cashflow')
+  const [accounts,setAccounts]=useState<BankAccount[]>([])
+  const [me,setMe]=useState<Me|null>(null)
+  const [accountId,setAccountId]=useState('')
+  const [scheduledDate,setScheduledDate]=useState(todayInput())
+  const [batchName,setBatchName]=useState('Pagamentos programados')
+  const [paymentMethod,setPaymentMethod]=useState('pix')
+  const [notes,setNotes]=useState('')
+  const [candidates,setCandidates]=useState<PaymentCandidate[]>([])
+  const [selected,setSelected]=useState<Set<string>>(new Set())
+  const [batches,setBatches]=useState<PaymentBatch[]>([])
+  const [repasses,setRepasses]=useState<OwnerRepasse[]>([])
+  const [repasseLoading,setRepasseLoading]=useState(false)
+  const [executeTarget,setExecuteTarget]=useState<PaymentBatch|null>(null)
+  const [executionDate,setExecutionDate]=useState(todayInput())
+  const [executionReference,setExecutionReference]=useState('')
+  const [loading,setLoading]=useState(false)
+  const [saving,setSaving]=useState(false)
+  const [error,setError]=useState('')
+  const [success,setSuccess]=useState('')
+
+  const selectedAccount=accounts.find(item=>item.id===accountId)||null
+  const selectedCandidates=useMemo(()=>candidates.filter(item=>selected.has(candidateKey(item))),[candidates,selected])
+  const selectedAmount=useMemo(()=>selectedCandidates.reduce((sum,item)=>sum+Number(item.remaining_amount||0),0),[selectedCandidates])
+
+  const loadAccounts=useCallback(async()=>{try{const [result,currentUser]=await Promise.all([apiRequest<BankAccount[]>('/finance/banking/accounts'),apiRequest<Me>('/me')]);setMe(currentUser);setAccounts(result.filter(item=>item.is_active));setAccountId(current=>{if(current&&result.some(item=>item.id===current&&item.is_active))return current;return result.find(item=>item.is_active)?.id||''})}catch(cause){setError(cause instanceof ApiError?cause.detail:'Não foi possível carregar as contas bancárias.')}},[])
+  const loadPaymentData=useCallback(async()=>{if(!accountId){setCandidates([]);setBatches([]);return}setLoading(true);setError('');try{const [candidateResult,batchResult]=await Promise.all([apiRequest<PaymentCandidate[]>(`/finance/treasury/payment-candidates?account_id=${accountId}&until=${scheduledDate}`),apiRequest<PaymentBatch[]>(`/finance/treasury/payment-batches?account_id=${accountId}`)]);setCandidates(candidateResult);setBatches(batchResult);setSelected(current=>new Set([...current].filter(key=>candidateResult.some(item=>candidateKey(item)===key))))}catch(cause){setError(cause instanceof ApiError?cause.detail:'Não foi possível carregar os lotes de pagamento.')}finally{setLoading(false)}},[accountId,scheduledDate])
+  useEffect(()=>{void loadAccounts()},[loadAccounts])
+  useEffect(()=>{if(area==='payments')void loadPaymentData()},[area,loadPaymentData])
+  const loadRepasses=useCallback(async()=>{setRepasseLoading(true);setError('');try{const result=await apiRequest<OwnerRepasse[]>('/finance/treasury/repasses');setRepasses(result)}catch(cause){setError(cause instanceof ApiError?cause.detail:'Não foi possível carregar os repasses.')}finally{setRepasseLoading(false)}},[])
+  useEffect(()=>{if(area==='repasses')void loadRepasses()},[area,loadRepasses])
+  useEffect(()=>{if(area==='cashflow'){setError('');setSuccess('')}},[area])
+
+  function toggleCandidate(item:PaymentCandidate){const key=candidateKey(item);setSelected(current=>{const next=new Set(current);if(next.has(key))next.delete(key);else next.add(key);return next})}
+  function selectAll(){setSelected(current=>current.size===candidates.length?new Set():new Set(candidates.map(candidateKey)))}
+
+  async function createBatch(event:FormEvent){event.preventDefault();if(!accountId||selectedCandidates.length===0)return;setSaving(true);setError('');setSuccess('');try{const result=await apiRequest<PaymentBatch>('/finance/treasury/payment-batches',{method:'POST',body:JSON.stringify({name:batchName,bank_account_id:accountId,scheduled_date:scheduledDate,payment_method:paymentMethod,notes:notes||null,items:selectedCandidates.map(item=>({target_type:item.target_type,target_id:item.target_id}))})});setSelected(new Set());setNotes('');setSuccess(`${result.code} criado com ${result.item_count} pagamento(s).`);await loadPaymentData()}catch(cause){setError(cause instanceof ApiError?cause.detail:'Não foi possível criar o lote de pagamentos.')}finally{setSaving(false)}}
+  async function actionBatch(batch:PaymentBatch,action:'prepare'|'approve'|'cancel'){
+    setSaving(true);setError('');setSuccess('')
+    try{
+      let body:string|undefined
+      if(action==='approve'&&batch.prepared_by_user_id===me?.id){
+        if(!canOverrideSod)throw new Error('Segregação de funções: outro usuário deve aprovar este lote.')
+        const reason=window.prompt('Você está aprovando um lote preparado por você. Informe a justificativa da exceção de segregação:')
+        if(!reason)return
+        body=JSON.stringify({override_sod:true,reason})
+      }else if(action==='cancel'&&batch.status!=='draft'){
+        const reason=window.prompt('Informe o motivo do cancelamento:')
+        if(!reason)return
+        body=JSON.stringify({reason})
+      }else if(action==='approve'){
+        body=JSON.stringify({})
+      }
+      const result=await apiRequest<PaymentBatch>(`/finance/treasury/payment-batches/${batch.id}/${action}`,{method:'POST',body})
+      const verbs={prepare:'preparado',approve:'aprovado',cancel:'cancelado'}
+      setSuccess(`${result.code} ${verbs[action]} com sucesso.`);await loadPaymentData()
+    }catch(cause){setError(cause instanceof ApiError?cause.detail:cause instanceof Error?cause.message:'Não foi possível atualizar o lote.')}finally{setSaving(false)}
+  }
+  async function executeBatch(event:FormEvent){event.preventDefault();if(!executeTarget)return;setSaving(true);setError('');setSuccess('');try{let override_sod=false;let reason:string|null=null;if(executeTarget.approved_by_user_id===me?.id){if(!canOverrideSod)throw new Error('Segregação de funções: outro usuário deve executar este lote.');reason=window.prompt('Você está executando um lote aprovado por você. Informe a justificativa da exceção de segregação:');if(!reason)return;override_sod=true}const result=await apiRequest<PaymentBatch>(`/finance/treasury/payment-batches/${executeTarget.id}/execute`,{method:'POST',body:JSON.stringify({execution_date:executionDate,reference:executionReference||null,override_sod,reason})});setExecuteTarget(null);setExecutionReference('');setSuccess(`${result.code} executado e conciliado com o extrato bancário.`);await loadPaymentData()}catch(cause){setError(cause instanceof ApiError?cause.detail:cause instanceof Error?cause.message:'Não foi possível registrar a execução do lote.')}finally{setSaving(false)}}
+  const statusClass=(status:string)=>status==='executed'||status==='approved'?'success':status==='cancelled'?'neutral':status==='ready'?'warning':'neutral'
+
+  return <section className="workspace treasury-workspace">
+    <div className="page-heading finance-heading treasury-heading"><div><span className="eyebrow">Financeiro · Tesouraria</span><h1>Tesouraria</h1><p>Fluxo financeiro diário e programação de pagamentos com separação rígida entre recursos próprios e valores de terceiros.</p></div>{(area==='payments'||area==='repasses')&&<button className="button secondary" type="button" onClick={()=>area==='payments'?void loadPaymentData():void loadRepasses()} disabled={area==='payments'?loading:repasseLoading}><RefreshCw size={14}/> Atualizar</button>}</div>
+    <div className="panel treasury-tabs"><button type="button" className={area==='cashflow'?'active':''} onClick={()=>setArea('cashflow')}><TrendingUp size={15}/> Fluxo financeiro</button><button type="button" className={area==='payments'?'active':''} onClick={()=>setArea('payments')}><ListChecks size={15}/> Lotes de pagamentos</button><button type="button" className={area==='repasses'?'active':''} onClick={()=>setArea('repasses')}><WalletCards size={15}/> Repasses</button></div>
+
+    {area==='cashflow'?<FinanceCashFlowPanel/>:area==='payments'?<>
+      {error&&<div className="form-alert danger-alert">{error}</div>}{success&&<div className="form-alert success-alert">{success}</div>}
+      <div className="treasury-payment-layout">
+        <form className="panel treasury-batch-builder" onSubmit={createBatch}>
+          <div className="treasury-section-title"><div><span className="eyebrow">Programação</span><h2>Novo lote</h2></div><CalendarDays size={20}/></div>
+          {accounts.length===0?<div className="finance-empty compact"><WalletCards size={24}/><strong>Nenhuma conta bancária ativa.</strong><span>Cadastre a conta na área Bancos antes de programar pagamentos.</span></div>:<>
+            <label><span>Conta de pagamento</span><select value={accountId} onChange={event=>{setAccountId(event.target.value);setSelected(new Set())}}>{accounts.map(account=><option key={account.id} value={account.id}>{account.code} · {account.name} · {account.fund_scope==='third_party'?'Terceiros':'Operacional'}</option>)}</select></label>
+            {selectedAccount&&<div className="treasury-account-hint"><ShieldCheck size={14}/><span>Este lote aceitará apenas títulos <strong>{selectedAccount.fund_scope==='third_party'?'de terceiros':'operacionais'}</strong>.</span></div>}
+            <label><span>Nome do lote</span><input value={batchName} onChange={event=>setBatchName(event.target.value)} maxLength={160} required/></label>
+            <div className="form-grid two-columns"><label><span>Data programada</span><input type="date" min={todayInput()} value={scheduledDate} onChange={event=>setScheduledDate(event.target.value)} required/></label><label><span>Forma de pagamento</span><select value={paymentMethod} onChange={event=>setPaymentMethod(event.target.value)}><option value="pix">Pix</option><option value="transfer">Transferência</option><option value="boleto">Boleto</option><option value="other">Outro</option></select></label></div>
+            <label><span>Observações</span><textarea value={notes} onChange={event=>setNotes(event.target.value)} rows={3} maxLength={2000}/></label><div className="treasury-selection-total"><span>{selectedCandidates.length} título(s) selecionado(s)</span><strong>{money(selectedAmount)}</strong></div><button className="button primary" type="submit" disabled={saving||!canPrepare||selectedCandidates.length===0}><ListChecks size={14}/> Criar lote</button>{!canPrepare&&<small className="treasury-permission-note">Seu perfil não possui permissão para preparar pagamentos.</small>}
+          </>}
+        </form>
+        <div className="panel treasury-candidates"><div className="treasury-table-heading"><div><strong>Obrigações disponíveis</strong><span>Somente títulos ainda não vinculados a outro lote aberto e compatíveis com a conta escolhida.</span></div>{candidates.length>0&&<button type="button" className="button secondary compact" onClick={selectAll}>{selected.size===candidates.length?'Limpar':'Selecionar todos'}</button>}</div>{loading?<div className="settings-loading">Carregando obrigações...</div>:candidates.length===0?<div className="finance-empty compact"><CheckCircle2 size={25}/><strong>Nenhuma obrigação disponível.</strong><span>Não há títulos elegíveis até {dateLabel(scheduledDate)} para esta conta.</span></div>:<div className="treasury-candidate-list">{candidates.map(item=><label className={`treasury-candidate ${selected.has(candidateKey(item))?'selected':''}`} key={candidateKey(item)}><input type="checkbox" checked={selected.has(candidateKey(item))} onChange={()=>toggleCandidate(item)}/><div><div className="treasury-code-line"><strong>{item.target_code}</strong><span>{sourceLabels[item.target_type]||item.target_type}</span>{item.overdue&&<i className="status-badge danger">Vencido</i>}</div><h3>{item.description}</h3><p>{item.counterparty_name} · venc. {dateLabel(item.due_date)}</p></div><strong>{money(item.remaining_amount)}</strong></label>)}</div>}</div>
+      </div>
+      <div className="treasury-batches-heading"><div><span className="eyebrow">Controle</span><h2>Lotes de pagamento</h2><p>O lote é preparado, aprovado e só então tem a execução registrada. Até a integração bancária ao vivo, registrar a execução cria e concilia os débitos reais no extrato.</p></div></div>
+      <div className="treasury-batch-list">{batches.map(batch=><article className={`panel treasury-batch ${batch.status}`} key={batch.id}><div className="treasury-batch-top"><div><div className="treasury-code-line"><strong>{batch.code}</strong><i className={`status-badge ${statusClass(batch.status)}`}>{batchStatus[batch.status]||batch.status}</i></div><h3>{batch.name}</h3><p>{batch.bank_account_name} · {batch.fund_scope==='third_party'?'Recursos de terceiros':'Operacional'} · {paymentMethodLabels[batch.payment_method]||batch.payment_method}</p></div><div className="treasury-batch-value"><span>Programado para {dateLabel(batch.scheduled_date)}</span><strong>{money(batch.total_amount)}</strong><small>{batch.item_count} pagamento(s)</small></div></div><div className="treasury-batch-items">{batch.items.map(item=><div key={item.id}><span>{item.target_code}</span><strong>{item.counterparty_name}</strong><span>{money(item.amount)}</span></div>)}</div><div className="treasury-governance-trail"><span>Criado por <b>{batch.created_by_name||'—'}</b></span>{batch.prepared_at&&<span>Preparado por <b>{batch.prepared_by_name||'—'}</b></span>}{batch.approved_at&&<span>Aprovado por <b>{batch.approved_by_name||'—'}</b></span>}{batch.executed_at&&<span>Executado por <b>{batch.executed_by_name||'—'}</b></span>}{batch.cancelled_at&&<span>Cancelado por <b>{batch.cancelled_by_name||'—'}</b></span>}</div><div className="treasury-batch-actions">{batch.status==='draft'&&canPrepare&&<button className="button primary compact" type="button" disabled={saving} onClick={()=>void actionBatch(batch,'prepare')}><CheckCircle2 size={13}/> Preparar</button>}{batch.status==='ready'&&canApprove&&<button className="button primary compact" type="button" disabled={saving} onClick={()=>void actionBatch(batch,'approve')}><ShieldCheck size={13}/>{batch.prepared_by_user_id===me?.id?' Aprovar com exceção':' Aprovar'}</button>}{batch.status==='approved'&&canExecute&&<button className="button primary compact" type="button" disabled={saving} onClick={()=>{setExecuteTarget(batch);setExecutionDate(todayInput());setExecutionReference('')}}><PlayCircle size={13}/>{batch.approved_by_user_id===me?.id?' Executar com exceção':' Registrar execução'}</button>}{['draft','ready'].includes(batch.status)&&canPrepare&&<button className="button secondary compact" type="button" disabled={saving} onClick={()=>void actionBatch(batch,'cancel')}><XCircle size={13}/> Cancelar</button>}{batch.status==='approved'&&canApprove&&<button className="button secondary compact" type="button" disabled={saving} onClick={()=>void actionBatch(batch,'cancel')}><XCircle size={13}/> Cancelar</button>}{batch.status==='executed'&&<span className="treasury-executed-note"><CheckCircle2 size={13}/> Executado em {dateLabel(batch.executed_at)} · ref. {batch.execution_reference||'—'}</span>}</div></article>)}{!loading&&batches.length===0&&<article className="panel finance-empty"><ListChecks size={28}/><strong>Nenhum lote criado para esta conta.</strong><span>Selecione as obrigações acima para montar a primeira programação.</span></article>}</div>
+    </>:<section className="panel treasury-repasses-view">
+      <div className="treasury-section-title"><div><span className="eyebrow">Proprietários</span><h2>Repasses</h2><p>Valores gerados após a confirmação do recebimento do locatário.</p></div><WalletCards size={20}/></div>
+      {error&&<div className="form-alert danger-alert">{error}</div>}
+      {repasseLoading?<div className="settings-loading">Carregando repasses...</div>:repasses.length===0?<div className="finance-empty compact"><WalletCards size={26}/><strong>Nenhum repasse gerado.</strong><span>Os repasses aparecem aqui depois que uma cobrança é efetivamente recebida e liquidada.</span></div>:<>
+        <div className="finance-advanced-metrics"><article className="panel"><span>Pendentes</span><strong>{repasses.filter(item=>item.status==='pending').length}</strong><small>{money(repasses.filter(item=>item.status==='pending').reduce((sum,item)=>sum+item.amount,0))}</small></article><article className="panel"><span>Pagos</span><strong>{repasses.filter(item=>item.status==='paid').length}</strong><small>{money(repasses.filter(item=>item.status==='paid').reduce((sum,item)=>sum+item.amount,0))}</small></article><article className="panel"><span>Total listado</span><strong>{repasses.length}</strong><small>{money(repasses.reduce((sum,item)=>sum+item.amount,0))}</small></article></div>
+        <div className="treasury-repasses-list">{repasses.map(item=><article className="treasury-repasse-row" key={item.id}><div><strong>{item.owner_name}</strong><span>{item.property_code} · {item.lease_code} · cobrança {item.charge_code}</span></div><div><span>Competência {dateLabel(item.competence)} · venc. {dateLabel(item.due_date)} · {item.ownership_percent.toLocaleString('pt-BR')}%</span><strong>{money(item.amount)}</strong></div><div><i className="status-badge">{item.status==='paid'?'Pago':'Pendente'}</i>{item.paid_at&&<small>Pago em {dateLabel(item.paid_at)}</small>}</div></article>)}</div>
+        <div className="treasury-repasses-footer"><span>Os repasses pendentes podem ser selecionados na área de lotes de pagamentos.</span><button className="button primary compact" type="button" onClick={()=>setArea('payments')}>Programar pagamentos</button></div>
+      </>}
+    </section>}
+    {executeTarget&&<div className="finance-modal-backdrop" onMouseDown={event=>{if(event.currentTarget===event.target)setExecuteTarget(null)}}><form className="panel finance-modal treasury-execute-modal" onSubmit={executeBatch}><div className="finance-modal-header"><div><span className="eyebrow">Execução do pagamento</span><h2>{executeTarget.code}</h2><p>Registre apenas após confirmar que os pagamentos realmente saíram da conta. O sistema criará os débitos e fará a conciliação automática dos títulos.</p></div><button type="button" onClick={()=>setExecuteTarget(null)}><XCircle size={17}/></button></div><div className="treasury-execute-summary"><span>{executeTarget.item_count} pagamento(s)</span><strong>{money(executeTarget.total_amount)}</strong></div><div className="form-grid two-columns"><label><span>Data da execução</span><input type="date" max={todayInput()} value={executionDate} onChange={event=>setExecutionDate(event.target.value)} required/></label><label><span>Referência bancária</span><input value={executionReference} onChange={event=>setExecutionReference(event.target.value)} maxLength={180} placeholder="Opcional"/></label></div><div className="finance-modal-actions"><button className="button secondary" type="button" onClick={()=>setExecuteTarget(null)}>Voltar</button><button className="button primary" type="submit" disabled={saving}><PlayCircle size={14}/> Confirmar execução</button></div></form></div>}
+  </section>
+}

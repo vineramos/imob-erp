@@ -1,0 +1,211 @@
+.integration-card-expanded { grid-template-columns: auto minmax(160px,1fr) minmax(150px,210px) auto; }
+.integration-health { grid-column: 2 / -1; border-top: 1px solid var(--border); padding-top: 10px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.integration-health-copy { display: flex; align-items: flex-start; gap: 8px; min-width: 0; }
+.integration-health-copy > svg { margin-top: 1px; color: var(--brand-primary); flex: 0 0 auto; }
+.integration-health-copy strong, .integration-health-copy span { display: block; }
+.integration-health-copy strong { font-size: 10px; }
+.integration-health-copy span { margin-top: 3px; color: var(--text-muted); font-size: 9px; line-height: 1.45; }
+.warning-alert { border-color: color-mix(in srgb, var(--warning) 35%, var(--border)); background: color-mix(in srgb, var(--warning) 7%, var(--surface)); color: var(--text); display: flex; gap: 8px; align-items: center; }
+
+.contract-signers-editor { margin-top: 16px; padding-top: 15px; border-top: 1px solid var(--border); display: grid; gap: 10px; }
+.contract-signers-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.contract-signers-heading h3 { margin: 2px 0 0; font-size: 13px; }
+.contract-signers-heading p { margin: 4px 0 0; color: var(--text-muted); font-size: 9.5px; }
+.contract-signers-empty { padding: 12px; border: 1px dashed var(--border); border-radius: 8px; color: var(--text-muted); font-size: 9.5px; line-height: 1.5; }
+.contract-signer-row { display: grid; grid-template-columns: 115px minmax(140px,1.2fr) minmax(170px,1.3fr) 130px 125px 72px 32px; align-items: end; gap: 8px; padding: 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-muted); }
+.contract-signer-row .field span { font-size: 8.5px; }
+.signer-remove { width: 32px; height: 34px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface); color: var(--danger); cursor: pointer; display: grid; place-items: center; }
+.signer-remove:hover { border-color: var(--danger); }
+.contract-expanded-detail { border-top: 1px solid var(--border); display: grid; grid-template-columns: minmax(240px,.8fr) minmax(320px,1.2fr); gap: 14px; padding-top: 12px; }
+.contract-signers-summary { display: grid; gap: 7px; }
+.contract-signers-summary > div { border: 1px solid var(--border); border-radius: 7px; padding: 8px 9px; }
+.contract-signers-summary strong, .contract-signers-summary span { display: block; }
+.contract-signers-summary strong { font-size: 10px; }
+.contract-signers-summary span, .contract-signers-summary small { margin-top: 3px; color: var(--text-muted); font-size: 8.5px; }
+.signature-timeline { grid-column: 1 / -1; border-top: 1px solid var(--border); padding-top: 10px; display: grid; gap: 7px; }
+.signature-timeline-heading { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.signature-timeline-heading > svg { color: var(--brand-primary); }
+.signature-timeline > small { color: var(--text-muted); font-size: 8.5px; }
+.signature-timeline-error { color: var(--danger) !important; }
+.signature-event { display: grid; grid-template-columns: 18px 1fr; gap: 7px; padding: 8px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface-muted); }
+.signature-event > svg { margin-top: 1px; color: var(--success); }
+.signature-event strong, .signature-event span, .signature-event small { display: block; }
+.signature-event strong { font-size: 9.5px; }
+.signature-event span, .signature-event small { margin-top: 3px; color: var(--text-muted); font-size: 8px; }
+
+.commercial-workspace { display: grid; gap: 14px; }
+.commercial-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.commercial-grid { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(380px, .9fr); gap: 14px; align-items: start; }
+.commercial-list-column { display: grid; gap: 9px; min-width: 0; }
+.commercial-toolbar { align-items: center; }
+.commercial-property-row { width: 100%; min-height: 78px; padding: 12px 14px; display: grid; grid-template-columns: minmax(0,1fr) 120px auto; align-items: center; gap: 12px; text-align: left; font: inherit; color: inherit; cursor: pointer; }
+.commercial-property-row:hover, .commercial-property-row.selected { border-color: color-mix(in srgb, var(--brand-primary) 55%, var(--border)); box-shadow: 0 0 0 2px var(--brand-primary-soft); }
+.commercial-property-row > div strong, .commercial-property-row > div small, .commercial-property-row > div span { display: block; }
+.commercial-property-row > div strong { font-size: 11px; }
+.commercial-property-row > div small, .commercial-property-row > div span { margin-top: 4px; color: var(--text-muted); font-size: 9px; }
+.publication-inspector { position: sticky; top: 78px; padding: 15px; min-height: 300px; }
+.publication-inspector-heading { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; padding-bottom: 12px; border-bottom: 1px solid var(--border); }
+.publication-inspector-heading h2 { margin: 3px 0 0; font-size: 13px; }
+.publication-inspector-heading p { margin: 5px 0 0; color: var(--text-muted); font-size: 9px; }
+.publication-ok { color: var(--success); }
+.publication-pending { color: var(--warning); }
+.commercial-profile-form { padding: 12px 0; display: grid; gap: 9px; border-bottom: 1px solid var(--border); }
+.commercial-profile-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 8px; }
+.commercial-profile-form .field span { font-size: 8.5px; }
+.commercial-profile-form textarea { resize: vertical; min-height: 86px; }
+.commercial-profile-actions { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.commercial-profile-actions small { color: var(--text-muted); font-size: 8px; }
+.publication-checklist-heading { padding-top: 12px; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.publication-checklist-heading strong { font-size: 9.5px; }
+.publication-checklist { display: grid; gap: 7px; padding: 9px 0 12px; }
+.publication-checklist > div { display: grid; grid-template-columns: 18px 1fr; gap: 8px; align-items: start; padding: 8px; border-radius: 7px; background: var(--surface-muted); }
+.publication-checklist > div.ok > svg { color: var(--success); }
+.publication-checklist > div.pending > svg { color: var(--danger); }
+.publication-checklist strong, .publication-checklist span { display: block; }
+.publication-checklist strong { font-size: 9.5px; }
+.publication-checklist span { margin-top: 3px; color: var(--text-muted); font-size: 8.5px; line-height: 1.35; }
+.publication-actions { border-top: 1px solid var(--border); padding-top: 12px; display: grid; gap: 8px; }
+.publication-slug { display: flex; align-items: center; gap: 5px; color: var(--text-muted); font-size: 8.5px; word-break: break-all; }
+.commercial-api-note, .contract-provider-note { display: flex; gap: 12px; padding: 15px; }
+.commercial-api-note > svg, .contract-provider-note > svg { color: var(--brand-primary); flex: 0 0 auto; }
+.commercial-api-note h2, .contract-provider-note h2 { margin: 3px 0 0; font-size: 12px; }
+.commercial-api-note p, .contract-provider-note p { margin: 5px 0 0; color: var(--text-muted); font-size: 9.5px; line-height: 1.5; }
+
+@media (max-width: 1180px) {
+  .contract-signer-row { grid-template-columns: repeat(3, minmax(0,1fr)); }
+  .signer-remove { align-self: center; }
+  .commercial-grid { grid-template-columns: 1fr; }
+  .publication-inspector { position: static; }
+}
+
+@media (max-width: 760px) {
+  .integration-card-expanded { grid-template-columns: auto 1fr; }
+  .integration-card-expanded select, .integration-card-expanded > .status-badge, .integration-health { grid-column: 1 / -1; }
+  .integration-health, .contract-signers-heading, .commercial-profile-actions { flex-direction: column; align-items: stretch; }
+  .contract-signer-row, .contract-expanded-detail, .commercial-property-row, .commercial-profile-grid { grid-template-columns: 1fr; }
+  .signature-timeline { grid-column: auto; }
+  .commercial-metrics { grid-template-columns: 1fr; }
+}
+
+
+/* Commercial publication v8.2 */
+.commercial-toolbar-v82 {
+  display: grid;
+  grid-template-columns: auto minmax(220px,1fr) 150px auto 170px;
+  gap: 8px;
+  align-items: center;
+}
+.commercial-toolbar-v82 > select,
+.commercial-sort {
+  min-height: 36px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+}
+.commercial-toolbar-v82 > select {
+  padding-inline: 9px;
+  color: var(--text);
+  font-size: 9.5px;
+}
+.commercial-quick-filter {
+  min-height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: 9px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.commercial-quick-filter.active {
+  border-color: #c6aa67;
+  background: #fbf6e9;
+  color: #725a21;
+}
+.commercial-sort {
+  padding-inline: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.commercial-sort svg { color: var(--text-muted); }
+.commercial-sort select {
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text);
+  font-size: 9px;
+}
+.commercial-property-card-v82 {
+  min-height: 172px;
+}
+.commercial-property-card-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin: 12px 0 4px;
+}
+.commercial-property-card-facts span {
+  min-height: 24px;
+  padding: 4px 7px;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  background: var(--surface-soft);
+  color: var(--text-muted);
+  font-size: 8px;
+  font-weight: 650;
+}
+@media(max-width:1180px){
+  .commercial-toolbar-v82 { grid-template-columns:1fr 1fr 1fr; }
+  .commercial-toolbar-v82 .portfolio-tabs { grid-column:1/-1; }
+}
+@media(max-width:760px){
+  .commercial-toolbar-v82 { grid-template-columns:1fr 1fr; }
+  .commercial-toolbar-v82 .portfolio-search { grid-column:1/-1; }
+}
+@media(max-width:520px){
+  .commercial-toolbar-v82 { grid-template-columns:1fr; }
+  .commercial-toolbar-v82 .portfolio-tabs,
+  .commercial-toolbar-v82 .portfolio-search { grid-column:auto; }
+}
+
+
+.crm-whatsapp-section{display:grid;gap:0;overflow:hidden;padding:0!important;border:1px solid var(--border);border-radius:12px;background:var(--surface)}
+.crm-whatsapp-header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 13px;border-bottom:1px solid var(--border);background:linear-gradient(180deg,var(--surface),var(--surface-muted))}
+.crm-whatsapp-identity{display:flex;align-items:center;gap:10px;min-width:0}
+.crm-whatsapp-icon{width:34px;height:34px;display:grid;place-items:center;flex:0 0 auto;border-radius:50%;background:#eaf7ef;color:#18794e}
+.crm-whatsapp-identity h3{margin:1px 0 0;font-size:12px;line-height:1.25}
+.crm-whatsapp-identity small{display:block;margin-top:2px;color:var(--text-muted);font-size:8.5px}
+.crm-whatsapp-header-actions{display:flex;align-items:center;gap:8px}
+.crm-whatsapp-count{padding:4px 7px;border-radius:999px;background:var(--surface-soft);color:var(--text-muted);font-size:8.5px;font-weight:700}
+.crm-whatsapp-thread{display:grid;gap:7px;max-height:360px;min-height:150px;overflow:auto;padding:14px 16px;background:linear-gradient(135deg,color-mix(in srgb,#efeae2 82%,var(--surface)) 0%,color-mix(in srgb,#f7f4ef 86%,var(--surface)) 100%)}
+.crm-whatsapp-message{display:flex;width:100%}
+.crm-whatsapp-message.inbound{justify-content:flex-start}
+.crm-whatsapp-message.outbound{justify-content:flex-end}
+.crm-whatsapp-bubble{position:relative;display:grid;gap:4px;max-width:min(72%,600px);padding:8px 10px 7px;border:1px solid color-mix(in srgb,var(--border) 78%,transparent);border-radius:10px;background:var(--surface);box-shadow:0 1px 2px rgba(0,0,0,.04)}
+.crm-whatsapp-message.inbound .crm-whatsapp-bubble{border-top-left-radius:4px}
+.crm-whatsapp-message.outbound .crm-whatsapp-bubble{border-top-right-radius:4px;background:#e7f6df;border-color:#cfe8c5}
+.crm-whatsapp-author{font-size:8.5px;font-weight:800;color:var(--text-muted)}
+.crm-whatsapp-message.outbound .crm-whatsapp-author{color:#39714c}
+.crm-whatsapp-bubble p{margin:0;color:var(--text);font-size:11.5px;line-height:1.48;white-space:pre-wrap;word-break:break-word}
+.crm-whatsapp-meta{display:flex;align-items:center;justify-content:flex-end;gap:6px;margin-top:1px}
+.crm-whatsapp-meta time{color:var(--text-muted);font-size:7.8px}
+.crm-whatsapp-status{font-size:7.8px;font-weight:700;color:var(--text-muted)}
+.crm-whatsapp-status.accepted{color:#756821}
+.crm-whatsapp-status.delivered,.crm-whatsapp-status.read{color:#2878a5}
+.crm-whatsapp-status.failed{color:var(--danger)}
+.crm-whatsapp-error{margin-top:3px;padding-top:5px;border-top:1px solid color-mix(in srgb,var(--danger) 22%,transparent);color:var(--danger);font-size:8px;line-height:1.35}
+.crm-whatsapp-empty{min-height:120px;display:grid;place-items:center;align-content:center;gap:4px;color:var(--text-muted);text-align:center}
+.crm-whatsapp-empty strong{font-size:10px;color:var(--text)}
+.crm-whatsapp-empty span{font-size:8.5px}
+.crm-whatsapp-reply{padding:10px 12px 12px;border-top:1px solid var(--border);background:var(--surface)}
+.crm-whatsapp-composer{overflow:hidden;border:1px solid var(--border);border-radius:10px;background:var(--surface);transition:border-color .15s ease,box-shadow .15s ease}
+.crm-whatsapp-composer:focus-within{border-color:color-mix(in srgb,var(--brand-primary) 55%,var(--border));box-shadow:0 0 0 2px var(--brand-primary-soft)}
+.crm-whatsapp-composer textarea{width:100%;min-height:58px;padding:9px 10px 4px;border:0;outline:0;resize:vertical;background:transparent;color:var(--text);font:inherit;font-size:10.5px;line-height:1.45}
+.crm-whatsapp-composer-footer{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:4px 6px 6px 10px}
+.crm-whatsapp-composer-footer small{color:var(--text-muted);font-size:7.5px}
+.crm-whatsapp-composer-footer .button{min-height:30px;padding:0 11px}
+@media(max-width:760px){.crm-whatsapp-header{align-items:flex-start}.crm-whatsapp-header-actions{flex-direction:column;align-items:flex-end}.crm-whatsapp-bubble{max-width:88%}.crm-whatsapp-thread{padding:12px 9px}}

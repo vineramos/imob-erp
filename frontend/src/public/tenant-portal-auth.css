@@ -1,0 +1,16 @@
+.tenant-auth-card{overflow:hidden}
+.tenant-auth-actions{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:-2px}
+.tenant-auth-link,.tenant-auth-back{border:0;background:transparent;color:var(--tp-muted);font:inherit;font-size:11px;font-weight:700;cursor:pointer;padding:4px 0}
+.tenant-auth-link:hover,.tenant-auth-back:hover{color:var(--tp-text);text-decoration:underline}
+.tenant-auth-link.strong{color:var(--tp-text);font-weight:800}
+.tenant-auth-link:disabled,.tenant-auth-back:disabled{opacity:.5;cursor:not-allowed}
+.tenant-auth-back{display:inline-flex;align-items:center;justify-content:center;gap:6px;align-self:center}
+.tenant-auth-input-icon{position:relative}
+.tenant-auth-input-icon>svg{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:#7b858d;pointer-events:none}
+.tenant-login-card .tenant-auth-input-icon>input{padding-left:38px}
+.tenant-code-input{font-size:18px!important;font-weight:800!important;letter-spacing:.22em;text-align:center}
+.tenant-auth-card .tenant-alert{line-height:1.45}
+.tenant-auth-card .tenant-alert.neutral{background:var(--tp-soft);color:var(--tp-muted);border:1px solid var(--tp-border)}
+.tenant-auth-guidance{align-items:flex-start;margin-top:16px;margin-bottom:0}
+.tenant-auth-guidance strong{color:var(--tp-text)}
+@media(max-width:480px){.tenant-auth-actions{align-items:flex-start;flex-direction:column;gap:6px}.tenant-auth-link{width:100%;text-align:left}}

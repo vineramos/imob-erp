@@ -1,0 +1,26 @@
+.maintenance-metrics .metric-card.maintenance-metric-filter{
+  cursor:pointer;
+  user-select:none;
+  transition:border-color .16s ease,background .16s ease,box-shadow .16s ease,transform .16s ease;
+}
+.maintenance-metrics .metric-card.maintenance-metric-filter:hover{
+  transform:translateY(-1px);
+  border-color:color-mix(in srgb,var(--primary) 38%,var(--border));
+  box-shadow:0 6px 18px rgba(23,45,78,.07);
+}
+.maintenance-metrics .metric-card.maintenance-metric-filter:focus-visible{
+  outline:2px solid color-mix(in srgb,var(--primary) 55%,transparent);
+  outline-offset:2px;
+}
+.maintenance-metrics .metric-card.maintenance-metric-filter-active{
+  border-color:color-mix(in srgb,var(--primary) 62%,var(--border));
+  background:color-mix(in srgb,var(--primary-soft) 58%,var(--surface));
+  box-shadow:0 0 0 1px color-mix(in srgb,var(--primary) 12%,transparent),0 7px 20px rgba(23,45,78,.08);
+}
+.maintenance-metrics .metric-card.maintenance-metric-filter-active::before{
+  width:4px;
+  background:var(--primary-strong,var(--primary));
+}
+.maintenance-card--metric-hidden{
+  display:none!important;
+}

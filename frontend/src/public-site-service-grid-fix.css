@@ -1,0 +1,94 @@
+/* Correção defensiva da seção “Soluções para cada momento”.
+ * Mantém o texto legível e evita que estilos genéricos do ERP imponham
+ * largura/altura excessivas aos cards do site público.
+ */
+.public-site-premium .public-service-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  grid-auto-rows: auto !important;
+  align-items: stretch !important;
+  min-height: 0 !important;
+  height: auto !important;
+}
+
+.public-site-premium .public-service-grid article {
+  display: flex !important;
+  align-items: flex-start !important;
+  align-content: flex-start !important;
+  justify-content: flex-start !important;
+  gap: 11px !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  width: auto !important;
+  height: auto !important;
+  padding: 18px 18px !important;
+}
+
+.public-site-premium .public-service-grid article > span {
+  flex: 0 0 34px !important;
+  width: 34px !important;
+  min-width: 34px !important;
+  max-width: 34px !important;
+  height: 34px !important;
+  min-height: 34px !important;
+  max-height: 34px !important;
+}
+
+.public-site-premium .public-service-grid article > div {
+  display: block !important;
+  flex: 1 1 auto !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  width: auto !important;
+  height: auto !important;
+  max-width: none !important;
+  writing-mode: horizontal-tb !important;
+}
+
+.public-site-premium .public-service-grid article > div > strong,
+.public-site-premium .public-service-grid article > div > p {
+  display: block !important;
+  width: 100% !important;
+  max-width: none !important;
+  white-space: normal !important;
+  word-break: normal !important;
+  overflow-wrap: normal !important;
+  writing-mode: horizontal-tb !important;
+}
+
+.public-site-premium .public-service-grid article > div > strong {
+  line-height: 1.25 !important;
+}
+
+.public-site-premium .public-service-grid article > div > p {
+  margin-top: 4px !important;
+  line-height: 1.45 !important;
+}
+
+@media (max-width: 1050px) {
+  .public-site-premium .public-service-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  .public-site-premium .public-service-grid article:nth-child(2) {
+    border-right: 0 !important;
+  }
+
+  .public-site-premium .public-service-grid article:nth-child(-n + 2) {
+    border-bottom: 1px solid var(--site-line) !important;
+  }
+}
+
+@media (max-width: 620px) {
+  .public-site-premium .public-service-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .public-site-premium .public-service-grid article {
+    border-right: 0 !important;
+    border-bottom: 1px solid var(--site-line) !important;
+  }
+
+  .public-site-premium .public-service-grid article:last-child {
+    border-bottom: 0 !important;
+  }
+}
