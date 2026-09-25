@@ -7,6 +7,7 @@ type Validation = {
   valid:boolean
   xml_valid:boolean
   xml_error:string|null
+  document_issues?:string[]
   selected_count:number
   invalid_count:number
   invalid_properties:Array<{code:string;issues:string[]}>
@@ -98,6 +99,7 @@ export function PortalIntegrationsSettingsPanel({canEdit}:{canEdit:boolean}){
               <button className="button secondary compact-button" disabled={!canEdit||Boolean(validating)} type="button" onClick={()=>void validate(channel)}><RefreshCw size={13}/>{validating===channel.key?'Validando...':'Validar XML'}</button>
             </div>
             {validation&&validation.invalid_properties.length>0&&<div className="portal-settings-invalids">{validation.invalid_properties.slice(0,4).map(item=><div key={item.code}><strong>{item.code}</strong><span>{item.issues.join(' ')}</span></div>)}</div>}
+            {validation?.document_issues&&validation.document_issues.length>0&&<div className="portal-settings-invalids">{validation.document_issues.slice(0,6).map((issue,index)=><div key={issue+index}><strong>XML OLX</strong><span>{issue}</span></div>)}</div>}
             <div className="portal-settings-form">
               <label className="field"><span>Status da homologação</span><select disabled={!canEdit} value={channel.status} onChange={e=>patch(channel.key,{status:e.target.value as Channel['status']})}>{Object.entries(statusLabel).map(([value,label])=><option value={value} key={value}>{label}</option>)}</select></label>
               <label className="field"><span>Observações / protocolo</span><input disabled={!canEdit} maxLength={1000} placeholder="Ex.: chamado aberto, protocolo, retorno do portal..." value={channel.notes} onChange={e=>patch(channel.key,{notes:e.target.value})}/></label>
