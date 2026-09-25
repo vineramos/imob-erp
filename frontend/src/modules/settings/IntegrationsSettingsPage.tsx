@@ -4,6 +4,7 @@ import { ApiError, apiRequest } from '../../api/client'
 import type { BankIntegrationStatus, IntegrationReadiness, IntegrationsConfig, SignatureIntegrationStatus, SmtpConfiguration } from '../../api/types'
 import { authConfigured } from '../../auth/client'
 import { PortalIntegrationsSettingsPanel } from './PortalIntegrationsSettingsPanel'
+import { WhatsAppIntegrationSettingsPanel } from './WhatsAppIntegrationSettingsPanel'
 
 const defaults: IntegrationsConfig = {
   bank_provider: 'inter',
@@ -232,6 +233,8 @@ export function IntegrationsSettingsPage({ canEdit }: Props) {
               <small className="smtp-security-note">A senha é criptografada antes de ser armazenada e nunca é exibida novamente.</small>
             </div>}
           </article>
+
+          <WhatsAppIntegrationSettingsPanel canEdit={canEdit} />
 
           <PortalIntegrationsSettingsPanel canEdit={canEdit} />
 
