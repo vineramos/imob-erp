@@ -16,12 +16,16 @@ type WhatsAppConfig = {
   checked_at:string|null
   reachable:boolean|null
   message:string
+  last_webhook_at:string|null
+  last_webhook_status:string
+  last_webhook_message_count:number
+  last_webhook_error:string
 }
 
 const emptyConfig:WhatsAppConfig={
   provider:'whatsapp_meta',graph_version:'v26.0',business_account_id:'',phone_number_id:'',display_phone_number:'',
   token_configured:false,verify_token_configured:false,app_secret_configured:false,configured:false,webhook_url:'',
-  checked_at:null,reachable:null,message:''
+  checked_at:null,reachable:null,message:'',last_webhook_at:null,last_webhook_status:'never',last_webhook_message_count:0,last_webhook_error:''
 }
 
 export function WhatsAppIntegrationSettingsPanel({canEdit}:{canEdit:boolean}){
@@ -99,6 +103,17 @@ export function WhatsAppIntegrationSettingsPanel({canEdit}:{canEdit:boolean}){
           <div><strong>Callback URL do webhook</strong><span>{config.webhook_url||'Salve a configuração para gerar a URL pública.'}</span></div>
         </div>
         <button className="button secondary compact-button" type="button" disabled={!config.webhook_url} onClick={()=>void copyWebhook()}><Copy size={13}/>{copied?'Copiado':'Copiar URL'}</button>
+      </div>
+
+      <div className="integration-health">
+        <div className="integration-health-copy">
+          {config.last_webhook_status==='processed'?<CheckCircle2 size={16}/>:<CircleAlert size={16}/>}
+          <div>
+            <strong>Diagnóstico do webhook</strong>
+            <span>{config.last_webhook_at?('Último evento em '+new Date(config.last_webhook_at).toLocaleString('pt-BR')+' · '+config.last_webhook_message_count+' mensagem(ns) · '+config.last_webhook_status):'Nenhum POST da Meta chegou ao Imob ainda.'}</span>
+            {config.last_webhook_error&&<small>{config.last_webhook_error}</small>}
+          </div>
+        </div>
       </div>
 
       <div className="smtp-test-row">
