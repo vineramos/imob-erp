@@ -28,6 +28,13 @@ OLX_TYPE = {
     "land": "Terreno Padrão",
     "commercial": "Conjunto Comercial",
 }
+OLX_SUBTYPE_ALLOWED = {
+    "apartment": {"Apartamento", "Apartamento de Condomínio", "Apartamento Duplex Residencial", "Apartamento Padrão", "Apartamento Residencial", "Apartamento Triplex Residencial", "Conjunto Residencial", "Padrão", "Cobertura", "Cobertura Duplex", "Cobertura Residencial", "Cobertura Triplex", "Penthouse Residencial", "Flat", "Flat Padrão", "Flat Residencial", "Loft", "Loft Residencial", "Kitchenette / Conjugados", "Kitchenette / Studio", "Kitnet", "Kitnet / Conjugado", "Kitnet Residencial", "Studio"},
+    "studio": {"Studio", "Kitchenette / Studio", "Kitnet", "Kitnet / Conjugado", "Kitnet Residencial"},
+    "house": {"Casa", "Casa de Rua", "Casa Padrão", "Casa Padrão Térrea", "Casa Residencial", "Sobrado", "Sobrado Residencial", "Village Residencial", "Casa de Condomínio", "Casa em Condomínio", "Casa de Vila"},
+    "land": {"Loteamento Condomínio", "Loteamento Padrão", "Sítio", "Sítio Chácara", "Sítio Rural", "Terreno", "Terreno Padrão", "Chácara", "Chácara Rural", "Fazenda", "Fazenda Rural", "Haras", "Haras Rural"},
+    "commercial": {"Andar", "Casa Comercial", "Conjunto Comercial", "Conjunto Comercial / Sala", "Laje Comercial", "Salão Comercial", "Sobrado Comercial", "Área Comercial", "Galpão / Depósito / Armazém", "Galpão / Depósito / Barracão", "Galpão Comercial", "Indústria", "Box Garagem", "Hotel", "Hotel Residencial", "Motel", "Pousada / Chalé", "Barracão Comercial", "Centro Comercial", "Comercial", "Loja", "Loja Comercial", "Loja de Shopping", "Loja de Shopping / Centro Comercial", "Loja Salão", "Ponto Comercial", "Prédio", "Prédio Comercial", "Prédio Inteiro", "Sala", "Sala Comercial"},
+}
 VRSYNC_TYPE = {
     "apartment": "Residential / Apartment",
     "studio": "Residential / Studio",
@@ -113,8 +120,26 @@ def _issues(item: Property, photo_count: int, portal: str) -> list[str]:
         issues.append("Informe o valor comercial do imóvel.")
     if portal == "vrsync" and photo_count < 5:
         issues.append("ZAP/Viva Real exigem ao menos 5 fotos.")
-    if portal == "olx" and photo_count < 1:
-        issues.append("Adicione ao menos uma foto.")
+    if portal == "olx":
+        subtype = OLX_TYPE.get(item.property_type)
+        if subtype and subtype not in OLX_SUBTYPE_ALLOWED.get(item.property_type, set()):
+            issues.append("Subtipo do imóvel não está na taxonomia XML oficial da OLX.")
+        code = f"IMO{item.internal_number:06d}"
+        if len(code) > 20:
+            issues.append("Código do imóvel excede o limite de 20 caracteres da OLX.")
+        title = (item.public_title or "").strip()
+        if len(title) > 90:
+            issues.append("Título público excede o limite de 90 caracteres da OLX.")
+        description = (item.public_description or "").strip()
+        if len(description) > 6000:
+            issues.append("Descrição pública excede o limite de 6.000 caracteres da OLX.")
+        cep = "".join(ch for ch in str(address.get("postal_code") or "") if ch.isdigit())
+        if cep and len(cep) != 8:
+            issues.append("CEP precisa conter 8 dígitos para a integração OLX.")
+        if item.property_type in {"apartment", "studio", "house"} and item.bedrooms is None:
+            issues.append("Quantidade de dormitórios é obrigatória para apartamentos e casas na OLX.")
+        if photo_count < 1:
+            issues.append("Adicione ao menos uma foto antes da homologação.")
     return issues
 
 
@@ -123,9 +148,18 @@ def _selection(item: Property) -> dict[str, bool]:
     return {portal: bool((raw.get(portal) or {}).get("enabled")) for portal in PORTALS}
 
 
-def _feed_url(request: Request, organization_id: UUID, portal: str) -> str:
+def _public_base_url(request: Request) -> str:
     base = str(request.base_url).rstrip("/")
-    return f"{base}/api/public/feeds/{organization_id}/{portal}.xml"
+    forwarded_proto = request.headers.get("x-forwarded-proto", "").split(",", 1)[0].strip().lower()
+    if forwarded_proto in {"http", "https"} and "://" in base:
+        base = forwarded_proto + "://" + base.split("://", 1)[1]
+    elif request.url.hostname and request.url.hostname.endswith(".run.app") and base.startswith("http://"):
+        base = "https://" + base.removeprefix("http://")
+    return base
+
+
+def _feed_url(request: Request, organization_id: UUID, portal: str) -> str:
+    return f"{_public_base_url(request)}/api/public/feeds/{organization_id}/{portal}.xml"
 
 
 @router.get("/integrations/portals")
@@ -200,6 +234,17 @@ def validate_portal_integration(
         "selected_count": len(selected),
         "invalid_count": len(invalid),
         "invalid_properties": invalid[:20],
+        "compliance_profile": "OLX Imóveis XML" if portal == "olx" else "VRSync",
+        "requirements_checked": [
+            "XML bem-formado",
+            "URL pública HTTPS",
+            "Código do imóvel",
+            "Subtipo aceito",
+            "CEP",
+            "Descrição",
+            "Preço",
+            "Campos obrigatórios da subcategoria",
+        ] if portal == "olx" else ["XML bem-formado", "URL pública HTTPS", "campos mínimos VRSync"],
         "checked_at": datetime.now(timezone.utc).isoformat(),
     }
     settings = _settings(db, context.user.organization_id)
@@ -276,7 +321,7 @@ def _selected_properties(db: Session, organization_id: UUID, portal: str) -> lis
 
 
 def _photo_urls(request: Request, organization_id: UUID, item: Property, photos: list[PropertyPhoto]) -> list[tuple[PropertyPhoto, str]]:
-    base = str(request.base_url).rstrip("/")
+    base = _public_base_url(request)
     return [(photo, f"{base}/api/public/feeds/{organization_id}/properties/{item.id}/photos/{photo.id}") for photo in photos]
 
 
