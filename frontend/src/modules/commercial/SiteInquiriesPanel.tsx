@@ -206,7 +206,6 @@ export function SiteInquiriesPanel({ permissions }: Props) {
   const [manualHistoryNotes,setManualHistoryNotes]=useState('')
   const [whatsappMessages,setWhatsappMessages]=useState<WhatsAppConversationMessage[]>([])
   const [whatsappReply,setWhatsappReply]=useState('')
-  const [whatsappLoading,setWhatsappLoading]=useState(false)
   const [whatsappSending,setWhatsappSending]=useState(false)
   const [busy, setBusy] = useState(false)
 
