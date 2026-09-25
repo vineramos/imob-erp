@@ -110,7 +110,7 @@ def _response(db: Session, organization_id: UUID, request: Request) -> WhatsAppC
     )
 
 
-@router.get("/whatsapp/config", response_model=WhatsAppConfigurationResponse)
+@router.get("/meta-whatsapp/config", response_model=WhatsAppConfigurationResponse)
 def get_whatsapp_configuration(
     request: Request,
     context: UserContext = Depends(require_permission("settings.view")),
@@ -119,7 +119,7 @@ def get_whatsapp_configuration(
     return _response(db, context.user.organization_id, request)
 
 
-@router.put("/whatsapp/config", response_model=WhatsAppConfigurationResponse)
+@router.put("/meta-whatsapp/config", response_model=WhatsAppConfigurationResponse)
 def update_whatsapp_configuration(
     payload: WhatsAppConfigurationUpdate,
     request: Request,
@@ -190,7 +190,7 @@ def update_whatsapp_configuration(
     return _response(db, context.user.organization_id, request)
 
 
-@router.post("/whatsapp/test", response_model=WhatsAppTestResponse)
+@router.post("/meta-whatsapp/test", response_model=WhatsAppTestResponse)
 def test_whatsapp_connection(
     context: UserContext = Depends(require_permission("settings.company.manage")),
     db: Session = Depends(get_db),
