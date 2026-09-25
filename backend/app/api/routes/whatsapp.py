@@ -66,6 +66,13 @@ class WhatsAppTestResponse(BaseModel):
     checked_at: datetime
 
 
+class WhatsAppSubscriptionResponse(BaseModel):
+    subscribed: bool
+    app_name: str | None = None
+    message: str
+    checked_at: datetime
+
+
 class WhatsAppReplyRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     body: str = Field(min_length=1, max_length=4096)
@@ -369,6 +376,91 @@ def update_whatsapp_configuration(
     )
     db.commit()
     return _response(db, context.user.organization_id, request)
+
+
+@router.get("/meta-whatsapp/subscription", response_model=WhatsAppSubscriptionResponse)
+def get_whatsapp_subscription(
+    context: UserContext = Depends(require_permission("settings.view")),
+    db: Session = Depends(get_db),
+) -> WhatsAppSubscriptionResponse:
+    row = _row(db, context.user.organization_id)
+    if row is None:
+        return WhatsAppSubscriptionResponse(subscribed=False, message="WhatsApp Business não configurado.", checked_at=datetime.now(timezone.utc))
+    config = dict(row.non_secret_config or {})
+    secrets = _secrets(row, context.user.organization_id)
+    waba_id = str(config.get("business_account_id") or "").strip()
+    token = str(secrets.get("access_token") or "").strip()
+    version = str(config.get("graph_version") or DEFAULT_GRAPH_VERSION)
+    if not waba_id or not token:
+        return WhatsAppSubscriptionResponse(subscribed=False, message="WABA ID ou Access Token ausente.", checked_at=datetime.now(timezone.utc))
+    try:
+        response = httpx.get(
+            f"https://graph.facebook.com/{version}/{waba_id}/subscribed_apps",
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=12.0,
+        )
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=502, detail="Não foi possível consultar a assinatura do app na Meta.") from exc
+    if response.status_code >= 400:
+        try:
+            payload = response.json()
+            detail = payload.get("error", {}).get("message") if isinstance(payload, dict) else None
+        except ValueError:
+            detail = None
+        raise HTTPException(status_code=502, detail=detail or f"Meta retornou HTTP {response.status_code}.")
+    data = response.json()
+    apps = data.get("data") if isinstance(data, dict) else []
+    app = apps[0] if isinstance(apps, list) and apps else None
+    return WhatsAppSubscriptionResponse(
+        subscribed=bool(app),
+        app_name=str(app.get("name") or "") or None if isinstance(app, dict) else None,
+        message="App já está inscrito para receber eventos desta WABA." if app else "App ainda não está inscrito nesta WABA.",
+        checked_at=datetime.now(timezone.utc),
+    )
+
+
+@router.post("/meta-whatsapp/subscription", response_model=WhatsAppSubscriptionResponse)
+def subscribe_whatsapp_app(
+    context: UserContext = Depends(require_permission("settings.company.manage")),
+    db: Session = Depends(get_db),
+) -> WhatsAppSubscriptionResponse:
+    row = _row(db, context.user.organization_id)
+    if row is None:
+        raise HTTPException(status_code=422, detail="Configure o WhatsApp Business primeiro.")
+    config = dict(row.non_secret_config or {})
+    secrets = _secrets(row, context.user.organization_id)
+    waba_id = str(config.get("business_account_id") or "").strip()
+    token = str(secrets.get("access_token") or "").strip()
+    version = str(config.get("graph_version") or DEFAULT_GRAPH_VERSION)
+    if not waba_id or not token:
+        raise HTTPException(status_code=422, detail="WABA ID ou Access Token ainda não configurado.")
+    try:
+        response = httpx.post(
+            f"https://graph.facebook.com/{version}/{waba_id}/subscribed_apps",
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=12.0,
+        )
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=502, detail="Não foi possível inscrever o app na WABA.") from exc
+    if response.status_code >= 400:
+        try:
+            payload = response.json()
+            detail = payload.get("error", {}).get("message") if isinstance(payload, dict) else None
+        except ValueError:
+            detail = None
+        raise HTTPException(status_code=502, detail=detail or f"Meta retornou HTTP {response.status_code}.")
+    payload = response.json()
+    success = bool(payload.get("success")) if isinstance(payload, dict) else False
+    if not success:
+        raise HTTPException(status_code=502, detail="A Meta não confirmou a inscrição do app na WABA.")
+    config["subscribed_at"] = datetime.now(timezone.utc).isoformat()
+    row.non_secret_config = config
+    db.commit()
+    return WhatsAppSubscriptionResponse(
+        subscribed=True,
+        message="App inscrito na WABA. Os eventos de messages podem ser entregues ao webhook.",
+        checked_at=datetime.now(timezone.utc),
+    )
 
 
 @router.post("/meta-whatsapp/test", response_model=WhatsAppTestResponse)
