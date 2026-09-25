@@ -9,13 +9,16 @@ from uuid import UUID
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.domains.foundation.access import UserContext, require_permission
 from app.domains.foundation.audit import write_audit
+from app.domains.communications.models import CommunicationMessage
 from app.domains.foundation.models import OrganizationIntegrationCredential
+from app.domains.portfolio.models import Person
+from app.domains.portfolio.site_models import CommercialActivity, PublicSiteInquiry
 from app.integrations.credential_crypto import CredentialCryptoError, decrypt_secret, encrypt_secret
 
 router = APIRouter(tags=["whatsapp"])
@@ -59,6 +62,11 @@ class WhatsAppTestResponse(BaseModel):
     checked_at: datetime
 
 
+class WhatsAppReplyRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    body: str = Field(min_length=1, max_length=4096)
+
+
 def _row(db: Session, organization_id: UUID) -> OrganizationIntegrationCredential | None:
     return db.scalar(
         select(OrganizationIntegrationCredential).where(
@@ -77,6 +85,171 @@ def _secrets(row: OrganizationIntegrationCredential | None, organization_id: UUI
     except (CredentialCryptoError, json.JSONDecodeError) as exc:
         raise HTTPException(status_code=503, detail="Não foi possível abrir as credenciais protegidas do WhatsApp.") from exc
     return value if isinstance(value, dict) else {}
+
+
+def _digits(value: str | None) -> str:
+    return "".join(ch for ch in (value or "") if ch.isdigit())
+
+
+def _extract_inbound_messages(payload: dict) -> list[dict]:
+    result: list[dict] = []
+    if payload.get("object") != "whatsapp_business_account":
+        return result
+    for entry in payload.get("entry") or []:
+        if not isinstance(entry, dict):
+            continue
+        for change in entry.get("changes") or []:
+            if not isinstance(change, dict):
+                continue
+            value = change.get("value")
+            if not isinstance(value, dict):
+                continue
+            contacts = {
+                str(item.get("wa_id") or ""): str(((item.get("profile") or {}).get("name") or "")).strip()
+                for item in (value.get("contacts") or [])
+                if isinstance(item, dict)
+            }
+            for message in value.get("messages") or []:
+                if not isinstance(message, dict):
+                    continue
+                message_id = str(message.get("id") or "").strip()
+                sender = _digits(str(message.get("from") or ""))
+                if not message_id or not sender:
+                    continue
+                kind = str(message.get("type") or "unknown")
+                body = ""
+                if kind == "text":
+                    body = str(((message.get("text") or {}).get("body") or "")).strip()
+                elif kind == "button":
+                    body = str(((message.get("button") or {}).get("text") or "")).strip()
+                elif kind == "interactive":
+                    interactive = message.get("interactive") or {}
+                    reply = interactive.get("button_reply") or interactive.get("list_reply") or {}
+                    body = str(reply.get("title") or reply.get("id") or "").strip()
+                else:
+                    body = f"[Mensagem do WhatsApp: {kind}]"
+                result.append({
+                    "id": message_id,
+                    "from": sender,
+                    "name": contacts.get(sender) or f"WhatsApp {sender[-4:]}",
+                    "body": body or "[Mensagem sem texto]",
+                    "type": kind,
+                    "timestamp": str(message.get("timestamp") or ""),
+                })
+    return result
+
+
+def _find_person_by_phone(db: Session, organization_id: UUID, phone: str) -> Person | None:
+    return db.scalar(
+        select(Person).where(
+            Person.organization_id == organization_id,
+            Person.is_active.is_(True),
+            func.regexp_replace(func.coalesce(Person.phone, ""), r"\D", "", "g") == phone,
+        ).limit(1)
+    )
+
+
+def _find_inquiry_by_phone(db: Session, organization_id: UUID, phone: str) -> PublicSiteInquiry | None:
+    active = db.scalar(
+        select(PublicSiteInquiry).where(
+            PublicSiteInquiry.organization_id == organization_id,
+            func.regexp_replace(func.coalesce(PublicSiteInquiry.phone, ""), r"\D", "", "g") == phone,
+            PublicSiteInquiry.status.not_in(("won", "lost")),
+        ).order_by(PublicSiteInquiry.updated_at.desc()).limit(1)
+    )
+    if active is not None:
+        return active
+    return db.scalar(
+        select(PublicSiteInquiry).where(
+            PublicSiteInquiry.organization_id == organization_id,
+            func.regexp_replace(func.coalesce(PublicSiteInquiry.phone, ""), r"\D", "", "g") == phone,
+        ).order_by(PublicSiteInquiry.updated_at.desc()).limit(1)
+    )
+
+
+def _ensure_whatsapp_lead(db: Session, organization_id: UUID, *, phone: str, name: str, body: str) -> tuple[Person, PublicSiteInquiry]:
+    person = _find_person_by_phone(db, organization_id, phone)
+    if person is None:
+        person = Person(
+            organization_id=organization_id,
+            person_type="individual",
+            name=name[:180],
+            phone=phone,
+            address={},
+            notes="Cadastro criado automaticamente a partir de uma conversa recebida pelo WhatsApp Business.",
+        )
+        db.add(person)
+        db.flush()
+    elif person.name.startswith("WhatsApp ") and name and not name.startswith("WhatsApp "):
+        person.name = name[:180]
+
+    inquiry = _find_inquiry_by_phone(db, organization_id, phone)
+    if inquiry is None or inquiry.status in {"won", "lost"}:
+        inquiry = PublicSiteInquiry(
+            organization_id=organization_id,
+            property_id=None,
+            person_id=person.id,
+            property_code="WHATSAPP",
+            property_title="Atendimento iniciado pelo WhatsApp",
+            name=person.name,
+            email=person.email,
+            phone=phone,
+            preferred_contact="whatsapp",
+            message=body[:2000],
+            consent_at=datetime.now(timezone.utc),
+            status="new",
+            source="whatsapp",
+        )
+        db.add(inquiry)
+        db.flush()
+    else:
+        inquiry.person_id = inquiry.person_id or person.id
+        inquiry.phone = inquiry.phone or phone
+        inquiry.name = inquiry.name or person.name
+    return person, inquiry
+
+
+def _meta_send_text(db: Session, organization_id: UUID, recipient: str, body: str) -> tuple[str, str | None]:
+    row = _row(db, organization_id)
+    if row is None:
+        raise HTTPException(status_code=422, detail="WhatsApp Business não configurado.")
+    config = dict(row.non_secret_config or {})
+    secrets = _secrets(row, organization_id)
+    phone_number_id = str(config.get("phone_number_id") or "").strip()
+    token = str(secrets.get("access_token") or "").strip()
+    version = str(config.get("graph_version") or DEFAULT_GRAPH_VERSION)
+    if not phone_number_id or not token:
+        raise HTTPException(status_code=422, detail="Phone Number ID ou Access Token ainda não configurado.")
+    try:
+        response = httpx.post(
+            f"https://graph.facebook.com/{version}/{phone_number_id}/messages",
+            headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+            json={
+                "messaging_product": "whatsapp",
+                "recipient_type": "individual",
+                "to": _digits(recipient),
+                "type": "text",
+                "text": {"preview_url": False, "body": body.strip()},
+            },
+            timeout=15.0,
+        )
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=502, detail="Não foi possível alcançar a API do WhatsApp.") from exc
+    if response.status_code >= 400:
+        try:
+            payload = response.json()
+            detail = payload.get("error", {}).get("message") if isinstance(payload, dict) else None
+        except ValueError:
+            detail = None
+        raise HTTPException(status_code=502, detail=detail or f"Meta retornou HTTP {response.status_code}.")
+    payload = response.json()
+    messages = payload.get("messages") if isinstance(payload, dict) else None
+    contacts = payload.get("contacts") if isinstance(payload, dict) else None
+    message_id = str(messages[0].get("id") or "") if isinstance(messages, list) and messages else ""
+    wa_id = str(contacts[0].get("wa_id") or "") if isinstance(contacts, list) and contacts else None
+    if not message_id:
+        raise HTTPException(status_code=502, detail="A Meta aceitou a mensagem, mas não retornou o ID.")
+    return message_id, wa_id
 
 
 def _public_base_url(request: Request) -> str:
@@ -269,6 +442,154 @@ async def receive_whatsapp_webhook(
         if not supplied or not hmac.compare_digest(supplied, expected):
             raise HTTPException(status_code=401, detail="Assinatura do webhook inválida.")
 
-    # Base segura para a próxima etapa: persistência/vínculo com lead será adicionada
-    # depois que a conta Meta estiver conectada e os payloads reais forem homologados.
-    return {"received": True}
+    try:
+        payload = json.loads(body.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise HTTPException(status_code=400, detail="Payload inválido do WhatsApp.") from exc
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="Payload inválido do WhatsApp.")
+
+    created = 0
+    for incoming in _extract_inbound_messages(payload):
+        dedupe_key = f"whatsapp-in:{incoming['id']}"
+        duplicate = db.scalar(
+            select(CommunicationMessage.id).where(
+                CommunicationMessage.organization_id == organization_id,
+                CommunicationMessage.dedupe_key == dedupe_key,
+            ).limit(1)
+        )
+        if duplicate is not None:
+            continue
+        person, inquiry = _ensure_whatsapp_lead(
+            db,
+            organization_id,
+            phone=incoming["from"],
+            name=incoming["name"],
+            body=incoming["body"],
+        )
+        message = CommunicationMessage(
+            organization_id=organization_id,
+            person_id=person.id,
+            recipient_name=person.name,
+            recipient_phone=incoming["from"],
+            recipient_role="other",
+            channel="whatsapp",
+            category="commercial",
+            origin="provider",
+            subject="WhatsApp recebido",
+            body=incoming["body"],
+            status="received",
+            source_module="crm",
+            source_type="public_site_inquiry",
+            source_id=str(inquiry.id),
+            dedupe_key=dedupe_key,
+            provider_name="meta_whatsapp_cloud",
+            provider_message_id=incoming["id"],
+            sent_at=datetime.now(timezone.utc),
+        )
+        db.add(message)
+        db.add(CommercialActivity(
+            organization_id=organization_id,
+            inquiry_id=inquiry.id,
+            activity_type="contact",
+            title="WhatsApp recebido",
+            notes=incoming["body"][:4000],
+        ))
+        created += 1
+    db.commit()
+    return {"received": True, "messages_created": created}
+
+
+@router.get("/crm/site-inquiries/{inquiry_id}/whatsapp/messages")
+def list_inquiry_whatsapp_messages(
+    inquiry_id: UUID,
+    context: UserContext = Depends(require_permission("crm.view")),
+    db: Session = Depends(get_db),
+) -> list[dict]:
+    inquiry = db.scalar(select(PublicSiteInquiry).where(
+        PublicSiteInquiry.id == inquiry_id,
+        PublicSiteInquiry.organization_id == context.user.organization_id,
+    ))
+    if inquiry is None:
+        raise HTTPException(status_code=404, detail="Atendimento comercial não encontrado.")
+    rows = db.scalars(
+        select(CommunicationMessage).where(
+            CommunicationMessage.organization_id == context.user.organization_id,
+            CommunicationMessage.channel == "whatsapp",
+            CommunicationMessage.source_type == "public_site_inquiry",
+            CommunicationMessage.source_id == str(inquiry.id),
+        ).order_by(CommunicationMessage.created_at.asc()).limit(200)
+    ).all()
+    return [{
+        "id": str(item.id),
+        "direction": "inbound" if item.origin == "provider" else "outbound",
+        "body": item.body,
+        "status": item.status,
+        "provider_message_id": item.provider_message_id,
+        "created_at": item.created_at,
+        "sent_at": item.sent_at,
+    } for item in rows]
+
+
+@router.post("/crm/site-inquiries/{inquiry_id}/whatsapp/messages", status_code=201)
+def reply_inquiry_whatsapp(
+    inquiry_id: UUID,
+    payload: WhatsAppReplyRequest,
+    context: UserContext = Depends(require_permission("crm.manage")),
+    db: Session = Depends(get_db),
+) -> dict:
+    inquiry = db.scalar(select(PublicSiteInquiry).where(
+        PublicSiteInquiry.id == inquiry_id,
+        PublicSiteInquiry.organization_id == context.user.organization_id,
+    ))
+    if inquiry is None:
+        raise HTTPException(status_code=404, detail="Atendimento comercial não encontrado.")
+    phone = _digits(inquiry.phone)
+    if not phone:
+        raise HTTPException(status_code=422, detail="O lead não possui telefone para WhatsApp.")
+    message_id, wa_id = _meta_send_text(db, context.user.organization_id, phone, payload.body)
+    now = datetime.now(timezone.utc)
+    item = CommunicationMessage(
+        organization_id=context.user.organization_id,
+        person_id=inquiry.person_id,
+        recipient_name=inquiry.name,
+        recipient_phone=phone,
+        recipient_role="other",
+        channel="whatsapp",
+        category="commercial",
+        origin="manual",
+        subject="WhatsApp enviado",
+        body=payload.body.strip(),
+        status="sent",
+        source_module="crm",
+        source_type="public_site_inquiry",
+        source_id=str(inquiry.id),
+        provider_name="meta_whatsapp_cloud",
+        provider_message_id=message_id,
+        attempt_count=1,
+        sent_at=now,
+        created_by_user_id=context.user.id,
+        sent_by_user_id=context.user.id,
+    )
+    db.add(item)
+    db.add(CommercialActivity(
+        organization_id=context.user.organization_id,
+        inquiry_id=inquiry.id,
+        activity_type="contact",
+        title="WhatsApp enviado",
+        notes=payload.body.strip()[:4000],
+        created_by_user_id=context.user.id,
+    ))
+    if inquiry.status == "new":
+        inquiry.status = "contacted"
+    db.commit()
+    return {
+        "id": str(item.id),
+        "direction": "outbound",
+        "body": item.body,
+        "status": item.status,
+        "provider_message_id": message_id,
+        "wa_id": wa_id,
+        "created_at": item.created_at,
+        "sent_at": item.sent_at,
+    }
