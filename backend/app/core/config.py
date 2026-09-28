@@ -63,6 +63,7 @@ class Settings(BaseSettings):
     itau_client_secret: str = ""
     itau_cert_path: str = ""
     itau_key_path: str = ""
+    itau_token_url: str = "https://sts.itau.com.br/api/oauth/token"
     itau_sandbox_probe_url: str = "https://api.gateway.itau.com.br/sandbox/ca-validation"
 
     # Sicredi. Saldo/Extrato usam OAuth2 client_credentials + mTLS inclusive
