@@ -28,6 +28,13 @@ type PortalAuditConfig = { channels:PortalAuditChannel[] }
 type PortalValidation = { valid:boolean; selected_count:number; invalid_count:number; xml_valid:boolean }
 type PortalValidationResult = PortalAuditChannel & { validation:PortalValidation }
 
+const bankProviderLabel = (key: IntegrationsConfig['bank_provider']) => ({
+  inter: 'Banco Inter Empresas',
+  itau: 'Itaú Empresas',
+  sicredi: 'Sicredi',
+  none: 'Banco',
+}[key])
+
 const providerStatus = (enabled: boolean) => (
   <i className={`status-badge ${enabled ? 'success' : 'neutral'}`}>{enabled ? 'Provider selecionado' : 'Desativado'}</i>
 )
@@ -116,10 +123,10 @@ export function IntegrationsSettingsPage({ canEdit }: Props) {
     try {
       const result = await apiRequest<BankIntegrationStatus>('/integrations/bank/test', { method: 'POST' })
       setBankStatus(result)
-      if (result.reachable) setSuccess('Conexão com o Banco Inter validada com sucesso.')
+      if (result.reachable) setSuccess(`${bankProviderLabel(form.bank_provider)}: ${result.message}`)
       else setError(result.message)
     } catch (cause) {
-      setError(cause instanceof ApiError ? cause.detail : 'Não foi possível testar o Banco Inter.')
+      setError(cause instanceof ApiError ? cause.detail : `Não foi possível testar ${bankProviderLabel(form.bank_provider)}.`)
     } finally {
       setTestingBank(false)
     }
@@ -156,13 +163,14 @@ export function IntegrationsSettingsPage({ canEdit }: Props) {
       add('storage','Storage de documentos',storage.reachable?'ok':'attention',storage.message)
     } catch (cause) { add('storage','Storage de documentos','attention',failure(cause,'Falha ao testar o storage.')) }
 
-    if (form.bank_provider === 'none') add('bank','Banco Inter','disabled','Provider bancário desativado.')
+    if (form.bank_provider === 'none') add('bank','Banco / cobrança','disabled','Provider bancário desativado.')
     else {
+      const bankLabel=bankProviderLabel(form.bank_provider)
       try {
         const bank = await apiRequest<BankIntegrationStatus>('/integrations/bank/test',{method:'POST'})
         setBankStatus(bank)
-        add('bank','Banco Inter',bank.reachable?'ok':'attention',bank.message)
-      } catch (cause) { add('bank','Banco Inter','attention',failure(cause,'Falha ao testar o Banco Inter.')) }
+        add('bank',bankLabel,bank.reachable?'ok':'attention',bank.message)
+      } catch (cause) { add('bank',bankLabel,'attention',failure(cause,`Falha ao testar ${bankLabel}.`)) }
     }
 
     if (form.signature_provider === 'none') add('signature','Clicksign','disabled','Assinatura eletrônica desativada.')
@@ -270,7 +278,7 @@ export function IntegrationsSettingsPage({ canEdit }: Props) {
           <div><strong>{item.label}</strong><span>{item.detail}</span></div>
           <i className={'status-badge '+(item.status==='ok'?'success':item.status==='disabled'?'neutral':'warning')}>{item.status==='ok'?'Validado':item.status==='disabled'?'Desativado':'Atenção'}</i>
         </div>)}</div>
-        <small className="smtp-security-note">A validação não envia Pix, não cria contratos e não publica anúncios. No SMTP ela autentica sem enviar e-mail; nos portais valida o XML sem alterar a homologação externa.</small>
+        <small className="smtp-security-note">A validação não envia Pix, não cria contratos e não publica anúncios. Bancos usam somente probes não transacionais; no SMTP ela autentica sem enviar e-mail; nos portais valida o XML sem alterar a homologação externa.</small>
       </article>}
 
       <form onSubmit={save} className="settings-layout integrations-layout">
@@ -278,13 +286,13 @@ export function IntegrationsSettingsPage({ canEdit }: Props) {
           <article className="panel integration-card integration-card-expanded">
             <div className="integration-icon"><Banknote size={19} /></div>
             <div className="integration-content"><strong>Banco / Cobrança</strong><span>Provider financeiro principal</span></div>
-            <select disabled={!canEdit} value={form.bank_provider} onChange={(e) => setForm((current) => ({ ...current, bank_provider: e.target.value as IntegrationsConfig['bank_provider'] }))}><option value="inter">Banco Inter Empresas</option><option value="none">Nenhum</option></select>
-            {form.bank_provider === 'inter' ? connectionBadge(bankStatus) : providerStatus(false)}
-            {form.bank_provider === 'inter' && (
+            <select disabled={!canEdit} value={form.bank_provider} onChange={(e) => { setBankStatus(null); setForm((current) => ({ ...current, bank_provider: e.target.value as IntegrationsConfig['bank_provider'] })) }}><option value="inter">Banco Inter Empresas</option><option value="itau">Itaú Empresas · Sandbox</option><option value="sicredi">Sicredi · Sandbox</option><option value="none">Nenhum</option></select>
+            {form.bank_provider !== 'none' ? connectionBadge(bankStatus) : providerStatus(false)}
+            {form.bank_provider !== 'none' && (
               <div className="integration-health">
                 <div className="integration-health-copy">
                   {bankStatus?.reachable ? <CheckCircle2 size={16}/> : <CircleAlert size={16}/>}
-                  <div><strong>{bankStatus ? `Ambiente ${bankStatus.environment}` : 'Banco Inter'}</strong><span>{bankStatus?.message ?? 'Consulte o status para saber se as credenciais e o certificado estão disponíveis.'}</span></div>
+                  <div><strong>{bankStatus ? `${bankProviderLabel(form.bank_provider)} · ${bankStatus.environment}` : bankProviderLabel(form.bank_provider)}</strong><span>{bankStatus?.message ?? (form.bank_provider==='itau'?'Sandbox pronto para teste de gateway; a autenticação da API depende da aplicação criada no portal Itaú.':form.bank_provider==='sicredi'?'Para autenticar no Sandbox, configure Client ID, Secret, certificado mTLS e o escopo liberado pela cooperativa.':'Consulte o status para saber se as credenciais e o certificado estão disponíveis.')}</span></div>
                 </div>
                 <button className="button secondary compact-button" disabled={!canEdit || testingBank} type="button" onClick={() => void testBankConnection()}><RefreshCw size={14}/>{testingBank ? 'Testando...' : 'Testar conexão'}</button>
               </div>
