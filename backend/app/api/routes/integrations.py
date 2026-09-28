@@ -213,7 +213,10 @@ def _bank_status_response(provider_key: str, *, probe: bool = False) -> BankInte
             message=message, checked_at=checked_at,
         )
     try:
-        result = provider.test_connection()
+        probe_fn = getattr(provider, "test_connection", None)
+        result = probe_fn() if callable(probe_fn) else provider.balance()
+        if not isinstance(result, dict):
+            result = {}
     except BankProviderError as exc:
         return BankIntegrationStatusResponse(
             provider=provider_key, environment=provider_status.environment, configured=True, reachable=False,
