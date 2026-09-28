@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowUp, Check, CircleAlert, Instagram, Save, Send, X } from 'lucide-react'
+import { ArrowDown, ArrowUp, Check, ChevronLeft, ChevronRight, CircleAlert, Instagram, Save, Send, X } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { ApiError, apiBlobRequest, apiRequest } from '../../api/client'
 import './property-instagram-publication.css'
@@ -61,6 +61,7 @@ export function PropertyInstagramPublicationPanel({propertyId,permissions}:Props
   const [error,setError]=useState('')
   const [success,setSuccess]=useState('')
   const [openPhoto,setOpenPhoto]=useState<Photo|null>(null)
+  const [previewIndex,setPreviewIndex]=useState(0)
 
   useEffect(()=>{
     let active=true
@@ -84,7 +85,17 @@ export function PropertyInstagramPublicationPanel({propertyId,permissions}:Props
   const byId=useMemo(()=>new Map((data?.photos??[]).map(photo=>[photo.id,photo])),[data?.photos])
   const selected=photoIds.map(id=>byId.get(id)).filter((item):item is Photo=>Boolean(item))
   const available=(data?.photos??[]).filter(photo=>!photoIds.includes(photo.id))
+  const previewPhoto=selected[previewIndex]??selected[0]??null
   const dirty=Boolean(data)&&(caption!==data!.caption||format!==data!.format||photoIds.join('|')!==data!.photo_ids.join('|'))
+
+  useEffect(()=>{
+    setPreviewIndex(current=>selected.length===0?0:Math.min(current,selected.length-1))
+  },[selected.length])
+
+  function rotatePreview(direction:-1|1){
+    if(selected.length<2)return
+    setPreviewIndex(current=>(current+direction+selected.length)%selected.length)
+  }
 
   function move(index:number,direction:-1|1){
     setPhotoIds(current=>{
@@ -160,7 +171,7 @@ export function PropertyInstagramPublicationPanel({propertyId,permissions}:Props
       <aside className="instagram-preview-column">
         <section className="instagram-phone-preview">
           <div className="instagram-preview-top"><span className="instagram-preview-avatar"><Instagram size={15}/></span><strong>Prévia da publicação</strong><span>•••</span></div>
-          <div className="instagram-preview-media">{selected[0]?<PhotoPreview photo={selected[0]} onOpen={setOpenPhoto} className="instagram-preview-open"/>:<div className="instagram-preview-empty">Selecione a foto de capa</div>}{selected.length>1&&<span className="instagram-preview-count">1/{selected.length}</span>}</div>
+          <div className="instagram-preview-media">{previewPhoto?<PhotoPreview photo={previewPhoto} onOpen={setOpenPhoto} className="instagram-preview-open"/>:<div className="instagram-preview-empty">Selecione a foto de capa</div>}{selected.length>1&&<><button className="instagram-preview-arrow previous" type="button" onClick={()=>rotatePreview(-1)} aria-label="Foto anterior"><ChevronLeft size={22}/></button><button className="instagram-preview-arrow next" type="button" onClick={()=>rotatePreview(1)} aria-label="Próxima foto"><ChevronRight size={22}/></button><span className="instagram-preview-count">{previewIndex+1}/{selected.length}</span></>}</div>
           <div className="instagram-preview-actions">♡　◯　⌁</div>
           <div className="instagram-preview-caption"><strong>imobiliária</strong> <span>{caption||'A legenda aparecerá aqui.'}</span></div>
         </section>
