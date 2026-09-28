@@ -127,7 +127,7 @@ class OperationalDefaultsConfig(BaseModel):
 class IntegrationsConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    bank_provider: Literal["none", "inter"] = "inter"
+    bank_provider: Literal["none", "inter", "itau", "sicredi"] = "inter"
     signature_provider: Literal["none", "clicksign"] = "clicksign"
     email_provider: Literal["none", "smtp"] = "smtp"
     public_site_enabled: bool = False
