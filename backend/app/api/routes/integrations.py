@@ -21,7 +21,7 @@ from app.domains.portfolio.models import Property
 from app.integrations.document_storage import DocumentStorageError, DocumentStorageStatus, get_document_storage
 from app.integrations.signature import SignatureProviderError, SignatureProviderStatus, get_signature_provider
 from app.integrations.credential_crypto import CredentialCryptoError, encrypt_secret
-from app.integrations.email import EmailDeliveryError, SmtpConfig, send_email_message, smtp_config_for_organization
+from app.integrations.email import EmailDeliveryError, SmtpConfig, send_email_message, smtp_config_for_organization, test_smtp_connection
 
 router = APIRouter(tags=["integrations"])
 
@@ -108,6 +108,13 @@ class SmtpTestResponse(BaseModel):
     reachable: bool
     message: str
     recipient: str
+    checked_at: datetime
+
+
+class SmtpConnectionTestResponse(BaseModel):
+    configured: bool
+    reachable: bool
+    message: str
     checked_at: datetime
 
 
@@ -433,6 +440,24 @@ def update_smtp_configuration(
     )
     db.commit()
     return _smtp_response(db, context.user.organization_id)
+
+
+@router.post("/integrations/email/connection-test", response_model=SmtpConnectionTestResponse)
+def test_smtp_transport(
+    context: UserContext = Depends(require_permission("settings.company.manage")),
+    db: Session = Depends(get_db),
+) -> SmtpConnectionTestResponse:
+    try:
+        config = smtp_config_for_organization(db, context.user.organization_id)
+        test_smtp_connection(config)
+    except EmailDeliveryError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    return SmtpConnectionTestResponse(
+        configured=True,
+        reachable=True,
+        message="Conexão, segurança e autenticação SMTP validadas sem envio de mensagem.",
+        checked_at=datetime.now(timezone.utc),
+    )
 
 
 @router.post("/integrations/email/test", response_model=SmtpTestResponse)
