@@ -29,7 +29,7 @@ type InstagramPublication = {
 }
 type Props={propertyId:string;permissions:string[]}
 
-function PhotoPreview({photo}:{photo:Photo}){
+function PhotoPreview({photo,onOpen,className=''}:{photo:Photo;onOpen?:(photo:Photo)=>void;className?:string}){
   const [src,setSrc]=useState('')
   useEffect(()=>{
     let active=true,objectUrl=''
@@ -40,7 +40,9 @@ function PhotoPreview({photo}:{photo:Photo}){
     }).catch(()=>{if(active)setSrc('')})
     return()=>{active=false;if(objectUrl)URL.revokeObjectURL(objectUrl)}
   },[photo.content_url])
-  return src?<img src={src} alt={photo.caption||photo.filename}/>:<div className="instagram-photo-placeholder">Foto</div>
+  if(!src)return <div className="instagram-photo-placeholder">Foto</div>
+  if(!onOpen)return <img className={className} src={src} alt={photo.caption||photo.filename}/>
+  return <button className={'instagram-photo-open '+className} type="button" onClick={()=>onOpen(photo)} title="Ampliar foto"><img src={src} alt={photo.caption||photo.filename}/></button>
 }
 
 const statusLabel:Record<InstagramPublication['status'],string>={
@@ -58,6 +60,7 @@ export function PropertyInstagramPublicationPanel({propertyId,permissions}:Props
   const [saving,setSaving]=useState(false)
   const [error,setError]=useState('')
   const [success,setSuccess]=useState('')
+  const [openPhoto,setOpenPhoto]=useState<Photo|null>(null)
 
   useEffect(()=>{
     let active=true
@@ -68,6 +71,15 @@ export function PropertyInstagramPublicationPanel({propertyId,permissions}:Props
       .finally(()=>{if(active)setLoading(false)})
     return()=>{active=false}
   },[propertyId])
+
+  useEffect(()=>{
+    if(!openPhoto)return
+    const previous=document.body.style.overflow
+    document.body.style.overflow='hidden'
+    const close=(event:KeyboardEvent)=>{if(event.key==='Escape')setOpenPhoto(null)}
+    window.addEventListener('keydown',close)
+    return()=>{document.body.style.overflow=previous;window.removeEventListener('keydown',close)}
+  },[openPhoto])
 
   const byId=useMemo(()=>new Map((data?.photos??[]).map(photo=>[photo.id,photo])),[data?.photos])
   const selected=photoIds.map(id=>byId.get(id)).filter((item):item is Photo=>Boolean(item))
@@ -108,6 +120,13 @@ export function PropertyInstagramPublicationPanel({propertyId,permissions}:Props
   const inactive=!data.property_active||data.status==='inactive'
 
   return <section className="property-instagram-panel">
+    {openPhoto&&<div className="instagram-photo-modal-backdrop" role="presentation" onMouseDown={event=>{if(event.target===event.currentTarget)setOpenPhoto(null)}}>
+      <section className="instagram-photo-modal" role="dialog" aria-modal="true" aria-label="Visualização ampliada da foto">
+        <header><div><span>FOTO DO IMÓVEL</span><strong>{openPhoto.caption||openPhoto.filename}</strong></div><button type="button" onClick={()=>setOpenPhoto(null)} aria-label="Fechar"><X size={18}/></button></header>
+        <div className="instagram-photo-modal-image"><PhotoPreview photo={openPhoto}/></div>
+        <footer><span>{openPhoto.is_cover?'Capa da galeria':`Foto ${openPhoto.position+1}`}</span><small>Pressione Esc ou clique fora para fechar</small></footer>
+      </section>
+    </div>}
     <header className="instagram-panel-header">
       <div className="instagram-panel-title"><span className="instagram-mark"><Instagram size={20}/></span><div><span>CONTEÚDO SOCIAL</span><h2>Instagram do imóvel</h2><p>Monte o carrossel e revise a legenda antes do envio para a Meta.</p></div></div>
       <div className="instagram-panel-status"><i className={'status-badge '+(inactive?'neutral':data.status==='ready'?'success':'warning')}>{statusLabel[data.status]}</i>{dirty&&<small>Alterações não salvas</small>}</div>
@@ -123,7 +142,7 @@ export function PropertyInstagramPublicationPanel({propertyId,permissions}:Props
           <div className="instagram-section-heading"><div><span>CARROSSEL</span><h3>Sequência das fotos</h3></div><b>{photoIds.length}/10</b></div>
           <p className="instagram-help">A primeira imagem será a capa do post. A ordem abaixo é independente da galeria principal do imóvel.</p>
           {selected.length?<div className="instagram-selected-list">{selected.map((photo,index)=><article className="instagram-selected-photo" key={photo.id}>
-            <div className="instagram-selected-thumb"><PhotoPreview photo={photo}/><span>{index+1}</span></div>
+            <div className="instagram-selected-thumb"><PhotoPreview photo={photo} onOpen={setOpenPhoto}/><span>{index+1}</span></div>
             <div className="instagram-selected-copy"><strong>{index===0?'Capa do carrossel':`Imagem ${index+1}`}</strong><small>{photo.caption||photo.filename}</small></div>
             <div className="instagram-photo-actions"><button type="button" disabled={!canEdit||index===0||inactive} onClick={()=>move(index,-1)} title="Mover para cima"><ArrowUp size={14}/></button><button type="button" disabled={!canEdit||index===selected.length-1||inactive} onClick={()=>move(index,1)} title="Mover para baixo"><ArrowDown size={14}/></button><button type="button" disabled={!canEdit||inactive} onClick={()=>remove(photo.id)} title="Remover do carrossel"><X size={14}/></button></div>
           </article>)}</div>:<div className="instagram-empty">Selecione fotos da galeria para montar o carrossel.</div>}
@@ -141,7 +160,7 @@ export function PropertyInstagramPublicationPanel({propertyId,permissions}:Props
       <aside className="instagram-preview-column">
         <section className="instagram-phone-preview">
           <div className="instagram-preview-top"><span className="instagram-preview-avatar"><Instagram size={15}/></span><strong>Prévia da publicação</strong><span>•••</span></div>
-          <div className="instagram-preview-media">{selected[0]?<PhotoPreview photo={selected[0]}/>:<div className="instagram-preview-empty">Selecione a foto de capa</div>}{selected.length>1&&<span className="instagram-preview-count">1/{selected.length}</span>}</div>
+          <div className="instagram-preview-media">{selected[0]?<PhotoPreview photo={selected[0]} onOpen={setOpenPhoto} className="instagram-preview-open"/>:<div className="instagram-preview-empty">Selecione a foto de capa</div>}{selected.length>1&&<span className="instagram-preview-count">1/{selected.length}</span>}</div>
           <div className="instagram-preview-actions">♡　◯　⌁</div>
           <div className="instagram-preview-caption"><strong>imobiliária</strong> <span>{caption||'A legenda aparecerá aqui.'}</span></div>
         </section>
