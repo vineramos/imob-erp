@@ -11,6 +11,7 @@ from app.domains.foundation.access import UserContext, require_permission
 from app.domains.foundation.audit import write_audit
 from app.domains.foundation.models import AppUser
 from app.domains.portfolio.economic_indices import INDEX_DEFINITIONS, sync_index
+from app.domains.portfolio.instagram_publication import inactivate_instagram_publication
 from app.domains.portfolio.models import Capture, EconomicIndexValue, Person, PersonRole, Property, PropertyOwner
 from app.domains.portfolio.schemas import (
     CaptureCreate,
@@ -398,9 +399,12 @@ def update_property(
         "owners": [{"person_id": str(owner.person_id), "ownership_percent": float(owner.ownership_percent)} for owner in item.owners],
     }
 
+    previous_status = item.status
     item.property_type = payload.property_type
     item.purpose = payload.purpose
     item.status = payload.status
+    if previous_status != payload.status and payload.status == "inactive":
+        inactivate_instagram_publication(item, reason="Imóvel marcado como inativo no cadastro.")
     item.address = payload.address.model_dump()
     item.rent_amount = payload.rent_amount
     item.condo_amount = payload.condo_amount
