@@ -296,65 +296,162 @@ class InterBankProvider(BankProvider):
 
 
 class ItauBankProvider(BankProvider):
-    """Provider Itaú preparado para Sandbox e evolução posterior para produção.
+    """Provider Itaú com dois níveis seguros de validação.
 
-    A documentação pública do Itaú informa que Sandbox não usa o mesmo fluxo
-    OAuth2+mTLS de produção. Sem credenciais específicas de uma API contratada,
-    o teste seguro limita-se à conectividade do endpoint oficial de validação.
+    Sem credenciais, o Sandbox executa um preflight de rede/TLS a partir do
+    runtime do ERP. Quando Client ID, Secret e certificado mTLS estiverem
+    disponíveis, executa o fluxo oficial STS + ca-validation sem movimentar
+    valores ou criar cobranças.
     """
 
     key = "itau"
+    _token_cache: dict[str, tuple[str, float]] = {}
+    _token_lock = Lock()
 
     def __init__(self, settings: Settings | None = None):
         self.settings = settings or get_settings()
 
     def status(self) -> ProviderStatus:
         environment = self.settings.itau_environment.strip().lower() or "sandbox"
-        sandbox = environment != "production"
-        production_configured = all((
+        full_credentials = all((
             self.settings.itau_client_id,
             self.settings.itau_client_secret,
             self.settings.itau_cert_path,
             self.settings.itau_key_path,
         ))
         return ProviderStatus(
-            configured=sandbox or production_configured,
+            configured=True if environment != "production" else full_credentials,
             environment=environment,
             client_id_configured=bool(self.settings.itau_client_id and self.settings.itau_client_secret),
             certificate_configured=bool(self.settings.itau_cert_path and self.settings.itau_key_path),
             account_header_configured=False,
             billing_api="",
-            banking_api=self.settings.itau_sandbox_probe_url.strip() if sandbox else "https://api.itau.com.br",
+            banking_api=self.settings.itau_sandbox_probe_url.strip(),
         )
 
     def capabilities(self) -> ProviderCapabilities:
-        # Habilitaremos saldo/extrato/cobrança por produto quando a aplicação
-        # Itaú do cliente fornecer os contratos/URLs correspondentes.
         return ProviderCapabilities()
 
-    def test_connection(self) -> dict[str, Any]:
-        environment = self.settings.itau_environment.strip().lower() or "sandbox"
-        if environment == "production":
-            raise BankProviderError(
-                "Itaú produção exige credenciais e certificado mTLS da API contratada; use Sandbox até concluir a habilitação."
+    def _ssl_context(self) -> ssl.SSLContext:
+        if not self.settings.itau_cert_path or not self.settings.itau_key_path:
+            raise BankProviderError("Certificado mTLS do Itaú não configurado.")
+        context = ssl.create_default_context()
+        try:
+            context.load_cert_chain(
+                certfile=self.settings.itau_cert_path,
+                keyfile=self.settings.itau_key_path,
             )
-        url = self.settings.itau_sandbox_probe_url.strip()
-        if not url:
-            raise BankProviderError("URL oficial de Sandbox do Itaú não configurada.")
+        except (OSError, ssl.SSLError) as exc:
+            raise BankProviderError("Não foi possível carregar o certificado mTLS do Itaú.") from exc
+        return context
+
+    def _token(self) -> str:
+        if not all((self.settings.itau_client_id, self.settings.itau_client_secret)):
+            raise BankProviderError("Client ID e Client Secret do Itaú não configurados.")
+        if not self.settings.itau_cert_path or not self.settings.itau_key_path:
+            raise BankProviderError("Certificado mTLS do Itaú não configurado.")
+        token_url = self.settings.itau_token_url.strip()
+        if not token_url:
+            raise BankProviderError("Endpoint STS do Itaú não configurado.")
+        cache_key = f"{token_url}:{self.settings.itau_client_id}"
+        now = time.time()
+        with self._token_lock:
+            cached = self._token_cache.get(cache_key)
+            if cached and cached[1] > now + 30:
+                return cached[0]
+        try:
+            with httpx.Client(verify=self._ssl_context(), timeout=30.0) as client:
+                response = client.post(
+                    token_url,
+                    data={
+                        "grant_type": "client_credentials",
+                        "client_id": self.settings.itau_client_id,
+                        "client_secret": self.settings.itau_client_secret,
+                    },
+                    headers={"Accept": "application/json", "Content-Type": "application/x-www-form-urlencoded"},
+                )
+        except httpx.HTTPError as exc:
+            raise BankProviderError("Falha de comunicação com o STS do Itaú.") from exc
+        if response.status_code >= 400:
+            detail = ""
+            try:
+                data = response.json()
+                if isinstance(data, dict):
+                    detail = str(data.get("error_description") or data.get("message") or data.get("error") or "")
+            except ValueError:
+                detail = response.text.strip()[:300]
+            suffix = f" {detail}" if detail else ""
+            raise BankProviderError(f"Itaú recusou a autenticação OAuth2 (HTTP {response.status_code}).{suffix}")
+        try:
+            data = response.json()
+        except ValueError as exc:
+            raise BankProviderError("Itaú retornou resposta inválida ao gerar o access token.") from exc
+        token = str(data.get("access_token") or "")
+        if not token:
+            raise BankProviderError("Itaú não retornou access_token.")
+        expires_in = max(60, int(data.get("expires_in") or 300))
+        with self._token_lock:
+            self._token_cache[cache_key] = (token, now + expires_in)
+        return token
+
+    @staticmethod
+    def _network_probe(url: str) -> int:
         try:
             with httpx.Client(timeout=20.0, follow_redirects=True) as client:
                 response = client.get(url, headers={"Accept": "application/json"})
         except httpx.HTTPError as exc:
-            raise BankProviderError("Falha de rede ao alcançar o Sandbox do Itaú.") from exc
-        # 401/403 ainda provam DNS/TLS/rota até o gateway. Sem uma aplicação
-        # específica do portal não devemos interpretar isso como autenticação.
+            raise BankProviderError("Falha de rede/TLS ao alcançar a infraestrutura do Itaú.") from exc
         if response.status_code >= 500:
-            raise BankProviderError(f"Sandbox do Itaú respondeu HTTP {response.status_code}.")
+            raise BankProviderError(f"Infraestrutura do Itaú respondeu HTTP {response.status_code}.")
+        return response.status_code
+
+    def test_connection(self) -> dict[str, Any]:
+        probe_url = self.settings.itau_sandbox_probe_url.strip()
+        token_url = self.settings.itau_token_url.strip()
+        if not probe_url or not token_url:
+            raise BankProviderError("Endpoints oficiais do Itaú não estão configurados.")
+
+        full_credentials = all((
+            self.settings.itau_client_id,
+            self.settings.itau_client_secret,
+            self.settings.itau_cert_path,
+            self.settings.itau_key_path,
+        ))
+
+        if not full_credentials:
+            sts_status = self._network_probe(token_url)
+            gateway_status = self._network_probe(probe_url)
+            return {
+                "reachable": True,
+                "authenticated": False,
+                "mode": "sandbox_preflight",
+                "sts_http_status": sts_status,
+                "gateway_http_status": gateway_status,
+            }
+
+        token = self._token()
+        correlation_id = str(uuid.uuid4())
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Accept": "application/json",
+            "x-itau-apikey": self.settings.itau_client_id,
+            "x-itau-correlationID": correlation_id,
+            "x-itau-flowID": correlation_id,
+        }
+        try:
+            with httpx.Client(verify=self._ssl_context(), timeout=30.0) as client:
+                response = client.get(probe_url, headers=headers)
+        except httpx.HTTPError as exc:
+            raise BankProviderError("Falha de comunicação mTLS com o endpoint de validação do Itaú.") from exc
+        if response.status_code >= 400:
+            raise BankProviderError(
+                f"Itaú recusou a validação do certificado/gateway (HTTP {response.status_code})."
+            )
         return {
             "reachable": True,
+            "authenticated": True,
+            "mode": "mtls_ca_validation",
             "http_status": response.status_code,
-            "mode": "sandbox_gateway",
-            "authenticated": response.status_code < 400,
         }
 
 
