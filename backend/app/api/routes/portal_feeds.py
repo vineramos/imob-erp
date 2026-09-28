@@ -143,6 +143,14 @@ def _issues(item: Property, photo_count: int, portal: str) -> list[str]:
         issues.append("Informe um valor de aluguel maior que zero.")
     if item.purpose == "sale" and not (item.rent_amount and item.rent_amount > 0):
         issues.append("Informe o valor comercial do imóvel.")
+    if portal == "vrsync":
+        expected_area = _lot_area(item) if item.property_type == "land" else _usable_area(item)
+        if not expected_area:
+            issues.append("Informe a área exigida pelo VRSync (área do terreno para terreno; área útil para os demais imóveis).")
+        if item.property_type != "land" and item.bathrooms <= 0:
+            issues.append("Informe ao menos 1 banheiro para este tipo de imóvel no VRSync.")
+        if item.property_type in {"apartment", "studio", "house"} and item.bedrooms <= 0:
+            issues.append("Informe ao menos 1 quarto para este tipo de imóvel no VRSync.")
     if portal in {"vrsync", "imovelweb"} and photo_count < 5:
         issues.append(("Imovelweb/OpenNavent" if portal == "imovelweb" else "ZAP/Viva Real") + " exige ao menos 5 fotos.")
     if portal == "imovelweb":
@@ -150,7 +158,7 @@ def _issues(item: Property, photo_count: int, portal: str) -> list[str]:
             issues.append("Imovelweb/OpenNavent aceita título com até 80 caracteres.")
         if len((item.public_description or "").strip()) < 50:
             issues.append("Imovelweb/OpenNavent exige descrição com ao menos 50 caracteres.")
-        if not item.area_m2 or item.area_m2 <= 0:
+        if not (_lot_area(item) if item.property_type == "land" else _usable_area(item)):
             issues.append("Informe a área do imóvel para o feed OpenNavent.")
     if portal == "chaves" and photo_count < 1:
         issues.append("Adicione ao menos uma foto para o Chaves na Mão.")
@@ -286,7 +294,7 @@ def validate_portal_integration(
         "compliance_profile": {"olx": "OLX Imóveis XML", "vrsync": "VRSync", "imovelweb": "OpenNavent", "chaves": "XML Chaves na Mão"}[portal],
         "requirements_checked": {
             "olx": ["XML bem-formado", "URL pública HTTPS", "Código do imóvel", "Subtipo aceito", "CEP", "Descrição", "Preço", "Campos obrigatórios da subcategoria"],
-            "vrsync": ["XML bem-formado", "URL pública HTTPS", "campos mínimos VRSync"],
+            "vrsync": ["XML bem-formado", "URL pública HTTPS", "cidade/UF/bairro", "área útil ou terreno", "preço", "quartos/banheiros quando exigidos", "coordenadas opcionais"],
             "imovelweb": ["XML bem-formado", "OpenNavent", "5 fotos", "título", "descrição", "área", "código da imobiliária"],
             "chaves": ["XML bem-formado", "tipo aceito", "finalidade", "localização", "preço"],
         }[portal],
@@ -395,6 +403,29 @@ def _money_int(value: Decimal | None) -> str:
     return str(int(value or 0))
 
 
+def _feature_area(item: Property, key: str) -> Decimal | None:
+    raw = (item.features or {}).get(key)
+    if raw in (None, ""):
+        return None
+    try:
+        value = Decimal(str(raw))
+    except Exception:
+        return None
+    return value if value > 0 else None
+
+
+def _usable_area(item: Property) -> Decimal | None:
+    return item.area_m2 if item.area_m2 and item.area_m2 > 0 else None
+
+
+def _total_area(item: Property) -> Decimal | None:
+    return _feature_area(item, "total_area_m2") or _feature_area(item, "lot_area_m2") or _usable_area(item)
+
+
+def _lot_area(item: Property) -> Decimal | None:
+    return _feature_area(item, "lot_area_m2") or _feature_area(item, "total_area_m2") or _usable_area(item)
+
+
 def _validate_olx_document(xml_body: bytes) -> list[str]:
     issues: list[str] = []
     try:
@@ -479,8 +510,16 @@ def olx_feed(organization_id: UUID, request: Request, db: Session = Depends(get_
             ET.SubElement(node, "QtdDormitorios").text = str(min(int(item.bedrooms or 0), 5))
             ET.SubElement(node, "QtdBanheiros").text = str(min(int(item.bathrooms or 0), 5))
         ET.SubElement(node, "QtdVagas").text = str(min(int(item.parking_spaces or 0), 5))
-        if item.area_m2:
-            ET.SubElement(node, "AreaTotal" if item.property_type == "land" else "AreaUtil").text = str(int(item.area_m2))
+        usable_area = _usable_area(item)
+        total_area = _total_area(item)
+        if item.property_type == "land":
+            if total_area:
+                ET.SubElement(node, "AreaTotal").text = str(int(total_area))
+        else:
+            if usable_area:
+                ET.SubElement(node, "AreaUtil").text = str(int(usable_area))
+            if total_area and (not usable_area or int(total_area) != int(usable_area)):
+                ET.SubElement(node, "AreaTotal").text = str(int(total_area))
         ET.SubElement(node, "Observacao").text = (item.public_description or "")[:6000]
         photo_root = ET.SubElement(node, "Fotos")
         for photo, url in _photo_urls(request, organization_id, item, photos):
@@ -558,7 +597,7 @@ def imovelweb_feed(organization_id: UUID, request: Request, db: Session = Depend
             ("CFT4", "PRINCIPALES|SUITE", item.suites),
             ("CFT3", "PRINCIPALES|BANHEIRO", item.bathrooms),
             ("CFT7", "PRINCIPALES|VAGA", item.parking_spaces),
-            ("CFT101", "MEDIDAS|AREA_UTIL", int(item.area_m2 or 0)),
+            ("CFT101", "MEDIDAS|AREA_UTIL", int((_lot_area(item) if item.property_type == "land" else _usable_area(item)) or 0)),
         ):
             feature = ET.SubElement(features, "caracteristica")
             ET.SubElement(feature, "id").text = feature_id
@@ -604,8 +643,9 @@ def chaves_feed(organization_id: UUID, request: Request, db: Session = Depends(g
         ET.SubElement(node, "Bairro").text = str(address.get("neighborhood") or "")
         ET.SubElement(node, "Cidade").text = str(address.get("city") or "")
         ET.SubElement(node, "Estado").text = str(address.get("state") or "")
-        if item.area_m2:
-            ET.SubElement(node, "Area").text = str(int(item.area_m2))
+        chaves_area = _lot_area(item) if item.property_type == "land" else (_usable_area(item) or _total_area(item))
+        if chaves_area:
+            ET.SubElement(node, "Area").text = str(int(chaves_area))
         ET.SubElement(node, "Quartos").text = str(int(item.bedrooms or 0))
         ET.SubElement(node, "Banheiros").text = str(int(item.bathrooms or 0))
         ET.SubElement(node, "Vagas").text = str(int(item.parking_spaces or 0))
@@ -660,9 +700,17 @@ def vrsync_feed(organization_id: UUID, request: Request, db: Session = Depends(g
             price = ET.SubElement(details, f"{{{ns}}}ListPrice", {"currency": "BRL"})
         price.text = _money_int(item.rent_amount)
         ET.SubElement(details, f"{{{ns}}}Description").text = (item.public_description or "")[:3000]
-        area_tag = "LotArea" if item.property_type == "land" else "LivingArea"
-        if item.area_m2:
-            ET.SubElement(details, f"{{{ns}}}{area_tag}", {"unit": "square metres"}).text = str(int(item.area_m2))
+        if item.property_type == "land":
+            lot_area = _lot_area(item)
+            if lot_area:
+                ET.SubElement(details, f"{{{ns}}}LotArea", {"unit": "square metres"}).text = str(int(lot_area))
+        else:
+            usable_area = _usable_area(item)
+            if usable_area:
+                ET.SubElement(details, f"{{{ns}}}LivingArea", {"unit": "square metres"}).text = str(int(usable_area))
+            lot_area = _feature_area(item, "lot_area_m2")
+            if lot_area:
+                ET.SubElement(details, f"{{{ns}}}LotArea", {"unit": "square metres"}).text = str(int(lot_area))
         if item.property_type != "land":
             ET.SubElement(details, f"{{{ns}}}Bedrooms").text = str(max(1, int(item.bedrooms or 0)) if item.property_type == "studio" else int(item.bedrooms or 0))
             ET.SubElement(details, f"{{{ns}}}Bathrooms").text = str(int(item.bathrooms or 0))
@@ -674,10 +722,15 @@ def vrsync_feed(organization_id: UUID, request: Request, db: Session = Depends(g
         ET.SubElement(location, f"{{{ns}}}State", {"abbreviation": str(address.get("state") or "")}).text = str(address.get("state") or "")
         ET.SubElement(location, f"{{{ns}}}City").text = str(address.get("city") or "")
         ET.SubElement(location, f"{{{ns}}}Neighborhood").text = str(address.get("neighborhood") or "")
+        if str(address.get("zone") or "").strip():
+            ET.SubElement(location, f"{{{ns}}}Zone").text = str(address.get("zone") or "")
         ET.SubElement(location, f"{{{ns}}}Address").text = str(address.get("street") or "")
         ET.SubElement(location, f"{{{ns}}}StreetNumber").text = str(address.get("number") or "")
         ET.SubElement(location, f"{{{ns}}}Complement").text = str(address.get("complement") or "")
         ET.SubElement(location, f"{{{ns}}}PostalCode").text = str(address.get("postal_code") or "")
+        if str(address.get("latitude") or "").strip() and str(address.get("longitude") or "").strip():
+            ET.SubElement(location, f"{{{ns}}}Latitude").text = str(address.get("latitude") or "")
+            ET.SubElement(location, f"{{{ns}}}Longitude").text = str(address.get("longitude") or "")
         contact = ET.SubElement(listing, f"{{{ns}}}ContactInfo")
         ET.SubElement(contact, f"{{{ns}}}Name").text = organization.display_name
         ET.SubElement(contact, f"{{{ns}}}Email").text = organization.contact_email or "contato@imob.local"
