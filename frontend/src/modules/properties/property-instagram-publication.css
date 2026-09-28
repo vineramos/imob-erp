@@ -41,3 +41,31 @@
 .instagram-preview-arrow.previous{left:10px}
 .instagram-preview-arrow.next{right:10px}
 .instagram-preview-media:hover .instagram-preview-arrow{opacity:1}
+
+.instagram-caption-card{padding:20px}
+.instagram-caption-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:18px}
+.instagram-caption-heading>div{min-width:0}.instagram-caption-heading span{font-size:10px;font-weight:800;letter-spacing:.09em;color:var(--text-muted)}
+.instagram-caption-heading h3{margin:3px 0 3px;font-size:18px}.instagram-caption-heading p{margin:0;color:var(--text-muted);font-size:12px}
+.instagram-caption-heading>b{flex:0 0 auto;padding:6px 9px;border:1px solid var(--border);border-radius:999px;background:var(--app-bg);font-size:11px;color:var(--text-muted)}
+.instagram-caption-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:14px;padding:8px 10px;border:1px solid var(--border);border-bottom:0;border-radius:12px 12px 0 0;background:var(--app-bg)}
+.instagram-caption-toolbar button{display:inline-flex;align-items:center;gap:6px;padding:7px 10px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text);font-size:12px;font-weight:700;cursor:pointer}
+.instagram-caption-toolbar button:hover:not(:disabled){background:var(--primary-soft);border-color:var(--primary)}
+.instagram-caption-toolbar button:disabled{opacity:.45;cursor:not-allowed}
+.instagram-caption-toolbar small{font-size:10.5px;color:var(--text-muted);line-height:1.35;text-align:right;max-width:520px}
+.instagram-caption-editor{border:1px solid var(--border);border-radius:0 0 12px 12px;background:var(--surface);overflow:hidden}
+.instagram-caption-editor textarea{display:block;width:100%;min-height:250px;margin:0;padding:16px 17px;border:0!important;border-radius:0!important;background:transparent;font-size:13px;line-height:1.55;resize:vertical;outline:none;box-shadow:none!important}
+.instagram-caption-editor:focus-within{border-color:var(--primary);box-shadow:0 0 0 3px color-mix(in srgb,var(--primary) 11%,transparent)}
+.instagram-caption-help{display:flex;justify-content:space-between;gap:14px;margin-top:8px;color:var(--text-muted);font-size:10.5px}
+.instagram-format-block{margin-top:20px;padding-top:18px;border-top:1px solid var(--border)}
+.instagram-format-heading{display:flex;align-items:flex-end;justify-content:space-between;gap:18px}
+.instagram-format-heading span{font-size:10px;font-weight:800;letter-spacing:.09em;color:var(--text-muted)}
+.instagram-format-heading h3{margin:3px 0 0;font-size:15px}.instagram-format-heading>small{color:var(--text-muted);font-size:10.5px}
+.instagram-format-options{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-top:12px}
+.instagram-format-options button{position:relative;display:flex;flex-direction:column;align-items:flex-start;gap:3px;min-height:62px;padding:10px 34px 10px 11px;border:1px solid var(--border);border-radius:11px;background:var(--surface);color:var(--text);text-align:left;cursor:pointer}
+.instagram-format-options button>span{font-size:12px;font-weight:800}.instagram-format-options button>small{font-size:10px;color:var(--text-muted);line-height:1.25}
+.instagram-format-options button>svg{position:absolute;right:10px;top:10px}
+.instagram-format-options button.active{border-color:var(--primary);background:var(--primary-soft);box-shadow:inset 0 0 0 1px var(--primary)}
+.instagram-format-options button:disabled{opacity:.48;cursor:not-allowed}
+.instagram-format-note{margin:9px 0 0;color:var(--text-muted);font-size:10.5px;line-height:1.45}
+@media(max-width:900px){.instagram-format-options{grid-template-columns:repeat(2,minmax(0,1fr))}.instagram-caption-toolbar{align-items:flex-start;flex-direction:column}.instagram-caption-toolbar small{text-align:left;max-width:none}.instagram-caption-help{flex-direction:column;gap:3px}.instagram-format-heading{align-items:flex-start;flex-direction:column;gap:4px}}
+@media(max-width:520px){.instagram-caption-heading{flex-direction:column;gap:8px}.instagram-format-options{grid-template-columns:1fr}}
