@@ -202,9 +202,15 @@ def _bank_status_response(provider_key: str, *, probe: bool = False) -> BankInte
             message="Provider selecionado, mas credenciais e certificado ainda não estão configurados.", checked_at=checked_at,
         )
     if not probe:
+        if provider_key == "itau" and provider_status.environment != "production":
+            message = "Sandbox Itaú habilitado. Execute o teste para validar conectividade com o gateway oficial; a autenticação da API específica depende da aplicação do portal."
+        elif provider_key == "sicredi":
+            message = "Credenciais, certificado mTLS e escopo Sicredi presentes. Execute o teste para validar OAuth2 sem realizar transação."
+        else:
+            message = "Credenciais presentes. Execute o teste para validar autenticação e acesso bancário."
         return BankIntegrationStatusResponse(
             provider=provider_key, environment=provider_status.environment, configured=True, reachable=None,
-            message="Credenciais presentes. Execute o teste para validar autenticação e acesso bancário.", checked_at=checked_at,
+            message=message, checked_at=checked_at,
         )
     try:
         result = provider.test_connection()
@@ -292,11 +298,20 @@ def integrations_readiness(
         try:
             bank_status = bank_provider(bank_key).status()
             bank_configured = bank_status.configured
-            bank_message = (
-                "Credenciais e certificado do provider bancário estão configurados."
-                if bank_configured
-                else "Provider bancário selecionado, mas credenciais/certificado estão pendentes."
-            )
+            if bank_key == "itau" and bank_status.environment != "production":
+                bank_message = "Sandbox Itaú preparado para probe de conectividade; credenciais da API específica serão exigidas na etapa de produto."
+            elif bank_key == "sicredi":
+                bank_message = (
+                    "Sicredi com Client ID, Secret, certificado mTLS e escopo configurados."
+                    if bank_configured
+                    else "Sicredi selecionado; faltam credenciais, certificado mTLS e/ou escopo liberado pela cooperativa."
+                )
+            else:
+                bank_message = (
+                    "Credenciais e certificado do provider bancário estão configurados."
+                    if bank_configured
+                    else "Provider bancário selecionado, mas credenciais/certificado estão pendentes."
+                )
             bank_environment = bank_status.environment
         except BankProviderError as exc:
             bank_configured = False
