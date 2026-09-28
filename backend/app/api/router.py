@@ -51,6 +51,7 @@ from app.api.routes.portfolio import router as portfolio_router
 from app.api.routes.portal_feeds import router as portal_feeds_router
 from app.api.routes.property_lifecycle import router as property_lifecycle_router
 from app.api.routes.property_media import router as property_media_router
+from app.api.routes.property_instagram import router as property_instagram_router
 from app.api.routes.public_captures import router as public_captures_router
 from app.api.routes.public_map import router as public_map_router
 from app.api.routes.publication import router as publication_router
@@ -111,6 +112,7 @@ api_router.include_router(person_profile_router)
 api_router.include_router(person_media_router)
 api_router.include_router(person_insights_router)
 api_router.include_router(property_media_router)
+api_router.include_router(property_instagram_router)
 api_router.include_router(contracts_router)
 api_router.include_router(leases_router)
 api_router.include_router(lease_lifecycle_router)
