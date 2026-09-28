@@ -21,6 +21,7 @@ from app.domains.leases.schemas import (
     LeaseContractVersionResponse,
     LeaseContractWorkflow,
 )
+from app.domains.portfolio.instagram_publication import inactivate_instagram_publication
 from app.domains.portfolio.models import Person, Property, PropertyOwner
 from app.integrations.document_storage import DocumentStorageError, get_document_storage
 from app.integrations.signature import SignatureProviderError, get_signature_provider
@@ -291,6 +292,7 @@ def _activate_property_after_signature(db: Session, item: LeaseContract, user_id
         return
     property_item.status = "leased"
     property_item.publication_enabled = False
+    inactivate_instagram_publication(property_item, reason="Imóvel locado após conclusão do fluxo contratual.")
     if user_id is not None:
         property_item.publication_updated_by_user_id = user_id
 
