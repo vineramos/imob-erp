@@ -17,6 +17,9 @@ class AddressPayload(BaseModel):
     city: str = Field(default="Curitiba", max_length=120)
     state: str = Field(default="PR", max_length=2)
     postal_code: str = Field(default="", max_length=12)
+    zone: str = Field(default="", max_length=80)
+    latitude: str = Field(default="", max_length=32)
+    longitude: str = Field(default="", max_length=32)
 
 
 PersonType = Literal["individual", "company"]
@@ -110,6 +113,8 @@ class PropertyFeatures(BaseModel):
     elevators: int | None = Field(default=None, ge=0, le=50)
     solar_orientation: SolarOrientation = ""
     year_built: int | None = Field(default=None, ge=1800, le=2200)
+    total_area_m2: Decimal | None = Field(default=None, ge=0, le=100000000)
+    lot_area_m2: Decimal | None = Field(default=None, ge=0, le=100000000)
 
 PropertyType = Literal["apartment", "house", "commercial", "land", "studio", "other"]
 PropertyStatus = Literal["draft", "available", "reserved", "leased", "inactive"]
@@ -164,6 +169,7 @@ class PropertyUpdate(BaseModel):
     pets_allowed: bool = False
     features: PropertyFeatures = Field(default_factory=PropertyFeatures)
     public_title: str | None = Field(default=None, max_length=180)
+    public_description: str | None = Field(default=None, max_length=5000)
     owners: list[PropertyOwnerPayload] = Field(default_factory=list, max_length=20)
 
     @model_validator(mode="after")
