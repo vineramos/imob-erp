@@ -188,6 +188,11 @@ export function PropertyInstagramPublicationPanel({propertyId,permissions}:Props
             </div>
             <p className="instagram-format-note">Story e Reel aparecem desde já para deixar o fluxo preparado, mas o envio será liberado quando a conta profissional estiver conectada e validada na Meta.</p>
           </div>
+
+          <div className="instagram-editor-savebar">
+            <div><strong>Conteúdo exclusivo do Instagram</strong><span>Esta legenda e a ordem das fotos ficam salvas separadamente da descrição do site.</span></div>
+            <button className="button primary" type="button" disabled={!canEdit||saving||inactive||!dirty} onClick={()=>void save()}><Save size={15}/>{saving?'Salvando...':dirty?'Salvar alterações':'Salvo'}</button>
+          </div>
         </section>
       </div>
 
