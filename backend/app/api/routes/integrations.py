@@ -207,15 +207,24 @@ def _bank_status_response(provider_key: str, *, probe: bool = False) -> BankInte
             message="Credenciais presentes. Execute o teste para validar autenticação e acesso bancário.", checked_at=checked_at,
         )
     try:
-        provider.balance()
+        result = provider.test_connection()
     except BankProviderError as exc:
         return BankIntegrationStatusResponse(
             provider=provider_key, environment=provider_status.environment, configured=True, reachable=False,
             message=str(exc), checked_at=checked_at,
         )
+    if provider_key == "itau" and result.get("mode") == "sandbox_gateway":
+        message = (
+            f"Gateway oficial do Sandbox Itaú alcançável (HTTP {result.get('http_status')}). "
+            "Este teste valida rede/TLS; autenticação da API específica depende da aplicação criada no portal Itaú."
+        )
+    elif provider_key == "sicredi":
+        message = "Autenticação OAuth2 + mTLS do Sicredi validada no ambiente configurado, sem executar transação."
+    else:
+        message = "Autenticação, certificado e consulta bancária validados com sucesso."
     return BankIntegrationStatusResponse(
         provider=provider_key, environment=provider_status.environment, configured=True, reachable=True,
-        message="Autenticação, certificado e consulta bancária validados com sucesso.", checked_at=checked_at,
+        message=message, checked_at=checked_at,
     )
 
 
