@@ -1,4 +1,4 @@
-import { Banknote, CheckCircle2, CircleAlert, FileSignature, Mail, RefreshCw, Save, ShieldCheck, Webhook } from 'lucide-react'
+import { Activity, Banknote, CheckCircle2, CircleAlert, Database, FileSignature, Mail, MessageCircle, RadioTower, RefreshCw, Save, ShieldCheck, Webhook } from 'lucide-react'
 import { FormEvent, useEffect, useState } from 'react'
 import { ApiError, apiRequest } from '../../api/client'
 import type { BankIntegrationStatus, IntegrationReadiness, IntegrationsConfig, SignatureIntegrationStatus, SmtpConfiguration } from '../../api/types'
@@ -18,6 +18,15 @@ const defaults: IntegrationsConfig = {
 const smtpDefaults: SmtpConfiguration = { host: '', port: 587, username: '', from_email: '', from_name: '', use_tls: true, use_ssl: false, password_configured: false, source: 'none' }
 
 type Props = { canEdit: boolean }
+
+type IntegrationAuditStatus = 'ok' | 'attention' | 'disabled'
+type IntegrationAuditItem = { key:string; label:string; status:IntegrationAuditStatus; detail:string }
+type DocumentStorageStatus = { provider:string; configured:boolean; reachable:boolean|null; bucket:string|null; message:string; checked_at:string }
+type WhatsAppAuditConfig = { configured:boolean; reachable:boolean|null; last_webhook_at:string|null; last_webhook_status:string; message:string }
+type PortalAuditChannel = { key:string; label:string; status:string }
+type PortalAuditConfig = { channels:PortalAuditChannel[] }
+type PortalValidation = { valid:boolean; selected_count:number; invalid_count:number; xml_valid:boolean }
+type PortalValidationResult = PortalAuditChannel & { validation:PortalValidation }
 
 const providerStatus = (enabled: boolean) => (
   <i className={`status-badge ${enabled ? 'success' : 'neutral'}`}>{enabled ? 'Provider selecionado' : 'Desativado'}</i>
@@ -45,6 +54,9 @@ export function IntegrationsSettingsPage({ canEdit }: Props) {
   const [testingSignature, setTestingSignature] = useState(false)
   const [savingSmtp, setSavingSmtp] = useState(false)
   const [testingSmtp, setTestingSmtp] = useState(false)
+  const [auditing, setAuditing] = useState(false)
+  const [auditItems, setAuditItems] = useState<IntegrationAuditItem[]>([])
+  const [auditCheckedAt, setAuditCheckedAt] = useState<string | null>(null)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
 
@@ -130,6 +142,83 @@ export function IntegrationsSettingsPage({ canEdit }: Props) {
     }
   }
 
+  async function auditAllIntegrations() {
+    if (!canEdit || !authConfigured) return
+    setAuditing(true); setError(''); setSuccess('')
+    const results: IntegrationAuditItem[] = []
+    const add = (key:string,label:string,status:IntegrationAuditStatus,detail:string) => results.push({key,label,status,detail})
+    const failure = (cause:unknown, fallback:string) => cause instanceof ApiError ? cause.detail : fallback
+
+    add('auth','Neon Auth','ok','Sessão autenticada no ambiente atual; o proxy e a autenticação estão operacionais.')
+
+    try {
+      const storage = await apiRequest<DocumentStorageStatus>('/integrations/document-storage/test', { method:'POST' })
+      add('storage','Storage de documentos',storage.reachable?'ok':'attention',storage.message)
+    } catch (cause) { add('storage','Storage de documentos','attention',failure(cause,'Falha ao testar o storage.')) }
+
+    if (form.bank_provider === 'none') add('bank','Banco Inter','disabled','Provider bancário desativado.')
+    else {
+      try {
+        const bank = await apiRequest<BankIntegrationStatus>('/integrations/bank/test',{method:'POST'})
+        setBankStatus(bank)
+        add('bank','Banco Inter',bank.reachable?'ok':'attention',bank.message)
+      } catch (cause) { add('bank','Banco Inter','attention',failure(cause,'Falha ao testar o Banco Inter.')) }
+    }
+
+    if (form.signature_provider === 'none') add('signature','Clicksign','disabled','Assinatura eletrônica desativada.')
+    else {
+      try {
+        const signature = await apiRequest<SignatureIntegrationStatus>('/integrations/signature/test',{method:'POST'})
+        setSignatureStatus(signature)
+        add('signature','Clicksign',signature.reachable?'ok':'attention',signature.message)
+      } catch (cause) { add('signature','Clicksign','attention',failure(cause,'Falha ao testar a Clicksign.')) }
+    }
+
+    if (form.email_provider === 'none') add('smtp','SMTP','disabled','E-mail transacional desativado.')
+    else {
+      try {
+        const smtpProbe = await apiRequest<{reachable:boolean;message:string}>('/integrations/email/connection-test',{method:'POST'})
+        add('smtp','SMTP',smtpProbe.reachable?'ok':'attention',smtpProbe.message)
+      } catch (cause) { add('smtp','SMTP','attention',failure(cause,'Falha ao autenticar no SMTP.')) }
+    }
+
+    try {
+      const whats = await apiRequest<WhatsAppAuditConfig>('/meta-whatsapp/config')
+      if (!whats.configured) add('whatsapp','WhatsApp Business','attention','Credenciais da Meta ainda não estão completas.')
+      else {
+        const [meta,subscription] = await Promise.all([
+          apiRequest<{reachable:boolean;message:string}>('/meta-whatsapp/test',{method:'POST'}),
+          apiRequest<{subscribed:boolean;message:string}>('/meta-whatsapp/subscription'),
+        ])
+        const webhookOk = whats.last_webhook_status === 'processed' && Boolean(whats.last_webhook_at)
+        const ok = meta.reachable && subscription.subscribed && webhookOk
+        add('whatsapp','WhatsApp Business',ok?'ok':'attention',
+          `${meta.message} ${subscription.message}${webhookOk?' Webhook com evento processado.':' Webhook ainda sem confirmação recente.'}`)
+      }
+    } catch (cause) { add('whatsapp','WhatsApp Business','attention',failure(cause,'Falha ao validar a integração com a Meta.')) }
+
+    try {
+      const portals = await apiRequest<PortalAuditConfig>('/integrations/portals')
+      for (const channel of portals.channels) {
+        try {
+          const validated = await apiRequest<PortalValidationResult>(`/integrations/portals/${channel.key}/validate`,{method:'POST'})
+          const technical = validated.validation.valid
+          const externalActive = channel.status === 'active'
+          add(`portal-${channel.key}`,channel.label,technical&&externalActive?'ok':'attention',
+            technical
+              ? `${validated.validation.selected_count} imóvel(is) tecnicamente válido(s). ${externalActive?'Portal marcado como homologado externamente.':'Feed pronto; homologação externa ainda não está marcada como ativa.'}`
+              : `Feed com pendências: ${validated.validation.invalid_count} imóvel(is) inválido(s) ou XML inconsistente.`)
+        } catch (cause) { add(`portal-${channel.key}`,channel.label,'attention',failure(cause,'Falha ao validar o feed XML.')) }
+      }
+    } catch (cause) { add('portals','Portais imobiliários','attention',failure(cause,'Falha ao carregar os canais imobiliários.')) }
+
+    setAuditItems(results)
+    setAuditCheckedAt(new Date().toISOString())
+    const pending = results.filter(item=>item.status==='attention').length
+    setSuccess(pending===0?'Validação completa: todas as integrações ativas responderam corretamente.':`Validação concluída com ${pending} ponto(s) que ainda exigem atenção.`)
+    setAuditing(false)
+  }
+
   async function saveSmtp() {
     if (!canEdit || !authConfigured) return
     setSavingSmtp(true); setError(''); setSuccess('')
@@ -166,12 +255,23 @@ export function IntegrationsSettingsPage({ canEdit }: Props) {
         <div>
           <span className="eyebrow">Configurações · Conectividade</span>
           <h1>Integrações</h1>
-          <p>Escolha os provedores, cadastre o SMTP com senha protegida e acompanhe o estado real das conexões.</p>
+          <p>Escolha os provedores, valide conexões reais e acompanhe o estado técnico de cada serviço externo.</p>
         </div>
+        <button className="button primary" type="button" disabled={!canEdit||auditing} onClick={()=>void auditAllIntegrations()}><Activity size={15}/>{auditing?'Verificando tudo...':'Verificar todas'}</button>
       </div>
 
       {error && <div className="form-alert danger-alert">{error}</div>}
       {success && <div className="form-alert success-alert">{success}</div>}
+
+      {auditItems.length>0&&<article className="panel integrations-audit-panel">
+        <div className="panel-heading panel-heading-row"><div><span className="eyebrow">Diagnóstico ao vivo</span><h2>Validação consolidada</h2><p>{auditCheckedAt?`Executada em ${new Date(auditCheckedAt).toLocaleString('pt-BR')}.`:'Resultados da última validação.'}</p></div><Activity size={19}/></div>
+        <div className="integrations-audit-grid">{auditItems.map(item=><div className={'integrations-audit-row '+item.status} key={item.key}>
+          <span className="integrations-audit-icon">{item.key==='storage'?<Database size={15}/>:item.key==='whatsapp'?<MessageCircle size={15}/>:item.key.startsWith('portal-')?<RadioTower size={15}/>:item.status==='ok'?<CheckCircle2 size={15}/>:<CircleAlert size={15}/>}</span>
+          <div><strong>{item.label}</strong><span>{item.detail}</span></div>
+          <i className={'status-badge '+(item.status==='ok'?'success':item.status==='disabled'?'neutral':'warning')}>{item.status==='ok'?'Validado':item.status==='disabled'?'Desativado':'Atenção'}</i>
+        </div>)}</div>
+        <small className="smtp-security-note">A validação não envia Pix, não cria contratos e não publica anúncios. No SMTP ela autentica sem enviar e-mail; nos portais valida o XML sem alterar a homologação externa.</small>
+      </article>}
 
       <form onSubmit={save} className="settings-layout integrations-layout">
         <div className="settings-column">
