@@ -7,7 +7,7 @@ import {
 /** Mapa técnico estável usado por autenticação, permissões, busca e deep links. */
 export const navigation = [
   { label: 'Início', icon: Gauge, module: 'dashboard', permission: 'dashboard.view' },
-  { label: 'Clientes', icon: Users, module: 'people', permission: 'properties.view' },
+  { label: 'Pessoas', icon: Users, module: 'people', permission: 'properties.view' },
   { label: 'Imóveis', icon: House, module: 'properties', permission: 'properties.view' },
   { label: 'Corretores', icon: UserRoundCheck, module: 'brokers', permission: 'properties.view' },
   { label: 'Captações', icon: Target, module: 'captures', permission: 'captures.view' },
@@ -47,7 +47,7 @@ const item = (label: string, module: ModuleKey, permission: string, icon: Lucide
 export const sidebarNavigation: readonly SidebarSection[] = [
   item('Início', 'dashboard', 'dashboard.view', Gauge),
   item('Imóveis', 'properties', 'properties.view', House),
-  item('Clientes', 'people', 'properties.view', Users),
+  item('Pessoas', 'people', 'properties.view', Users),
   item('Comercial', 'crm', 'crm.view', Target),
   item('Corretores', 'brokers', 'properties.view', UserRoundCheck),
   item('Contratos', 'contracts', 'contracts.view', FileText),
