@@ -414,6 +414,7 @@ def update_property(
     item.pets_allowed = payload.pets_allowed
     item.features = payload.features.model_dump()
     item.public_title = (payload.public_title or "").strip() or None
+    item.public_description = (payload.public_description or "").strip() or None
 
     item.owners.clear()
     db.flush()
