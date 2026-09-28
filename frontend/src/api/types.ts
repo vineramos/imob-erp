@@ -159,6 +159,9 @@ export type Address = {
   city: string
   state: string
   postal_code: string
+  zone?: string
+  latitude?: string
+  longitude?: string
 }
 
 export type Person = {
@@ -203,6 +206,8 @@ export type PropertyFeatures = {
   elevators: number | null
   solar_orientation: '' | 'north' | 'south' | 'east' | 'west' | 'northeast' | 'northwest' | 'southeast' | 'southwest'
   year_built: number | null
+  total_area_m2: number | null
+  lot_area_m2: number | null
 }
 
 export type PropertyAdditionalCharge = {
