@@ -72,6 +72,26 @@ def smtp_configured(config: SmtpConfig | None = None) -> bool:
     return (config or environment_smtp_config()).configured
 
 
+def test_smtp_connection(config: SmtpConfig) -> None:
+    """Validate SMTP transport/TLS/authentication without sending a message."""
+    if not config.configured:
+        raise EmailDeliveryError("O envio de e-mail transacional ainda não está configurado.")
+    try:
+        if config.use_ssl:
+            client: smtplib.SMTP = smtplib.SMTP_SSL(config.host, config.port, timeout=12)
+        else:
+            client = smtplib.SMTP(config.host, config.port, timeout=12)
+        with client:
+            client.ehlo()
+            if config.use_tls and not config.use_ssl:
+                client.starttls()
+                client.ehlo()
+            if config.username.strip():
+                client.login(config.username, config.password)
+    except (OSError, smtplib.SMTPException) as exc:
+        raise EmailDeliveryError("Não foi possível autenticar no servidor SMTP configurado.") from exc
+
+
 def _deliver(message: EmailMessage, config: SmtpConfig) -> None:
     if not config.configured:
         raise EmailDeliveryError("O envio de e-mail transacional ainda não está configurado.")
