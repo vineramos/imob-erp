@@ -1034,3 +1034,23 @@
   font-size: 9.5px;
   font-weight: 780;
 }
+
+
+/* Portal-ready property registration */
+.property-portal-data-section{background:color-mix(in srgb,var(--surface-muted) 72%,var(--surface))}
+.property-portal-readiness{margin-left:auto;padding:4px 8px;border-radius:999px;font-size:8px;font-weight:800;white-space:nowrap}
+.property-portal-readiness.ready{background:color-mix(in srgb,var(--success) 12%,var(--surface));color:var(--success)}
+.property-portal-readiness.pending{background:color-mix(in srgb,var(--warning) 12%,var(--surface));color:color-mix(in srgb,var(--warning) 82%,var(--text))}
+.property-portal-copy-grid{display:grid;grid-template-columns:1fr;gap:9px}
+.property-portal-copy-grid label{display:grid;gap:5px}
+.property-portal-copy-grid label>span{font-size:8.5px;font-weight:700;color:var(--text-muted)}
+.property-portal-copy-grid input,.property-portal-copy-grid textarea{width:100%;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text);font:inherit;font-size:10px;padding:9px 10px;outline:none}
+.property-portal-copy-grid textarea{resize:vertical;min-height:96px;line-height:1.5}
+.property-portal-copy-grid input:focus,.property-portal-copy-grid textarea:focus{border-color:color-mix(in srgb,var(--brand-primary) 55%,var(--border));box-shadow:0 0 0 2px var(--brand-primary-soft)}
+.property-portal-copy-grid small{font-size:7.8px;color:var(--text-muted)}
+.property-portal-precheck{display:flex;flex-wrap:wrap;gap:5px;margin-top:10px}
+.property-portal-precheck span{display:inline-flex;align-items:center;min-height:24px;padding:4px 7px;border:1px solid var(--border);border-radius:999px;background:var(--surface);font-size:8px;font-weight:700;color:var(--text-muted)}
+.property-portal-precheck span.ok{border-color:color-mix(in srgb,var(--success) 28%,var(--border));color:var(--success);background:color-mix(in srgb,var(--success) 5%,var(--surface))}
+.property-portal-precheck span.pending{border-color:color-mix(in srgb,var(--warning) 35%,var(--border));color:color-mix(in srgb,var(--warning) 78%,var(--text))}
+.property-portal-note{margin:9px 0 0;color:var(--text-muted);font-size:8px;line-height:1.5}
+@media(max-width:620px){.property-portal-readiness{margin-left:0}.property-edit-section-heading{flex-wrap:wrap}}
