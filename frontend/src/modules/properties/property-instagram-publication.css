@@ -64,3 +64,9 @@
 .instagram-format-note{margin:9px 0 0;color:var(--text-muted);font-size:10.5px;line-height:1.45}
 @media(max-width:900px){.instagram-format-options{grid-template-columns:repeat(2,minmax(0,1fr))}.instagram-caption-help{flex-direction:column;gap:3px}.instagram-format-heading{align-items:flex-start;flex-direction:column;gap:4px}}
 @media(max-width:520px){.instagram-caption-heading{flex-direction:column;gap:8px}.instagram-format-options{grid-template-columns:1fr}}
+
+.instagram-editor-savebar{display:flex;align-items:center;justify-content:space-between;gap:18px;margin-top:16px;padding:13px 14px;border:1px solid var(--border);border-radius:12px;background:var(--app-bg)}
+.instagram-editor-savebar>div{display:flex;flex-direction:column;gap:2px;min-width:0}
+.instagram-editor-savebar strong{font-size:12px}.instagram-editor-savebar span{font-size:10.5px;color:var(--text-muted)}
+.instagram-editor-savebar .button{flex:0 0 auto;min-width:148px;justify-content:center}
+@media(max-width:640px){.instagram-editor-savebar{align-items:stretch;flex-direction:column}.instagram-editor-savebar .button{width:100%}}
