@@ -55,6 +55,27 @@ class Settings(BaseSettings):
     inter_account_number: str = ""
     inter_webhook_secret: str = ""
 
+    # Itaú Empresas. Sandbox é segregado e não usa o mesmo fluxo mTLS/OAuth
+    # de produção. A URL de probe serve apenas para validar conectividade do
+    # runtime; credenciais produtivas continuam no Secret Manager.
+    itau_environment: str = "sandbox"
+    itau_client_id: str = ""
+    itau_client_secret: str = ""
+    itau_cert_path: str = ""
+    itau_key_path: str = ""
+    itau_sandbox_probe_url: str = "https://api.gateway.itau.com.br/sandbox/ca-validation"
+
+    # Sicredi. Saldo/Extrato usam OAuth2 client_credentials + mTLS inclusive
+    # no ambiente de homologação. URLs/escopo são configuráveis porque variam
+    # por produto contratado e devem seguir o guia liberado pela cooperativa.
+    sicredi_environment: str = "sandbox"
+    sicredi_client_id: str = ""
+    sicredi_client_secret: str = ""
+    sicredi_cert_path: str = ""
+    sicredi_key_path: str = ""
+    sicredi_token_url: str = "https://mtls-api-parceiro.sicredi.com.br/sb/thirdparty/auth/token"
+    sicredi_scope: str = ""
+
     # Storage próprio para documentos finais/contratuais. Em Cloud Run, a
     # autenticação usa a service account do runtime; nenhuma chave JSON é
     # necessária nem permitida pela aplicação.
