@@ -222,10 +222,15 @@ def _bank_status_response(provider_key: str, *, probe: bool = False) -> BankInte
             provider=provider_key, environment=provider_status.environment, configured=True, reachable=False,
             message=str(exc), checked_at=checked_at,
         )
-    if provider_key == "itau" and result.get("mode") == "sandbox_gateway":
+    if provider_key == "itau" and result.get("mode") == "sandbox_preflight":
         message = (
-            f"Gateway oficial do Sandbox Itaú alcançável (HTTP {result.get('http_status')}). "
-            "Este teste valida rede/TLS; autenticação da API específica depende da aplicação criada no portal Itaú."
+            f"Preflight Itaú concluído: STS HTTP {result.get('sts_http_status')} e gateway HTTP {result.get('gateway_http_status')}. "
+            "Rede/TLS do Cloud Run estão alcançando a infraestrutura Itaú; falta a credencial da aplicação para autenticação completa."
+        )
+    elif provider_key == "itau" and result.get("mode") == "mtls_ca_validation":
+        message = (
+            f"Itaú validado com OAuth2 + mTLS no endpoint oficial de ca-validation (HTTP {result.get('http_status')}). "
+            "Nenhuma transação financeira foi executada."
         )
     elif provider_key == "sicredi":
         message = "Autenticação OAuth2 + mTLS do Sicredi validada no ambiente configurado, sem executar transação."
