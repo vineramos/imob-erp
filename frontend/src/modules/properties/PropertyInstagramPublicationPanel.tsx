@@ -1,5 +1,5 @@
-import { ArrowDown, ArrowUp, Bold, Check, ChevronLeft, ChevronRight, CircleAlert, Instagram, Save, Send, X } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { ArrowDown, ArrowUp, Check, ChevronLeft, ChevronRight, CircleAlert, Instagram, Save, Send, X } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
 import { ApiError, apiBlobRequest, apiRequest } from '../../api/client'
 import './property-instagram-publication.css'
 
@@ -28,21 +28,6 @@ type InstagramPublication = {
   instagram_connected:boolean
 }
 type Props={propertyId:string;permissions:string[]}
-
-const boldBase={
-  upper:0x1D400,
-  lower:0x1D41A,
-  digit:0x1D7CE,
-}
-function instagramVisualBold(value:string){
-  return value.normalize('NFD').split('').map(char=>{
-    const code=char.codePointAt(0)??0
-    if(code>=65&&code<=90)return String.fromCodePoint(boldBase.upper+(code-65))
-    if(code>=97&&code<=122)return String.fromCodePoint(boldBase.lower+(code-97))
-    if(code>=48&&code<=57)return String.fromCodePoint(boldBase.digit+(code-48))
-    return char
-  }).join('').normalize('NFC')
-}
 
 function PhotoPreview({photo,onOpen,className=''}:{photo:Photo;onOpen?:(photo:Photo)=>void;className?:string}){
   const [src,setSrc]=useState('')
@@ -77,7 +62,6 @@ export function PropertyInstagramPublicationPanel({propertyId,permissions}:Props
   const [success,setSuccess]=useState('')
   const [openPhoto,setOpenPhoto]=useState<Photo|null>(null)
   const [previewIndex,setPreviewIndex]=useState(0)
-  const captionRef=useRef<HTMLTextAreaElement|null>(null)
 
   useEffect(()=>{
     let active=true
@@ -126,31 +110,6 @@ export function PropertyInstagramPublicationPanel({propertyId,permissions}:Props
     setError('');setPhotoIds(current=>[...current,photoId])
   }
   function remove(photoId:string){setPhotoIds(current=>current.filter(id=>id!==photoId))}
-
-  function boldSelection(){
-    const field=captionRef.current
-    if(!field||inactive)return
-    const start=field.selectionStart
-    const end=field.selectionEnd
-    if(start===end){
-      setError('Selecione o trecho da legenda que deseja destacar em negrito visual.')
-      field.focus()
-      return
-    }
-    const selectedText=caption.slice(start,end)
-    const replacement=instagramVisualBold(selectedText)
-    const next=caption.slice(0,start)+replacement+caption.slice(end)
-    if(next.length>2200){
-      setError('O destaque ultrapassaria o limite de 2.200 caracteres da legenda.')
-      return
-    }
-    setError('')
-    setCaption(next)
-    requestAnimationFrame(()=>{
-      field.focus()
-      field.setSelectionRange(start,start+replacement.length)
-    })
-  }
 
   async function save(){
     if(!canEdit||!data)return
@@ -207,14 +166,10 @@ export function PropertyInstagramPublicationPanel({propertyId,permissions}:Props
             <div><span>LEGENDA</span><h3>Legenda do post</h3><p>Edite o texto exatamente como ele será enviado ao Instagram.</p></div>
             <b>{caption.length.toLocaleString('pt-BR')} / 2.200</b>
           </div>
-          <div className="instagram-caption-toolbar">
-            <button type="button" disabled={!canEdit||inactive} onClick={boldSelection} title="Aplicar negrito visual ao trecho selecionado"><Bold size={14}/><span>Negrito</span></button>
-            <small>O Instagram não possui negrito nativo na legenda; este botão usa caracteres Unicode compatíveis com o texto publicado.</small>
+          <div className="instagram-caption-editor instagram-caption-editor-standalone">
+            <textarea disabled={!canEdit||inactive} rows={12} maxLength={2200} value={caption} onChange={event=>setCaption(event.target.value)} placeholder="Escreva a legenda do imóvel..."/>
           </div>
-          <div className="instagram-caption-editor">
-            <textarea ref={captionRef} disabled={!canEdit||inactive} rows={12} maxLength={2200} value={caption} onChange={event=>setCaption(event.target.value)} placeholder="Escreva a legenda do imóvel..."/>
-          </div>
-          <div className="instagram-caption-help"><span>Use quebras de linha para deixar a legenda mais fácil de ler.</span><span>Selecione um trecho e clique em <strong>Negrito</strong> para destacá-lo.</span></div>
+          <div className="instagram-caption-help"><span>Use quebras de linha para deixar a legenda mais fácil de ler.</span></div>
 
           <div className="instagram-format-block">
             <div className="instagram-format-heading"><div><span>FORMATO</span><h3>Como este imóvel será publicado</h3></div><small>Carrossel é o padrão recomendado para anúncios imobiliários.</small></div>
