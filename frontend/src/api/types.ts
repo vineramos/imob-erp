@@ -43,7 +43,7 @@ export type OperationalDefaults = {
 }
 
 export type IntegrationsConfig = {
-  bank_provider: 'none' | 'inter'
+  bank_provider: 'none' | 'inter' | 'itau' | 'sicredi'
   signature_provider: 'none' | 'clicksign'
   email_provider: 'none' | 'smtp'
   public_site_enabled: boolean
