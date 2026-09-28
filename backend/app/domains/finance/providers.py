@@ -78,6 +78,10 @@ class BankProvider:
     def pix_payment_status(self, reference: str) -> ProviderPaymentResult:
         raise BankProviderError(f"O provider {self.key} não oferece consulta de pagamento Pix.")
 
+    def test_connection(self) -> dict[str, Any]:
+        """Executa uma verificação segura e não transacional da integração."""
+        raise BankProviderError(f"O provider {self.key} não possui teste de conexão implementado.")
+
 
 class ManualBankProvider(BankProvider):
     """Provider neutro para qualquer banco sem integração direta."""
@@ -287,6 +291,176 @@ class InterBankProvider(BankProvider):
         resolved_reference = str(transaction.get("codigoSolicitacao") or reference)
         return ProviderPaymentResult(reference=resolved_reference, status=status, raw=dict(data or {}))
 
+    def test_connection(self) -> dict[str, Any]:
+        return self.balance()
+
+
+class ItauBankProvider(BankProvider):
+    """Provider Itaú preparado para Sandbox e evolução posterior para produção.
+
+    A documentação pública do Itaú informa que Sandbox não usa o mesmo fluxo
+    OAuth2+mTLS de produção. Sem credenciais específicas de uma API contratada,
+    o teste seguro limita-se à conectividade do endpoint oficial de validação.
+    """
+
+    key = "itau"
+
+    def __init__(self, settings: Settings | None = None):
+        self.settings = settings or get_settings()
+
+    def status(self) -> ProviderStatus:
+        environment = self.settings.itau_environment.strip().lower() or "sandbox"
+        sandbox = environment != "production"
+        production_configured = all((
+            self.settings.itau_client_id,
+            self.settings.itau_client_secret,
+            self.settings.itau_cert_path,
+            self.settings.itau_key_path,
+        ))
+        return ProviderStatus(
+            configured=sandbox or production_configured,
+            environment=environment,
+            client_id_configured=bool(self.settings.itau_client_id and self.settings.itau_client_secret),
+            certificate_configured=bool(self.settings.itau_cert_path and self.settings.itau_key_path),
+            account_header_configured=False,
+            billing_api="",
+            banking_api=self.settings.itau_sandbox_probe_url.strip() if sandbox else "https://api.itau.com.br",
+        )
+
+    def capabilities(self) -> ProviderCapabilities:
+        # Habilitaremos saldo/extrato/cobrança por produto quando a aplicação
+        # Itaú do cliente fornecer os contratos/URLs correspondentes.
+        return ProviderCapabilities()
+
+    def test_connection(self) -> dict[str, Any]:
+        environment = self.settings.itau_environment.strip().lower() or "sandbox"
+        if environment == "production":
+            raise BankProviderError(
+                "Itaú produção exige credenciais e certificado mTLS da API contratada; use Sandbox até concluir a habilitação."
+            )
+        url = self.settings.itau_sandbox_probe_url.strip()
+        if not url:
+            raise BankProviderError("URL oficial de Sandbox do Itaú não configurada.")
+        try:
+            with httpx.Client(timeout=20.0, follow_redirects=True) as client:
+                response = client.get(url, headers={"Accept": "application/json"})
+        except httpx.HTTPError as exc:
+            raise BankProviderError("Falha de rede ao alcançar o Sandbox do Itaú.") from exc
+        # 401/403 ainda provam DNS/TLS/rota até o gateway. Sem uma aplicação
+        # específica do portal não devemos interpretar isso como autenticação.
+        if response.status_code >= 500:
+            raise BankProviderError(f"Sandbox do Itaú respondeu HTTP {response.status_code}.")
+        return {
+            "reachable": True,
+            "http_status": response.status_code,
+            "mode": "sandbox_gateway",
+            "authenticated": response.status_code < 400,
+        }
+
+
+class SicrediBankProvider(BankProvider):
+    """Provider Sicredi para autenticação de homologação via OAuth2 + mTLS.
+
+    Saldo e Extrato possuem contratos próprios; o primeiro marco do ERP é
+    validar certificado + client_credentials sem executar transação financeira.
+    """
+
+    key = "sicredi"
+    _token_cache: dict[str, tuple[str, float]] = {}
+    _token_lock = Lock()
+
+    def __init__(self, settings: Settings | None = None):
+        self.settings = settings or get_settings()
+
+    def status(self) -> ProviderStatus:
+        configured = all((
+            self.settings.sicredi_client_id,
+            self.settings.sicredi_client_secret,
+            self.settings.sicredi_cert_path,
+            self.settings.sicredi_key_path,
+            self.settings.sicredi_token_url,
+            self.settings.sicredi_scope,
+        ))
+        return ProviderStatus(
+            configured=configured,
+            environment=self.settings.sicredi_environment.strip().lower() or "sandbox",
+            client_id_configured=bool(self.settings.sicredi_client_id and self.settings.sicredi_client_secret),
+            certificate_configured=bool(self.settings.sicredi_cert_path and self.settings.sicredi_key_path),
+            account_header_configured=False,
+            billing_api="",
+            banking_api=self.settings.sicredi_token_url.strip(),
+        )
+
+    def capabilities(self) -> ProviderCapabilities:
+        return ProviderCapabilities()
+
+    def _ssl_context(self) -> ssl.SSLContext:
+        if not self.settings.sicredi_cert_path or not self.settings.sicredi_key_path:
+            raise BankProviderError("Certificado mTLS do Sicredi não configurado.")
+        context = ssl.create_default_context()
+        try:
+            context.load_cert_chain(
+                certfile=self.settings.sicredi_cert_path,
+                keyfile=self.settings.sicredi_key_path,
+            )
+        except (OSError, ssl.SSLError) as exc:
+            raise BankProviderError("Não foi possível carregar o certificado mTLS do Sicredi.") from exc
+        return context
+
+    def _token(self) -> str:
+        if not self.status().configured:
+            raise BankProviderError(
+                "Sicredi Sandbox exige Client ID, Secret, certificado mTLS e escopo do produto contratado."
+            )
+        token_url = self.settings.sicredi_token_url.strip()
+        scope = self.settings.sicredi_scope.strip()
+        cache_key = f"{token_url}:{self.settings.sicredi_client_id}:{scope}"
+        now = time.time()
+        with self._token_lock:
+            cached = self._token_cache.get(cache_key)
+            if cached and cached[1] > now + 30:
+                return cached[0]
+        payload = {
+            "grant_type": "client_credentials",
+            "client_id": self.settings.sicredi_client_id,
+            "client_secret": self.settings.sicredi_client_secret,
+            "scope": scope,
+        }
+        try:
+            with httpx.Client(verify=self._ssl_context(), timeout=30.0) as client:
+                response = client.post(
+                    token_url,
+                    data=payload,
+                    headers={"Accept": "application/json", "Content-Type": "application/x-www-form-urlencoded"},
+                )
+        except httpx.HTTPError as exc:
+            raise BankProviderError("Falha de comunicação ao autenticar no Sicredi Sandbox.") from exc
+        if response.status_code >= 400:
+            detail = ""
+            try:
+                data = response.json()
+                if isinstance(data, dict):
+                    detail = str(data.get("error_description") or data.get("message") or data.get("error") or "")
+            except ValueError:
+                detail = response.text.strip()[:300]
+            suffix = f" {detail}" if detail else ""
+            raise BankProviderError(f"Sicredi recusou a autenticação OAuth2 (HTTP {response.status_code}).{suffix}")
+        try:
+            data = response.json()
+        except ValueError as exc:
+            raise BankProviderError("Sicredi retornou resposta inválida na autenticação.") from exc
+        token = str(data.get("access_token") or "")
+        if not token:
+            raise BankProviderError("Sicredi não retornou access_token.")
+        expires_in = max(60, int(data.get("expires_in") or 300))
+        with self._token_lock:
+            self._token_cache[cache_key] = (token, now + expires_in)
+        return token
+
+    def test_connection(self) -> dict[str, Any]:
+        token = self._token()
+        return {"reachable": True, "authenticated": True, "token_received": bool(token)}
+
 
 @dataclass(frozen=True)
 class BankProviderDescriptor:
@@ -299,12 +473,14 @@ class BankProviderDescriptor:
 BANK_PROVIDER_REGISTRY: dict[str, type[BankProvider]] = {
     "manual": ManualBankProvider,
     "inter": InterBankProvider,
+    "itau": ItauBankProvider,
+    "sicredi": SicrediBankProvider,
 }
 
 
 def bank_provider_descriptors() -> list[BankProviderDescriptor]:
     descriptors: list[BankProviderDescriptor] = []
-    labels = {"manual": "Manual / arquivo", "inter": "Banco Inter"}
+    labels = {"manual": "Manual / arquivo", "inter": "Banco Inter", "itau": "Itaú Empresas", "sicredi": "Sicredi"}
     for key, provider_class in BANK_PROVIDER_REGISTRY.items():
         provider = provider_class()
         descriptors.append(
