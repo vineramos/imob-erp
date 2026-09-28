@@ -336,7 +336,7 @@ def create_property(
         parking_spaces=payload.parking_spaces,
         furnished=payload.furnished,
         pets_allowed=payload.pets_allowed,
-        features=payload.features.model_dump(),
+        features=payload.features.model_dump(mode="json"),
         public_title=(payload.public_title or "").strip() or None,
         public_description=(payload.public_description or "").strip() or None,
         publication_enabled=payload.publication_enabled,
@@ -412,7 +412,7 @@ def update_property(
     item.parking_spaces = payload.parking_spaces
     item.furnished = payload.furnished
     item.pets_allowed = payload.pets_allowed
-    item.features = payload.features.model_dump()
+    item.features = payload.features.model_dump(mode="json")
     item.public_title = (payload.public_title or "").strip() or None
     item.public_description = (payload.public_description or "").strip() or None
 
