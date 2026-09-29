@@ -397,7 +397,7 @@ export function PropertyInstagramPublicationPanel({propertyId,permissions}:Props
           <div className="instagram-story-note"><CircleAlert size={14}/><span>O Story é publicado como mídia vertical. O Instagram não recebe uma legenda de post para Stories por este fluxo; qualquer texto precisa fazer parte da própria arte/imagem.</span></div>
           <div className="instagram-story-actions">
             <button className="button secondary" type="button" disabled={!canEdit||inactive||!storyDirty||!storyPhotoId||savingStory} onClick={()=>void saveStory()}><Save size={14}/>{savingStory?'Salvando...':storyDirty?'Salvar Story':'Story salvo'}</button>
-            <button className="button primary" type="button" disabled={!canPublish||inactive||!data.instagram_connected||data.story_status!=='ready'||storyDirty||publishingStory} onClick={()=>void publishStory()}><Send size={14}/>{publishingStory?'Publicando...':'Publicar Story'}</button>
+            <button className="button primary" type="button" disabled={!canPublish||inactive||!data.instagram_connected||!['ready','failed'].includes(data.story_status)||storyDirty||publishingStory} onClick={()=>void publishStory()}><Send size={14}/>{publishingStory?'Publicando...':data.story_status==='failed'&&data.story_media_id&&!data.story_description_media_id?'Tentar 2º Story novamente':data.story_status==='failed'?'Tentar novamente':'Publicar 2 Stories'}</button>
           </div>
         </div>
 
