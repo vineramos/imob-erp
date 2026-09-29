@@ -270,6 +270,36 @@ def public_story_media_url(
     return f"{base_url.rstrip('/')}/api/public/instagram-story-media/{organization_id}/{property_id}/{photo_id}?{query}"
 
 
+def sign_story_description_path(organization_id: UUID, property_id: UUID, expires: int) -> str:
+    message = f"{organization_id}:{property_id}:{expires}:story-description".encode("utf-8")
+    return hmac.new(_media_signing_key(), message, hashlib.sha256).hexdigest()
+
+
+def validate_story_description_signature(
+    organization_id: UUID,
+    property_id: UUID,
+    expires: int,
+    signature: str,
+) -> bool:
+    if expires < int(time.time()):
+        return False
+    expected = sign_story_description_path(organization_id, property_id, expires)
+    return hmac.compare_digest(expected, signature)
+
+
+def public_story_description_url(
+    *,
+    base_url: str,
+    organization_id: UUID,
+    property_id: UUID,
+    ttl_seconds: int = 3600,
+) -> str:
+    expires = int(time.time()) + ttl_seconds
+    signature = sign_story_description_path(organization_id, property_id, expires)
+    query = urlencode({"expires": expires, "signature": signature})
+    return f"{base_url.rstrip('/')}/api/public/instagram-story-description/{organization_id}/{property_id}?{query}"
+
+
 def wait_for_container(creds: InstagramCredentials, creation_id: str, *, attempts: int = 8) -> None:
     for index in range(attempts):
         payload = request_json(creds, "GET", creation_id, params={"fields": "status_code"})
