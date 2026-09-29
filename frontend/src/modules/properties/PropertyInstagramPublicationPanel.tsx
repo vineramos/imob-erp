@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowUp, Check, ChevronLeft, ChevronRight, CircleAlert, Instagram, Save, Send, X } from 'lucide-react'
+import { ArrowDown, ArrowUp, Check, ChevronLeft, ChevronRight, CircleAlert, Clock3, ExternalLink, History, Instagram, Save, Send, X } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { ApiError, apiBlobRequest, apiRequest } from '../../api/client'
 import './property-instagram-publication.css'
@@ -11,9 +11,16 @@ type Photo = {
   is_cover:boolean
   content_url:string
 }
+type InstagramPublicationHistoryItem = {
+  media_id:string
+  permalink:string|null
+  published_at:string
+  format:'carousel'|'single'|'story'|'reel'
+  photo_count:number
+}
 type InstagramPublication = {
   property_id:string
-  status:'draft'|'ready'|'published'|'inactive'|'failed'
+  status:'draft'|'ready'|'publishing'|'published'|'inactive'|'failed'
   format:'carousel'|'single'|'story'|'reel'
   caption:string
   photo_ids:string[]
@@ -24,6 +31,8 @@ type InstagramPublication = {
   inactivated_at:string|null
   inactivation_reason:string|null
   external_removal_pending:boolean
+  last_error:string|null
+  history:InstagramPublicationHistoryItem[]
   property_active:boolean
   instagram_connected:boolean
 }
@@ -46,7 +55,7 @@ function PhotoPreview({photo,onOpen,className=''}:{photo:Photo;onOpen?:(photo:Ph
 }
 
 const statusLabel:Record<InstagramPublication['status'],string>={
-  draft:'Rascunho',ready:'Pronto para publicar',published:'Publicado',inactive:'Inativo',failed:'Falha',
+  draft:'Rascunho',ready:'Pronto para publicar',publishing:'Publicando',published:'Publicado',inactive:'Inativo',failed:'Falha',
 }
 
 export function PropertyInstagramPublicationPanel({propertyId,permissions}:Props){
@@ -141,6 +150,7 @@ export function PropertyInstagramPublicationPanel({propertyId,permissions}:Props
   if(!data)return <section className="property-surface property-instagram-panel"><div className="form-alert danger-alert">{error||'Publicação indisponível.'}</div></section>
 
   const inactive=!data.property_active||data.status==='inactive'
+  const lastPublished=data.history[0]??(data.media_id&&data.published_at?{media_id:data.media_id,permalink:data.permalink,published_at:data.published_at,format:data.format,photo_count:photoIds.length}:null)
 
   return <section className="property-instagram-panel">
     {openPhoto&&<div className="instagram-photo-modal-backdrop" role="presentation" onMouseDown={event=>{if(event.target===event.currentTarget)setOpenPhoto(null)}}>
@@ -158,6 +168,18 @@ export function PropertyInstagramPublicationPanel({propertyId,permissions}:Props
     {error&&<div className="form-alert danger-alert">{error}</div>}
     {success&&<div className="form-alert success-alert">{success}</div>}
     {inactive&&<div className="instagram-inactive-alert"><CircleAlert size={17}/><div><strong>Publicação inativada junto com o imóvel</strong><span>{data.inactivation_reason||'Este imóvel não está mais disponível para anúncio.'}{data.external_removal_pending?' A retirada do conteúdo já publicado na Meta precisa ser concluída quando a conexão permitir essa ação.':''}</span></div></div>}
+    {data.status==='failed'&&data.last_error&&<div className="instagram-inactive-alert instagram-failure-alert"><CircleAlert size={17}/><div><strong>Falha na última tentativa de publicação</strong><span>{data.last_error}</span></div></div>}
+
+    {lastPublished&&<section className="property-surface instagram-publication-summary">
+      <div className="instagram-publication-summary-main">
+        <span className="instagram-publication-summary-icon"><Check size={17}/></span>
+        <div><span>ÚLTIMA PUBLICAÇÃO</span><h3>{lastPublished.format==='carousel'?'Carrossel':'Foto única'} · {lastPublished.photo_count} {lastPublished.photo_count===1?'imagem':'imagens'}</h3><p><Clock3 size={13}/>{new Date(lastPublished.published_at).toLocaleString('pt-BR')}</p></div>
+      </div>
+      <div className="instagram-publication-summary-actions">
+        <small>ID {lastPublished.media_id}</small>
+        {lastPublished.permalink&&<a className="button secondary compact-button" href={lastPublished.permalink} target="_blank" rel="noreferrer"><ExternalLink size={14}/>Abrir no Instagram</a>}
+      </div>
+    </section>}
 
     <div className="instagram-editor-layout">
       <div className="instagram-editor-column">
@@ -221,6 +243,15 @@ export function PropertyInstagramPublicationPanel({propertyId,permissions}:Props
           <button className="button secondary" type="button" disabled={!canEdit||saving||inactive||!dirty} onClick={()=>void save()}><Save size={14}/>{saving?'Salvando...':'Salvar rascunho'}</button>
           <button className="button primary" type="button" disabled={!canPublish||inactive||!data.instagram_connected||data.status!=='ready'||dirty||publishing} title={!data.instagram_connected?'Conecte a conta do Instagram primeiro.':dirty?'Salve as alterações antes de publicar.':''} onClick={()=>void publish()}><Send size={14}/>{publishing?'Publicando...':'Publicar no Instagram'}</button>
         </section>
+
+        {data.history.length>0&&<section className="property-surface instagram-history-card">
+          <div className="instagram-history-heading"><div><span>HISTÓRICO</span><h3>Publicações recentes</h3></div><History size={17}/></div>
+          <div className="instagram-history-list">{data.history.slice(0,5).map((entry,index)=><article key={entry.media_id}>
+            <span className="instagram-history-index">{index+1}</span>
+            <div><strong>{entry.format==='carousel'?'Carrossel':'Foto única'} · {entry.photo_count} {entry.photo_count===1?'imagem':'imagens'}</strong><small>{new Date(entry.published_at).toLocaleString('pt-BR')}</small></div>
+            {entry.permalink?<a href={entry.permalink} target="_blank" rel="noreferrer" title="Abrir no Instagram"><ExternalLink size={14}/></a>:<span/>}
+          </article>)}</div>
+        </section>}
       </aside>
     </div>
   </section>
