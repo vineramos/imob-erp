@@ -246,7 +246,7 @@ def public_story_media_url(
     ttl_seconds: int = 3600,
 ) -> str:
     expires = int(time.time()) + ttl_seconds
-    normalized_zoom = round(max(0.65, min(2.0, zoom)), 2)
+    normalized_zoom = round(max(0.2, min(2.0, zoom)), 2)
     signature = sign_story_media_path(organization_id, property_id, photo_id, expires, normalized_zoom)
     query = urlencode({"expires": expires, "zoom": f"{normalized_zoom:.2f}", "signature": signature})
     return f"{base_url.rstrip('/')}/api/public/instagram-story-media/{organization_id}/{property_id}/{photo_id}?{query}"
