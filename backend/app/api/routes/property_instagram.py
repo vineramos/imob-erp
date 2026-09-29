@@ -6,7 +6,8 @@ from typing import Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
-from PIL import Image, ImageOps
+from PIL import Image, ImageDraw, ImageFont, ImageOps
+import qrcode
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -20,11 +21,13 @@ from app.integrations.instagram import (
     credentials as instagram_credentials,
     media_details,
     public_media_url,
+    public_story_description_url,
     public_story_media_url,
     publish_carousel,
     publish_single,
     publish_story,
     validate_media_signature,
+    validate_story_description_signature,
     validate_story_media_signature,
 )
 
@@ -69,6 +72,10 @@ class InstagramPublicationResponse(BaseModel):
     story_photo_id: UUID | None = None
     story_media_id: str | None = None
     story_zoom: float = 1.0
+    story_offset_x: float = 0.0
+    story_offset_y: float = 0.0
+    story_description_media_id: str | None = None
+    story_site_url: str | None = None
     story_published_at: str | None = None
     story_last_error: str | None = None
     property_active: bool
@@ -87,7 +94,9 @@ class InstagramStoryUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     photo_id: UUID
-    zoom: float = Field(default=1.0, ge=0.65, le=2.0)
+    zoom: float = Field(default=1.0, ge=0.2, le=2.0)
+    offset_x: float = Field(default=0.0, ge=-1.0, le=1.0)
+    offset_y: float = Field(default=0.0, ge=-1.0, le=1.0)
 
 
 def _property(db: Session, organization_id: UUID, property_id: UUID) -> Property:
@@ -224,6 +233,10 @@ def _response(db: Session, item: Property, photos: list[PropertyPhoto]) -> Insta
         story_photo_id=UUID(str((state.get("story") or {}).get("photo_id"))) if (state.get("story") or {}).get("photo_id") else None,
         story_media_id=(str((state.get("story") or {}).get("media_id") or "").strip() or None),
         story_zoom=float((state.get("story") or {}).get("zoom") or 1.0),
+        story_offset_x=float((state.get("story") or {}).get("offset_x") or 0.0),
+        story_offset_y=float((state.get("story") or {}).get("offset_y") or 0.0),
+        story_description_media_id=(str((state.get("story") or {}).get("description_media_id") or "").strip() or None),
+        story_site_url=(str((state.get("story") or {}).get("site_url") or "").strip() or None),
         story_published_at=(state.get("story") or {}).get("published_at"),
         story_last_error=(str((state.get("story") or {}).get("last_error") or "").strip() or None),
         property_active=not inactive,
@@ -541,6 +554,8 @@ def update_instagram_story(
         "status": "ready",
         "photo_id": str(payload.photo_id),
         "zoom": round(payload.zoom, 2),
+        "offset_x": round(payload.offset_x, 3),
+        "offset_y": round(payload.offset_y, 3),
         "updated_at": datetime.now(timezone.utc).isoformat(),
         "last_error": None,
     })
