@@ -801,6 +801,12 @@ def update_instagram_story(
         "zoom": round(payload.zoom, 2),
         "offset_x": round(payload.offset_x, 3),
         "offset_y": round(payload.offset_y, 3),
+        "text_scale": round(payload.text_scale, 2),
+        "qr_scale": round(payload.qr_scale, 2),
+        "text_offset_x": round(payload.text_offset_x, 3),
+        "text_offset_y": round(payload.text_offset_y, 3),
+        "qr_offset_x": round(payload.qr_offset_x, 3),
+        "qr_offset_y": round(payload.qr_offset_y, 3),
         "media_id": None,
         "description_media_id": None,
         "permalink": None,
@@ -894,16 +900,13 @@ def publish_instagram_story_property(
         existing_media_id = str(story.get("media_id") or "").strip()
         if existing_media_id:
             media_id = existing_media_id
-            details = media_details(creds, media_id)
         else:
             media_id = publish_story(creds, image_url=image_url)
-            details = media_details(creds, media_id)
             partial_state = dict(item.instagram_publication or {})
             partial_story = dict(partial_state.get("story") or {})
             partial_story.update({
                 "status": "publishing",
                 "media_id": media_id,
-                "permalink": str(details.get("permalink") or "").strip() or None,
                 "site_url": _story_site_url(request, item),
                 "updated_at": datetime.now(timezone.utc).isoformat(),
                 "last_error": None,
@@ -912,13 +915,13 @@ def publish_instagram_story_property(
             item.instagram_publication = partial_state
             db.commit()
 
-        existing_description_media_id = str(story.get("description_media_id") or "").strip()
+        current_story = dict((dict(item.instagram_publication or {}).get("story") or {}))
+        existing_description_media_id = str(current_story.get("description_media_id") or "").strip()
         if existing_description_media_id:
             description_media_id = existing_description_media_id
-            description_details = media_details(creds, description_media_id)
         else:
             description_media_id = publish_story(creds, image_url=description_url)
-            description_details = media_details(creds, description_media_id)
+
     except HTTPException as exc:
         failed_state = dict(item.instagram_publication or {})
         failed_story = dict(failed_state.get("story") or {})
@@ -935,8 +938,8 @@ def publish_instagram_story_property(
     now = datetime.now(timezone.utc)
     final_state = dict(item.instagram_publication or {})
     final_story = dict(final_state.get("story") or {})
-    permalink = str(details.get("permalink") or "").strip() or None
-    description_permalink = str(description_details.get("permalink") or "").strip() or None
+    permalink = None
+    description_permalink = None
     site_url = _story_site_url(request, item)
     final_story.update({
         "status": "published",
