@@ -33,6 +33,11 @@ type InstagramPublication = {
   external_removal_pending:boolean
   last_error:string|null
   history:InstagramPublicationHistoryItem[]
+  story_status:'draft'|'ready'|'publishing'|'published'|'failed'
+  story_photo_id:string|null
+  story_media_id:string|null
+  story_published_at:string|null
+  story_last_error:string|null
   property_active:boolean
   instagram_connected:boolean
 }
@@ -57,6 +62,12 @@ function PhotoPreview({photo,onOpen,className=''}:{photo:Photo;onOpen?:(photo:Ph
 const statusLabel:Record<InstagramPublication['status'],string>={
   draft:'Rascunho',ready:'Pronto para publicar',publishing:'Publicando',published:'Publicado',inactive:'Inativo',failed:'Falha',
 }
+const storyStatusLabel:Record<InstagramPublication['story_status'],string>={
+  draft:'Rascunho',ready:'Pronto',publishing:'Publicando',published:'Publicado',failed:'Falha',
+}
+const formatLabel=(value:InstagramPublicationHistoryItem['format'])=>({
+  carousel:'Carrossel',single:'Foto única',story:'Story',reel:'Reel',
+}[value])
 
 export function PropertyInstagramPublicationPanel({propertyId,permissions}:Props){
   const canEdit=permissions.includes('properties.edit')
@@ -72,12 +83,15 @@ export function PropertyInstagramPublicationPanel({propertyId,permissions}:Props
   const [success,setSuccess]=useState('')
   const [openPhoto,setOpenPhoto]=useState<Photo|null>(null)
   const [previewIndex,setPreviewIndex]=useState(0)
+  const [storyPhotoId,setStoryPhotoId]=useState<string|null>(null)
+  const [savingStory,setSavingStory]=useState(false)
+  const [publishingStory,setPublishingStory]=useState(false)
 
   useEffect(()=>{
     let active=true
     setLoading(true);setError('')
     void apiRequest<InstagramPublication>(`/properties/${propertyId}/instagram-publication`)
-      .then(result=>{if(!active)return;setData(result);setCaption(result.caption);setPhotoIds(result.photo_ids);setFormat(result.format)})
+      .then(result=>{if(!active)return;setData(result);setCaption(result.caption);setPhotoIds(result.photo_ids);setFormat(result.format);setStoryPhotoId(result.story_photo_id)})
       .catch(cause=>{if(active)setError(cause instanceof ApiError?cause.detail:'Não foi possível carregar a publicação do Instagram.')})
       .finally(()=>{if(active)setLoading(false)})
     return()=>{active=false}
@@ -96,7 +110,9 @@ export function PropertyInstagramPublicationPanel({propertyId,permissions}:Props
   const selected=photoIds.map(id=>byId.get(id)).filter((item):item is Photo=>Boolean(item))
   const available=(data?.photos??[]).filter(photo=>!photoIds.includes(photo.id))
   const previewPhoto=selected[previewIndex]??selected[0]??null
+  const storyPhoto=(data?.photos??[]).find(photo=>photo.id===storyPhotoId)??null
   const dirty=Boolean(data)&&(caption!==data!.caption||format!==data!.format||photoIds.join('|')!==data!.photo_ids.join('|'))
+  const storyDirty=Boolean(data)&&storyPhotoId!==data!.story_photo_id
 
   useEffect(()=>{
     setPreviewIndex(current=>selected.length===0?0:Math.min(current,selected.length-1))
@@ -146,6 +162,31 @@ export function PropertyInstagramPublicationPanel({propertyId,permissions}:Props
     finally{setPublishing(false)}
   }
 
+  async function saveStory(){
+    if(!canEdit||!data||!storyPhotoId)return
+    setSavingStory(true);setError('');setSuccess('')
+    try{
+      const result=await apiRequest<InstagramPublication>(`/properties/${propertyId}/instagram-publication/story`,{
+        method:'PUT',
+        body:JSON.stringify({photo_id:storyPhotoId}),
+      })
+      setData(result);setStoryPhotoId(result.story_photo_id)
+      setSuccess('Story salvo. A imagem fica independente do carrossel do post.')
+    }catch(cause){setError(cause instanceof ApiError?cause.detail:'Não foi possível salvar o Story.')}
+    finally{setSavingStory(false)}
+  }
+
+  async function publishStory(){
+    if(!canPublish||!data||storyDirty||!storyPhotoId)return
+    setPublishingStory(true);setError('');setSuccess('')
+    try{
+      const result=await apiRequest<InstagramPublication>(`/properties/${propertyId}/instagram-publication/story/publish`,{method:'POST'})
+      setData(result);setStoryPhotoId(result.story_photo_id)
+      setSuccess('Story publicado no Instagram com sucesso.')
+    }catch(cause){setError(cause instanceof ApiError?cause.detail:'Não foi possível publicar o Story no Instagram.')}
+    finally{setPublishingStory(false)}
+  }
+
   if(loading)return <section className="property-surface property-instagram-panel"><div className="instagram-loading">Carregando publicação do Instagram...</div></section>
   if(!data)return <section className="property-surface property-instagram-panel"><div className="form-alert danger-alert">{error||'Publicação indisponível.'}</div></section>
 
@@ -173,7 +214,7 @@ export function PropertyInstagramPublicationPanel({propertyId,permissions}:Props
     {lastPublished&&<section className="property-surface instagram-publication-summary">
       <div className="instagram-publication-summary-main">
         <span className="instagram-publication-summary-icon"><Check size={17}/></span>
-        <div><span>ÚLTIMA PUBLICAÇÃO</span><h3>{lastPublished.format==='carousel'?'Carrossel':'Foto única'} · {lastPublished.photo_count} {lastPublished.photo_count===1?'imagem':'imagens'}</h3><p><Clock3 size={13}/>{new Date(lastPublished.published_at).toLocaleString('pt-BR')}</p></div>
+        <div><span>ÚLTIMA PUBLICAÇÃO</span><h3>{formatLabel(lastPublished.format)} · {lastPublished.photo_count} {lastPublished.photo_count===1?'imagem':'imagens'}</h3><p><Clock3 size={13}/>{new Date(lastPublished.published_at).toLocaleString('pt-BR')}</p></div>
       </div>
       <div className="instagram-publication-summary-actions">
         <small>ID {lastPublished.media_id}</small>
@@ -248,11 +289,46 @@ export function PropertyInstagramPublicationPanel({propertyId,permissions}:Props
           <div className="instagram-history-heading"><div><span>HISTÓRICO</span><h3>Publicações recentes</h3></div><History size={17}/></div>
           <div className="instagram-history-list">{data.history.slice(0,5).map((entry,index)=><article key={entry.media_id}>
             <span className="instagram-history-index">{index+1}</span>
-            <div><strong>{entry.format==='carousel'?'Carrossel':'Foto única'} · {entry.photo_count} {entry.photo_count===1?'imagem':'imagens'}</strong><small>{new Date(entry.published_at).toLocaleString('pt-BR')}</small></div>
+            <div><strong>{formatLabel(entry.format)} · {entry.photo_count} {entry.photo_count===1?'imagem':'imagens'}</strong><small>{new Date(entry.published_at).toLocaleString('pt-BR')}</small></div>
             {entry.permalink?<a href={entry.permalink} target="_blank" rel="noreferrer" title="Abrir no Instagram"><ExternalLink size={14}/></a>:<span/>}
           </article>)}</div>
         </section>}
       </aside>
     </div>
+
+    <section className="property-surface instagram-story-workspace">
+      <div className="instagram-story-heading">
+        <div><span>STORY</span><h3>Publicação vertical</h3><p>Escolha uma foto específica para o Story. Ela é salva separadamente do post e do carrossel.</p></div>
+        <i className={'status-badge '+(data.story_status==='published'?'success':data.story_status==='failed'?'danger':data.story_status==='ready'?'success':'neutral')}>{storyStatusLabel[data.story_status]}</i>
+      </div>
+
+      {data.story_status==='failed'&&data.story_last_error&&<div className="instagram-inactive-alert instagram-failure-alert"><CircleAlert size={17}/><div><strong>Falha no Story</strong><span>{data.story_last_error}</span></div></div>}
+
+      <div className="instagram-story-layout">
+        <div className="instagram-story-picker">
+          <div className="instagram-story-picker-head"><strong>Foto do Story</strong><span>Prévia em 9:16</span></div>
+          <div className="instagram-story-photo-grid">
+            {data.photos.map(photo=><button key={photo.id} type="button" className={storyPhotoId===photo.id?'active':''} disabled={!canEdit||inactive} onClick={()=>setStoryPhotoId(photo.id)}>
+              <div><PhotoPreview photo={photo}/></div>
+              <span>{photo.caption||photo.filename}</span>
+              {storyPhotoId===photo.id&&<Check size={14}/>}
+            </button>)}
+          </div>
+          <div className="instagram-story-note"><CircleAlert size={14}/><span>O Story é publicado como mídia vertical. O Instagram não recebe uma legenda de post para Stories por este fluxo; qualquer texto precisa fazer parte da própria arte/imagem.</span></div>
+          <div className="instagram-story-actions">
+            <button className="button secondary" type="button" disabled={!canEdit||inactive||!storyDirty||!storyPhotoId||savingStory} onClick={()=>void saveStory()}><Save size={14}/>{savingStory?'Salvando...':storyDirty?'Salvar Story':'Story salvo'}</button>
+            <button className="button primary" type="button" disabled={!canPublish||inactive||!data.instagram_connected||data.story_status!=='ready'||storyDirty||publishingStory} onClick={()=>void publishStory()}><Send size={14}/>{publishingStory?'Publicando...':'Publicar Story'}</button>
+          </div>
+        </div>
+
+        <div className="instagram-story-preview-shell">
+          <div className="instagram-story-preview">
+            {storyPhoto?<PhotoPreview photo={storyPhoto} onOpen={setOpenPhoto}/>:<div className="instagram-story-preview-empty"><Instagram size={24}/><span>Selecione uma foto</span></div>}
+            <div className="instagram-story-top"><span className="instagram-preview-avatar"><Instagram size={14}/></span><strong>imob.erp</strong><span>agora</span><b>•••</b></div>
+          </div>
+          {data.story_published_at&&<div className="instagram-story-last-published"><Check size={14}/><span>Último Story: {new Date(data.story_published_at).toLocaleString('pt-BR')}</span></div>}
+        </div>
+      </div>
+    </section>
   </section>
 }
