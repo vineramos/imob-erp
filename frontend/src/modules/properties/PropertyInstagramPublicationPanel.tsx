@@ -1,5 +1,5 @@
-import { ArrowDown, ArrowUp, Check, ChevronLeft, ChevronRight, CircleAlert, Clock3, ExternalLink, History, Instagram, Minus, Plus, RotateCcw, Save, Send, X } from 'lucide-react'
-import { type CSSProperties, useEffect, useMemo, useState } from 'react'
+import { ArrowDown, ArrowUp, Check, ChevronLeft, ChevronRight, CircleAlert, Clock3, Copy, ExternalLink, History, Instagram, Move, Minus, Plus, RotateCcw, Save, Send, X } from 'lucide-react'
+import { type CSSProperties, type PointerEvent as ReactPointerEvent, useEffect, useMemo, useRef, useState } from 'react'
 import { ApiError, apiBlobRequest, apiRequest } from '../../api/client'
 import './property-instagram-publication.css'
 
@@ -37,6 +37,10 @@ type InstagramPublication = {
   story_photo_id:string|null
   story_media_id:string|null
   story_zoom:number
+  story_offset_x:number
+  story_offset_y:number
+  story_description_media_id:string|null
+  story_site_url:string|null
   story_published_at:string|null
   story_last_error:string|null
   property_active:boolean
@@ -86,6 +90,11 @@ export function PropertyInstagramPublicationPanel({propertyId,permissions}:Props
   const [previewIndex,setPreviewIndex]=useState(0)
   const [storyPhotoId,setStoryPhotoId]=useState<string|null>(null)
   const [storyZoom,setStoryZoom]=useState(1)
+  const [storyOffsetX,setStoryOffsetX]=useState(0)
+  const [storyOffsetY,setStoryOffsetY]=useState(0)
+  const [cropOpen,setCropOpen]=useState(false)
+  const cropFrameRef=useRef<HTMLDivElement|null>(null)
+  const cropDragRef=useRef<{pointerId:number;clientX:number;clientY:number;offsetX:number;offsetY:number}|null>(null)
   const [savingStory,setSavingStory]=useState(false)
   const [publishingStory,setPublishingStory]=useState(false)
 
@@ -93,7 +102,7 @@ export function PropertyInstagramPublicationPanel({propertyId,permissions}:Props
     let active=true
     setLoading(true);setError('')
     void apiRequest<InstagramPublication>(`/properties/${propertyId}/instagram-publication`)
-      .then(result=>{if(!active)return;setData(result);setCaption(result.caption);setPhotoIds(result.photo_ids);setFormat(result.format);setStoryPhotoId(result.story_photo_id);setStoryZoom(result.story_zoom||1)})
+      .then(result=>{if(!active)return;setData(result);setCaption(result.caption);setPhotoIds(result.photo_ids);setFormat(result.format);setStoryPhotoId(result.story_photo_id);setStoryZoom(result.story_zoom||1);setStoryOffsetX(result.story_offset_x||0);setStoryOffsetY(result.story_offset_y||0)})
       .catch(cause=>{if(active)setError(cause instanceof ApiError?cause.detail:'Não foi possível carregar a publicação do Instagram.')})
       .finally(()=>{if(active)setLoading(false)})
     return()=>{active=false}
@@ -114,7 +123,7 @@ export function PropertyInstagramPublicationPanel({propertyId,permissions}:Props
   const previewPhoto=selected[previewIndex]??selected[0]??null
   const storyPhoto=(data?.photos??[]).find(photo=>photo.id===storyPhotoId)??null
   const dirty=Boolean(data)&&(caption!==data!.caption||format!==data!.format||photoIds.join('|')!==data!.photo_ids.join('|'))
-  const storyDirty=Boolean(data)&&(storyPhotoId!==data!.story_photo_id||Math.abs(storyZoom-(data!.story_zoom||1))>0.001)
+  const storyDirty=Boolean(data)&&(storyPhotoId!==data!.story_photo_id||Math.abs(storyZoom-(data!.story_zoom||1))>0.001||Math.abs(storyOffsetX-(data!.story_offset_x||0))>0.001||Math.abs(storyOffsetY-(data!.story_offset_y||0))>0.001)
 
   useEffect(()=>{
     setPreviewIndex(current=>selected.length===0?0:Math.min(current,selected.length-1))
@@ -164,15 +173,45 @@ export function PropertyInstagramPublicationPanel({propertyId,permissions}:Props
     finally{setPublishing(false)}
   }
 
+  function resetStoryCrop(){
+    setStoryZoom(1);setStoryOffsetX(0);setStoryOffsetY(0)
+  }
+
+  function beginStoryDrag(event:ReactPointerEvent<HTMLDivElement>){
+    if(!cropFrameRef.current)return
+    event.currentTarget.setPointerCapture(event.pointerId)
+    cropDragRef.current={pointerId:event.pointerId,clientX:event.clientX,clientY:event.clientY,offsetX:storyOffsetX,offsetY:storyOffsetY}
+  }
+
+  function moveStoryDrag(event:ReactPointerEvent<HTMLDivElement>){
+    const drag=cropDragRef.current
+    const frame=cropFrameRef.current
+    if(!drag||drag.pointerId!==event.pointerId||!frame)return
+    const rect=frame.getBoundingClientRect()
+    const nextX=Math.max(-1,Math.min(1,drag.offsetX+(event.clientX-drag.clientX)/(rect.width/2)))
+    const nextY=Math.max(-1,Math.min(1,drag.offsetY+(event.clientY-drag.clientY)/(rect.height/2)))
+    setStoryOffsetX(Math.round(nextX*1000)/1000)
+    setStoryOffsetY(Math.round(nextY*1000)/1000)
+  }
+
+  function endStoryDrag(event:ReactPointerEvent<HTMLDivElement>){
+    if(cropDragRef.current?.pointerId===event.pointerId)cropDragRef.current=null
+  }
+
+  async function copyStorySite(){
+    if(!data?.story_site_url)return
+    try{await navigator.clipboard.writeText(data.story_site_url);setSuccess('Link público do imóvel copiado.')}catch{}
+  }
+
   async function saveStory(){
     if(!canEdit||!data||!storyPhotoId)return
     setSavingStory(true);setError('');setSuccess('')
     try{
       const result=await apiRequest<InstagramPublication>(`/properties/${propertyId}/instagram-publication/story`,{
         method:'PUT',
-        body:JSON.stringify({photo_id:storyPhotoId,zoom:storyZoom}),
+        body:JSON.stringify({photo_id:storyPhotoId,zoom:storyZoom,offset_x:storyOffsetX,offset_y:storyOffsetY}),
       })
-      setData(result);setStoryPhotoId(result.story_photo_id);setStoryZoom(result.story_zoom||1)
+      setData(result);setStoryPhotoId(result.story_photo_id);setStoryZoom(result.story_zoom||1);setStoryOffsetX(result.story_offset_x||0);setStoryOffsetY(result.story_offset_y||0)
       setSuccess('Story salvo. A imagem fica independente do carrossel do post.')
     }catch(cause){setError(cause instanceof ApiError?cause.detail:'Não foi possível salvar o Story.')}
     finally{setSavingStory(false)}
@@ -183,8 +222,8 @@ export function PropertyInstagramPublicationPanel({propertyId,permissions}:Props
     setPublishingStory(true);setError('');setSuccess('')
     try{
       const result=await apiRequest<InstagramPublication>(`/properties/${propertyId}/instagram-publication/story/publish`,{method:'POST'})
-      setData(result);setStoryPhotoId(result.story_photo_id)
-      setSuccess('Story publicado no Instagram com sucesso.')
+      setData(result);setStoryPhotoId(result.story_photo_id);setStoryZoom(result.story_zoom||1);setStoryOffsetX(result.story_offset_x||0);setStoryOffsetY(result.story_offset_y||0)
+      setSuccess('2 Stories publicados: foto enquadrada + card com detalhes e QR Code do imóvel.')
     }catch(cause){setError(cause instanceof ApiError?cause.detail:'Não foi possível publicar o Story no Instagram.')}
     finally{setPublishingStory(false)}
   }
@@ -196,6 +235,30 @@ export function PropertyInstagramPublicationPanel({propertyId,permissions}:Props
   const lastPublished=data.history[0]??(data.media_id&&data.published_at?{media_id:data.media_id,permalink:data.permalink,published_at:data.published_at,format:data.format,photo_count:photoIds.length}:null)
 
   return <section className="property-instagram-panel">
+    {cropOpen&&storyPhoto&&<div className="instagram-story-crop-backdrop" role="presentation" onMouseDown={event=>{if(event.target===event.currentTarget)setCropOpen(false)}}>
+      <section className="instagram-story-crop-modal" role="dialog" aria-modal="true" aria-label="Editar enquadramento do Story">
+        <header><div><span>ENQUADRAMENTO DO STORY</span><strong>Arraste e aproxime como quiser</strong></div><button type="button" onClick={()=>setCropOpen(false)} aria-label="Fechar"><X size={18}/></button></header>
+        <div className="instagram-story-crop-body">
+          <div className="instagram-story-crop-stage" onPointerDown={beginStoryDrag} onPointerMove={moveStoryDrag} onPointerUp={endStoryDrag} onPointerCancel={endStoryDrag}>
+            <div className="instagram-story-crop-image-layer">
+              <PhotoPreview photo={storyPhoto} imageStyle={{transform:`translate(${storyOffsetX*50}%, ${storyOffsetY*50}%) scale(${storyZoom})`}}/>
+            </div>
+            <div ref={cropFrameRef} className="instagram-story-crop-frame"><span>ÁREA QUE SERÁ PUBLICADA</span></div>
+          </div>
+          <aside className="instagram-story-crop-controls">
+            <div><span>Zoom</span><b>{Math.round(storyZoom*100)}%</b></div>
+            <div className="instagram-story-zoom-row">
+              <button type="button" disabled={storyZoom<=.2} onClick={()=>setStoryZoom(current=>Math.max(.2,Math.round((current-.05)*100)/100))}><Minus size={14}/></button>
+              <input type="range" min=".2" max="2" step=".05" value={storyZoom} onChange={event=>setStoryZoom(Number(event.target.value))}/>
+              <button type="button" disabled={storyZoom>=2} onClick={()=>setStoryZoom(current=>Math.min(2,Math.round((current+.05)*100)/100))}><Plus size={14}/></button>
+            </div>
+            <div className="instagram-story-crop-position"><Move size={15}/><span>Arraste a foto diretamente para mudar o ponto central.</span></div>
+            <button className="button secondary" type="button" onClick={resetStoryCrop}><RotateCcw size={14}/>Centralizar e resetar</button>
+            <button className="button primary" type="button" onClick={()=>setCropOpen(false)}><Check size={14}/>Usar este enquadramento</button>
+          </aside>
+        </div>
+      </section>
+    </div>}
     {openPhoto&&<div className="instagram-photo-modal-backdrop" role="presentation" onMouseDown={event=>{if(event.target===event.currentTarget)setOpenPhoto(null)}}>
       <section className="instagram-photo-modal" role="dialog" aria-modal="true" aria-label="Visualização ampliada da foto">
         <header><div><span>FOTO DO IMÓVEL</span><strong>{openPhoto.caption||openPhoto.filename}</strong></div><button type="button" onClick={()=>setOpenPhoto(null)} aria-label="Fechar"><X size={18}/></button></header>
@@ -317,14 +380,19 @@ export function PropertyInstagramPublicationPanel({propertyId,permissions}:Props
             </button>)}
           </div>
           <div className="instagram-story-zoom-control">
-            <div className="instagram-story-zoom-head"><div><strong>Enquadramento</strong><span>Zoom da imagem no Story</span></div><b>{Math.round(storyZoom*100)}%</b></div>
+            <div className="instagram-story-zoom-head"><div><strong>Enquadramento</strong><span>Zoom e posição da imagem no Story</span></div><b>{Math.round(storyZoom*100)}%</b></div>
             <div className="instagram-story-zoom-row">
               <button type="button" disabled={!canEdit||inactive||storyZoom<=0.2} onClick={()=>setStoryZoom(current=>Math.max(.2,Math.round((current-.05)*100)/100))} aria-label="Diminuir zoom"><Minus size={14}/></button>
               <input disabled={!canEdit||inactive} type="range" min="0.2" max="2" step="0.05" value={storyZoom} onChange={event=>setStoryZoom(Number(event.target.value))}/>
               <button type="button" disabled={!canEdit||inactive||storyZoom>=2} onClick={()=>setStoryZoom(current=>Math.min(2,Math.round((current+.05)*100)/100))} aria-label="Aumentar zoom"><Plus size={14}/></button>
-              <button className="instagram-story-reset" type="button" disabled={!canEdit||inactive||Math.abs(storyZoom-1)<.001} onClick={()=>setStoryZoom(1)}><RotateCcw size={13}/>Resetar</button>
+              <button className="instagram-story-reset" type="button" disabled={!canEdit||inactive} onClick={resetStoryCrop}><RotateCcw size={13}/>Resetar</button>
             </div>
-            <small>A prévia reproduz o corte enviado à Meta. Abaixo de 100%, podem aparecer faixas para preservar mais da foto.</small>
+            <button className="button secondary instagram-story-edit-crop" type="button" disabled={!canEdit||inactive||!storyPhoto} onClick={()=>setCropOpen(true)}><Move size={14}/>Editar enquadramento</button>
+            <small>No editor você pode arrastar a foto, dar zoom e ver claramente o que fica dentro ou fora do Story.</small>
+          </div>
+          <div className="instagram-story-sequence">
+            <article><b>1</b><div><strong>Story da foto</strong><span>Imagem com o enquadramento que você definiu.</span></div></article>
+            <article><b>2</b><div><strong>Story com os detalhes</strong><span>Título, localização, preço, características e QR Code para abrir o imóvel no site.</span></div></article>
           </div>
           <div className="instagram-story-note"><CircleAlert size={14}/><span>O Story é publicado como mídia vertical. O Instagram não recebe uma legenda de post para Stories por este fluxo; qualquer texto precisa fazer parte da própria arte/imagem.</span></div>
           <div className="instagram-story-actions">
@@ -335,10 +403,11 @@ export function PropertyInstagramPublicationPanel({propertyId,permissions}:Props
 
         <div className="instagram-story-preview-shell">
           <div className="instagram-story-preview">
-            {storyPhoto?<PhotoPreview photo={storyPhoto} onOpen={setOpenPhoto} imageStyle={{transform:`scale(${storyZoom})`}}/>:<div className="instagram-story-preview-empty"><Instagram size={24}/><span>Selecione uma foto</span></div>}
+            {storyPhoto?<PhotoPreview photo={storyPhoto} onOpen={setOpenPhoto} imageStyle={{transform:`translate(${storyOffsetX*50}%, ${storyOffsetY*50}%) scale(${storyZoom})`}}/>:<div className="instagram-story-preview-empty"><Instagram size={24}/><span>Selecione uma foto</span></div>}
             <div className="instagram-story-top"><span className="instagram-preview-avatar"><Instagram size={14}/></span><strong>imob.erp</strong><span>agora</span><b>•••</b></div>
           </div>
-          {data.story_published_at&&<div className="instagram-story-last-published"><Check size={14}/><span>Último Story: {new Date(data.story_published_at).toLocaleString('pt-BR')}</span></div>}
+          {data.story_published_at&&<div className="instagram-story-last-published"><Check size={14}/><span>Último envio: 2 Stories · {new Date(data.story_published_at).toLocaleString('pt-BR')}</span></div>}
+          {data.story_site_url&&<button className="instagram-story-site-link" type="button" onClick={()=>void copyStorySite()}><Copy size={13}/><span>Copiar link do imóvel</span></button>}
         </div>
       </div>
     </section>
