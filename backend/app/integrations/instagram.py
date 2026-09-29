@@ -124,8 +124,18 @@ def _meta_error(response: httpx.Response) -> str:
             if isinstance(error, dict):
                 message = str(error.get("message") or "").strip()
                 code = str(error.get("code") or "").strip()
+                subcode = str(error.get("error_subcode") or "").strip()
+                user_title = str(error.get("error_user_title") or "").strip()
+                suffix_parts = []
+                if code:
+                    suffix_parts.append(f"Meta {code}")
+                if subcode:
+                    suffix_parts.append(f"subcode {subcode}")
+                if user_title:
+                    suffix_parts.append(user_title)
+                suffix = f" ({' · '.join(suffix_parts)})" if suffix_parts else ""
                 if message:
-                    return f"{message}{f' (Meta {code})' if code else ''}"
+                    return f"{message}{suffix}"
     except ValueError:
         pass
     return f"Meta retornou HTTP {response.status_code}."
@@ -327,6 +337,32 @@ def create_image_container(creds: InstagramCredentials, *, image_url: str, is_ca
     return creation_id
 
 
+def _publish_creation(creds: InstagramCredentials, creation_id: str, *, retry_media_builder: bool = True) -> str:
+    attempts = 3 if retry_media_builder else 1
+    last_error: HTTPException | None = None
+    for attempt in range(attempts):
+        try:
+            published = request_json(
+                creds,
+                "POST",
+                f"{creds.account_id}/media_publish",
+                data={"creation_id": creation_id},
+            )
+            media_id = str(published.get("id") or "").strip()
+            if not media_id:
+                raise HTTPException(status_code=502, detail="A Meta não retornou o ID da publicação.")
+            return media_id
+        except HTTPException as exc:
+            last_error = exc
+            detail = str(exc.detail)
+            if "2207008" not in detail or attempt >= attempts - 1:
+                raise
+            time.sleep(5 * (attempt + 1))
+    if last_error is not None:
+        raise last_error
+    raise HTTPException(status_code=502, detail="Não foi possível concluir a publicação na Meta.")
+
+
 def publish_single(creds: InstagramCredentials, *, image_url: str, caption: str) -> str:
     if not creds.account_id:
         raise HTTPException(status_code=422, detail="ID da conta do Instagram ainda não configurado.")
@@ -340,16 +376,7 @@ def publish_single(creds: InstagramCredentials, *, image_url: str, caption: str)
     if not creation_id:
         raise HTTPException(status_code=502, detail="A Meta não retornou o ID do container.")
     wait_for_container(creds, creation_id)
-    published = request_json(
-        creds,
-        "POST",
-        f"{creds.account_id}/media_publish",
-        data={"creation_id": creation_id},
-    )
-    media_id = str(published.get("id") or "").strip()
-    if not media_id:
-        raise HTTPException(status_code=502, detail="A Meta não retornou o ID da publicação.")
-    return media_id
+    return _publish_creation(creds, creation_id)
 
 
 def publish_story(creds: InstagramCredentials, *, image_url: str) -> str:
@@ -365,16 +392,7 @@ def publish_story(creds: InstagramCredentials, *, image_url: str) -> str:
     if not creation_id:
         raise HTTPException(status_code=502, detail="A Meta não retornou o ID do container do Story.")
     wait_for_container(creds, creation_id)
-    published = request_json(
-        creds,
-        "POST",
-        f"{creds.account_id}/media_publish",
-        data={"creation_id": creation_id},
-    )
-    media_id = str(published.get("id") or "").strip()
-    if not media_id:
-        raise HTTPException(status_code=502, detail="A Meta não retornou o ID do Story publicado.")
-    return media_id
+    return _publish_creation(creds, creation_id)
 
 
 def publish_carousel(creds: InstagramCredentials, *, image_urls: list[str], caption: str) -> str:
