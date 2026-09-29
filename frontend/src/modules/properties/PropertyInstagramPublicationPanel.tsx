@@ -58,6 +58,7 @@ export function PropertyInstagramPublicationPanel({propertyId,permissions}:Props
   const [format,setFormat]=useState<InstagramPublication['format']>('carousel')
   const [loading,setLoading]=useState(true)
   const [saving,setSaving]=useState(false)
+  const [publishing,setPublishing]=useState(false)
   const [error,setError]=useState('')
   const [success,setSuccess]=useState('')
   const [openPhoto,setOpenPhoto]=useState<Photo|null>(null)
@@ -123,6 +124,17 @@ export function PropertyInstagramPublicationPanel({propertyId,permissions}:Props
       setSuccess('Rascunho do Instagram salvo.')
     }catch(cause){setError(cause instanceof ApiError?cause.detail:'Não foi possível salvar o rascunho do Instagram.')}
     finally{setSaving(false)}
+  }
+
+  async function publish(){
+    if(!canPublish||!data||dirty)return
+    setPublishing(true);setError('');setSuccess('')
+    try{
+      const result=await apiRequest<InstagramPublication>(`/properties/${propertyId}/instagram-publication/publish`,{method:'POST'})
+      setData(result);setCaption(result.caption);setPhotoIds(result.photo_ids);setFormat(result.format)
+      setSuccess(result.permalink?'Publicado no Instagram com sucesso. O link da publicação foi registrado no imóvel.':'Publicado no Instagram com sucesso.')
+    }catch(cause){setError(cause instanceof ApiError?cause.detail:'Não foi possível publicar o imóvel no Instagram.')}
+    finally{setPublishing(false)}
   }
 
   if(loading)return <section className="property-surface property-instagram-panel"><div className="instagram-loading">Carregando publicação do Instagram...</div></section>
@@ -207,7 +219,7 @@ export function PropertyInstagramPublicationPanel({propertyId,permissions}:Props
         <section className="property-surface instagram-publish-card">
           <div><span>INTEGRAÇÃO META</span><h3>{data.instagram_connected?'Conta conectada':'Instagram ainda não conectado'}</h3><p>{data.instagram_connected?'O conteúdo pode ser enviado para publicação.':'O editor já está pronto. A publicação será liberada após conectarmos a conta profissional à Meta API.'}</p></div>
           <button className="button secondary" type="button" disabled={!canEdit||saving||inactive||!dirty} onClick={()=>void save()}><Save size={14}/>{saving?'Salvando...':'Salvar rascunho'}</button>
-          <button className="button primary" type="button" disabled={!canPublish||inactive||!data.instagram_connected||data.status!=='ready'} title={!data.instagram_connected?'Conecte a conta do Instagram primeiro.':''}><Send size={14}/>Publicar no Instagram</button>
+          <button className="button primary" type="button" disabled={!canPublish||inactive||!data.instagram_connected||data.status!=='ready'||dirty||publishing} title={!data.instagram_connected?'Conecte a conta do Instagram primeiro.':dirty?'Salve as alterações antes de publicar.':''} onClick={()=>void publish()}><Send size={14}/>{publishing?'Publicando...':'Publicar no Instagram'}</button>
         </section>
       </aside>
     </div>
