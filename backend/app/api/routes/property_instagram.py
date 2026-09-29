@@ -779,16 +779,28 @@ def publish_instagram_story_property(
     db.commit()
 
     story_zoom = round(float(story.get("zoom") or 1.0), 2)
+    story_offset_x = round(float(story.get("offset_x") or 0.0), 3)
+    story_offset_y = round(float(story.get("offset_y") or 0.0), 3)
+    base_url = _public_base_url(request)
     image_url = public_story_media_url(
-        base_url=_public_base_url(request),
+        base_url=base_url,
         organization_id=context.user.organization_id,
         property_id=item.id,
         photo_id=photo.id,
         zoom=story_zoom,
+        offset_x=story_offset_x,
+        offset_y=story_offset_y,
+    )
+    description_url = public_story_description_url(
+        base_url=base_url,
+        organization_id=context.user.organization_id,
+        property_id=item.id,
     )
     try:
         media_id = publish_story(creds, image_url=image_url)
         details = media_details(creds, media_id)
+        description_media_id = publish_story(creds, image_url=description_url)
+        description_details = media_details(creds, description_media_id)
     except HTTPException as exc:
         failed_state = dict(item.instagram_publication or {})
         failed_story = dict(failed_state.get("story") or {})
@@ -806,10 +818,15 @@ def publish_instagram_story_property(
     final_state = dict(item.instagram_publication or {})
     final_story = dict(final_state.get("story") or {})
     permalink = str(details.get("permalink") or "").strip() or None
+    description_permalink = str(description_details.get("permalink") or "").strip() or None
+    site_url = _story_site_url(request, item)
     final_story.update({
         "status": "published",
         "media_id": media_id,
+        "description_media_id": description_media_id,
         "permalink": permalink,
+        "description_permalink": description_permalink,
+        "site_url": site_url,
         "published_at": now.isoformat(),
         "updated_at": now.isoformat(),
         "last_error": None,
@@ -823,7 +840,7 @@ def publish_instagram_story_property(
         "permalink": permalink,
         "published_at": now.isoformat(),
         "format": "story",
-        "photo_count": 1,
+        "photo_count": 2,
     }
     final_state["story"] = final_story
     final_state["history"] = [history_entry, *previous_history][:8]
@@ -837,7 +854,15 @@ def publish_instagram_story_property(
         module="properties",
         entity_type="property",
         entity_id=str(item.id),
-        after_data={"status": "published", "media_id": media_id, "format": "story", "photo_id": str(photo.id)},
+        after_data={
+            "status": "published",
+            "media_id": media_id,
+            "description_media_id": description_media_id,
+            "format": "story",
+            "story_count": 2,
+            "photo_id": str(photo.id),
+            "site_url": site_url,
+        },
         ip_address=forwarded or (request.client.host if request.client else None),
         user_agent=request.headers.get("user-agent"),
     )
