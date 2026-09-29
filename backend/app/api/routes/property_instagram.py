@@ -462,11 +462,8 @@ def _story_description_image(request: Request, item: Property, db: Session) -> b
     qr_y = max(footer_y + 18, min(height - qr_size - 48, qr_y))
     image.paste(qr_image, (qr_x, qr_y))
 
-    display_url = site_url.replace("https://", "").replace("http://", "")
-    link_y = footer_y + 230
-    for line in _wrap_story_text(draw, display_url, footer_small, 520, 2):
-        draw.text((footer_tx, link_y), line, font=footer_small, fill=(75, 83, 95))
-        link_y += max(24, round(30 * text_scale))
+    # Não exibimos a URL bruta no card. Ela fica codificada somente no QR Code:
+    # além de poluir o layout, domínios longos podem invadir a área do QR.
 
     output = io.BytesIO()
     image.save(output, format="JPEG", quality=94, optimize=True)
