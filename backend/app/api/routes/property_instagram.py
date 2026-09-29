@@ -37,9 +37,17 @@ class InstagramPhotoItem(BaseModel):
     content_url: str
 
 
+class InstagramPublicationHistoryItem(BaseModel):
+    media_id: str
+    permalink: str | None = None
+    published_at: str
+    format: Literal["carousel", "single", "story", "reel"]
+    photo_count: int
+
+
 class InstagramPublicationResponse(BaseModel):
     property_id: UUID
-    status: Literal["draft", "ready", "published", "inactive", "failed"]
+    status: Literal["draft", "ready", "publishing", "published", "inactive", "failed"]
     format: Literal["carousel", "single", "story", "reel"]
     caption: str
     photo_ids: list[UUID]
@@ -50,6 +58,8 @@ class InstagramPublicationResponse(BaseModel):
     inactivated_at: str | None = None
     inactivation_reason: str | None = None
     external_removal_pending: bool = False
+    last_error: str | None = None
+    history: list[InstagramPublicationHistoryItem] = Field(default_factory=list)
     property_active: bool
     instagram_connected: bool = False
 
@@ -157,8 +167,25 @@ def _response(db: Session, item: Property, photos: list[PropertyPhoto]) -> Insta
     raw_status = str(state.get("status") or ("inactive" if inactive else "draft"))
     if inactive:
         raw_status = "inactive"
-    if raw_status not in {"draft", "ready", "published", "inactive", "failed"}:
+    if raw_status not in {"draft", "ready", "publishing", "published", "inactive", "failed"}:
         raw_status = "draft"
+
+    history: list[InstagramPublicationHistoryItem] = []
+    for entry in list(state.get("history") or [])[:8]:
+        if not isinstance(entry, dict):
+            continue
+        media_id = str(entry.get("media_id") or "").strip()
+        published_at = str(entry.get("published_at") or "").strip()
+        publication_format = str(entry.get("format") or "")
+        if not media_id or not published_at or publication_format not in {"carousel", "single", "story", "reel"}:
+            continue
+        history.append(InstagramPublicationHistoryItem(
+            media_id=media_id,
+            permalink=str(entry.get("permalink") or "").strip() or None,
+            published_at=published_at,
+            format=publication_format,
+            photo_count=max(1, int(entry.get("photo_count") or 1)),
+        ))
 
     return InstagramPublicationResponse(
         property_id=item.id,
@@ -173,6 +200,8 @@ def _response(db: Session, item: Property, photos: list[PropertyPhoto]) -> Insta
         inactivated_at=state.get("inactivated_at"),
         inactivation_reason=state.get("inactivation_reason"),
         external_removal_pending=bool(state.get("external_removal_pending")),
+        last_error=(str(state.get("last_error") or "").strip() or None),
+        history=history,
         property_active=not inactive,
         instagram_connected=instagram_credentials(db, item.organization_id).configured,
     )
@@ -357,14 +386,28 @@ def publish_instagram_property(
 
     now = datetime.now(timezone.utc)
     published = dict(item.instagram_publication or {})
+    permalink = str(details.get("permalink") or "").strip() or None
+    publication_entry = {
+        "media_id": media_id,
+        "permalink": permalink,
+        "published_at": now.isoformat(),
+        "format": publication_format,
+        "photo_count": len(selected),
+    }
+    previous_history = [
+        entry for entry in list(published.get("history") or [])
+        if isinstance(entry, dict) and str(entry.get("media_id") or "") != media_id
+    ]
     published.update({
         "status": "published",
         "media_id": media_id,
-        "permalink": str(details.get("permalink") or "").strip() or None,
+        "permalink": permalink,
         "published_at": now.isoformat(),
+        "photo_count": len(selected),
         "updated_at": now.isoformat(),
         "external_removal_pending": False,
         "last_error": None,
+        "history": [publication_entry, *previous_history][:8],
     })
     item.instagram_publication = published
 
