@@ -210,6 +210,48 @@ def public_media_url(
     return f"{base_url.rstrip('/')}/api/public/instagram-media/{organization_id}/{property_id}/{photo_id}?{query}"
 
 
+def sign_story_media_path(
+    organization_id: UUID,
+    property_id: UUID,
+    photo_id: UUID,
+    expires: int,
+    zoom: float,
+) -> str:
+    normalized_zoom = f"{zoom:.2f}"
+    message = f"{organization_id}:{property_id}:{photo_id}:{expires}:story:{normalized_zoom}".encode("utf-8")
+    return hmac.new(_media_signing_key(), message, hashlib.sha256).hexdigest()
+
+
+def validate_story_media_signature(
+    organization_id: UUID,
+    property_id: UUID,
+    photo_id: UUID,
+    expires: int,
+    zoom: float,
+    signature: str,
+) -> bool:
+    if expires < int(time.time()):
+        return False
+    expected = sign_story_media_path(organization_id, property_id, photo_id, expires, zoom)
+    return hmac.compare_digest(expected, signature)
+
+
+def public_story_media_url(
+    *,
+    base_url: str,
+    organization_id: UUID,
+    property_id: UUID,
+    photo_id: UUID,
+    zoom: float,
+    ttl_seconds: int = 3600,
+) -> str:
+    expires = int(time.time()) + ttl_seconds
+    normalized_zoom = round(max(0.65, min(2.0, zoom)), 2)
+    signature = sign_story_media_path(organization_id, property_id, photo_id, expires, normalized_zoom)
+    query = urlencode({"expires": expires, "zoom": f"{normalized_zoom:.2f}", "signature": signature})
+    return f"{base_url.rstrip('/')}/api/public/instagram-story-media/{organization_id}/{property_id}/{photo_id}?{query}"
+
+
 def wait_for_container(creds: InstagramCredentials, creation_id: str, *, attempts: int = 8) -> None:
     for index in range(attempts):
         payload = request_json(creds, "GET", creation_id, params={"fields": "status_code"})
