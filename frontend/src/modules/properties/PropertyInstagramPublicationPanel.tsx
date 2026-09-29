@@ -305,6 +305,63 @@ export function PropertyInstagramPublicationPanel({propertyId,permissions}:Props
         </div>
       </section>
     </div>}
+    {detailsOpen&&<div className="instagram-story-crop-backdrop" role="presentation" onMouseDown={event=>{if(event.target===event.currentTarget)setDetailsOpen(false)}}>
+      <section className="instagram-story-crop-modal instagram-story-details-modal" role="dialog" aria-modal="true" aria-label="Editar segundo Story">
+        <header><div><span>2º STORY · DETALHES</span><strong>Ajuste texto e QR Code</strong></div><button type="button" onClick={()=>setDetailsOpen(false)} aria-label="Fechar"><X size={18}/></button></header>
+        <div className="instagram-story-crop-body">
+          <div className="instagram-story-details-stage">
+            <div ref={detailsFrameRef} className="instagram-story-details-canvas">
+              <div className="instagram-story-details-brand">
+                {theme.logoUrl?<img src={theme.logoUrl} alt="Logo da imobiliária"/>:<span>{(theme.companyShortName||theme.companyName||'IM').slice(0,2).toUpperCase()}</span>}
+              </div>
+              <div
+                className="instagram-story-details-text"
+                style={{transform:`translate(${storyTextOffsetX*42}%, ${storyTextOffsetY*42}%) scale(${storyTextScale})`}}
+                onPointerDown={event=>beginDetailsDrag('text',event)}
+                onPointerMove={moveDetailsDrag}
+                onPointerUp={endDetailsDrag}
+                onPointerCancel={endDetailsDrag}
+              >
+                <span>IMÓVEL EM DESTAQUE</span>
+                <strong>{caption.split('\n').filter(Boolean)[0]?.replace(/^🏡\s*/,'')||'Detalhes do imóvel'}</strong>
+                <small>{caption.split('\n').filter(Boolean).slice(1,4).join(' · ')||'Localização · características · valor'}</small>
+                <p>{caption.split('\n').filter(Boolean).slice(4,8).join(' ')||'Confira as principais informações deste imóvel.'}</p>
+              </div>
+              <div className="instagram-story-details-footer">
+                <div><strong>Veja todos os detalhes no site</strong><span>Aponte a câmera para o QR Code</span></div>
+                <div
+                  className="instagram-story-details-qr"
+                  style={{transform:`translate(${storyQrOffsetX*34}%, ${storyQrOffsetY*34}%) scale(${storyQrScale})`}}
+                  onPointerDown={event=>beginDetailsDrag('qr',event)}
+                  onPointerMove={moveDetailsDrag}
+                  onPointerUp={endDetailsDrag}
+                  onPointerCancel={endDetailsDrag}
+                >
+                  <i/><i/><i/><i/><i/><i/><i/><i/><i/><i/><i/><i/><i/><i/><i/><i/>
+                </div>
+              </div>
+            </div>
+          </div>
+          <aside className="instagram-story-crop-controls instagram-story-details-controls">
+            <div><span>Caixa de texto</span><b>{Math.round(storyTextScale*100)}%</b></div>
+            <div className="instagram-story-zoom-row">
+              <button type="button" disabled={storyTextScale<=.6} onClick={()=>setStoryTextScale(current=>Math.max(.6,Math.round((current-.05)*100)/100))}><Minus size={14}/></button>
+              <input type="range" min=".6" max="1.8" step=".05" value={storyTextScale} onChange={event=>setStoryTextScale(Number(event.target.value))}/>
+              <button type="button" disabled={storyTextScale>=1.8} onClick={()=>setStoryTextScale(current=>Math.min(1.8,Math.round((current+.05)*100)/100))}><Plus size={14}/></button>
+            </div>
+            <div><span>QR Code</span><b>{Math.round(storyQrScale*100)}%</b></div>
+            <div className="instagram-story-zoom-row">
+              <button type="button" disabled={storyQrScale<=.6} onClick={()=>setStoryQrScale(current=>Math.max(.6,Math.round((current-.05)*100)/100))}><Minus size={14}/></button>
+              <input type="range" min=".6" max="1.8" step=".05" value={storyQrScale} onChange={event=>setStoryQrScale(Number(event.target.value))}/>
+              <button type="button" disabled={storyQrScale>=1.8} onClick={()=>setStoryQrScale(current=>Math.min(1.8,Math.round((current+.05)*100)/100))}><Plus size={14}/></button>
+            </div>
+            <div className="instagram-story-crop-position"><Move size={15}/><span>Arraste a caixa de texto ou o QR Code diretamente na prévia para reposicionar.</span></div>
+            <button className="button secondary" type="button" onClick={resetDetailsLayout}><RotateCcw size={14}/>Resetar layout</button>
+            <button className="button primary" type="button" onClick={()=>setDetailsOpen(false)}><Check size={14}/>Usar este layout</button>
+          </aside>
+        </div>
+      </section>
+    </div>}
     {openPhoto&&<div className="instagram-photo-modal-backdrop" role="presentation" onMouseDown={event=>{if(event.target===event.currentTarget)setOpenPhoto(null)}}>
       <section className="instagram-photo-modal" role="dialog" aria-modal="true" aria-label="Visualização ampliada da foto">
         <header><div><span>FOTO DO IMÓVEL</span><strong>{openPhoto.caption||openPhoto.filename}</strong></div><button type="button" onClick={()=>setOpenPhoto(null)} aria-label="Fechar"><X size={18}/></button></header>
@@ -438,7 +495,7 @@ export function PropertyInstagramPublicationPanel({propertyId,permissions}:Props
           </div>
           <div className="instagram-story-sequence">
             <article><b>1</b><div><strong>Story da foto</strong><span>Imagem com o enquadramento que você definiu.</span></div></article>
-            <article><b>2</b><div><strong>Story com os detalhes</strong><span>Título, localização, preço, características e QR Code para abrir o imóvel no site.</span></div></article>
+            <article className="instagram-story-sequence-editable"><b>2</b><div><strong>Story com os detalhes</strong><span>Logo, texto e QR Code com tamanho e posição ajustáveis.</span></div><button type="button" disabled={!canEdit||inactive} onClick={()=>setDetailsOpen(true)}><Move size={13}/>Editar</button></article>
           </div>
           <div className="instagram-story-note"><CircleAlert size={14}/><span>O Story é publicado como mídia vertical. O Instagram não recebe uma legenda de post para Stories por este fluxo; qualquer texto precisa fazer parte da própria arte/imagem.</span></div>
           <div className="instagram-story-actions">
