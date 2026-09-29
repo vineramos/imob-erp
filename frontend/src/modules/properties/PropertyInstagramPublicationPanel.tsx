@@ -1,6 +1,7 @@
 import { ArrowDown, ArrowUp, Check, ChevronLeft, ChevronRight, CircleAlert, Clock3, Copy, ExternalLink, History, Instagram, Move, Minus, Plus, RotateCcw, Save, Send, X } from 'lucide-react'
 import { type CSSProperties, type PointerEvent as ReactPointerEvent, useEffect, useMemo, useRef, useState } from 'react'
 import { ApiError, apiBlobRequest, apiRequest } from '../../api/client'
+import { useTheme } from '../../theme/ThemeProvider'
 import './property-instagram-publication.css'
 
 type Photo = {
@@ -41,6 +42,12 @@ type InstagramPublication = {
   story_offset_y:number
   story_description_media_id:string|null
   story_site_url:string|null
+  story_text_scale:number
+  story_qr_scale:number
+  story_text_offset_x:number
+  story_text_offset_y:number
+  story_qr_offset_x:number
+  story_qr_offset_y:number
   story_published_at:string|null
   story_last_error:string|null
   property_active:boolean
@@ -75,6 +82,7 @@ const formatLabel=(value:InstagramPublicationHistoryItem['format'])=>({
 }[value])
 
 export function PropertyInstagramPublicationPanel({propertyId,permissions}:Props){
+  const {theme}=useTheme()
   const canEdit=permissions.includes('properties.edit')
   const canPublish=permissions.includes('properties.publish')
   const [data,setData]=useState<InstagramPublication|null>(null)
@@ -93,8 +101,17 @@ export function PropertyInstagramPublicationPanel({propertyId,permissions}:Props
   const [storyOffsetX,setStoryOffsetX]=useState(0)
   const [storyOffsetY,setStoryOffsetY]=useState(0)
   const [cropOpen,setCropOpen]=useState(false)
+  const [detailsOpen,setDetailsOpen]=useState(false)
   const cropFrameRef=useRef<HTMLDivElement|null>(null)
+  const detailsFrameRef=useRef<HTMLDivElement|null>(null)
   const cropDragRef=useRef<{pointerId:number;clientX:number;clientY:number;offsetX:number;offsetY:number}|null>(null)
+  const detailsDragRef=useRef<{pointerId:number;target:'text'|'qr';clientX:number;clientY:number;offsetX:number;offsetY:number}|null>(null)
+  const [storyTextScale,setStoryTextScale]=useState(1)
+  const [storyQrScale,setStoryQrScale]=useState(1)
+  const [storyTextOffsetX,setStoryTextOffsetX]=useState(0)
+  const [storyTextOffsetY,setStoryTextOffsetY]=useState(0)
+  const [storyQrOffsetX,setStoryQrOffsetX]=useState(0)
+  const [storyQrOffsetY,setStoryQrOffsetY]=useState(0)
   const [savingStory,setSavingStory]=useState(false)
   const [publishingStory,setPublishingStory]=useState(false)
 
@@ -102,7 +119,7 @@ export function PropertyInstagramPublicationPanel({propertyId,permissions}:Props
     let active=true
     setLoading(true);setError('')
     void apiRequest<InstagramPublication>(`/properties/${propertyId}/instagram-publication`)
-      .then(result=>{if(!active)return;setData(result);setCaption(result.caption);setPhotoIds(result.photo_ids);setFormat(result.format);setStoryPhotoId(result.story_photo_id);setStoryZoom(result.story_zoom||1);setStoryOffsetX(result.story_offset_x||0);setStoryOffsetY(result.story_offset_y||0)})
+      .then(result=>{if(!active)return;setData(result);setCaption(result.caption);setPhotoIds(result.photo_ids);setFormat(result.format);setStoryPhotoId(result.story_photo_id);setStoryZoom(result.story_zoom||1);setStoryOffsetX(result.story_offset_x||0);setStoryOffsetY(result.story_offset_y||0);setStoryTextScale(result.story_text_scale||1);setStoryQrScale(result.story_qr_scale||1);setStoryTextOffsetX(result.story_text_offset_x||0);setStoryTextOffsetY(result.story_text_offset_y||0);setStoryQrOffsetX(result.story_qr_offset_x||0);setStoryQrOffsetY(result.story_qr_offset_y||0)})
       .catch(cause=>{if(active)setError(cause instanceof ApiError?cause.detail:'Não foi possível carregar a publicação do Instagram.')})
       .finally(()=>{if(active)setLoading(false)})
     return()=>{active=false}
@@ -123,7 +140,7 @@ export function PropertyInstagramPublicationPanel({propertyId,permissions}:Props
   const previewPhoto=selected[previewIndex]??selected[0]??null
   const storyPhoto=(data?.photos??[]).find(photo=>photo.id===storyPhotoId)??null
   const dirty=Boolean(data)&&(caption!==data!.caption||format!==data!.format||photoIds.join('|')!==data!.photo_ids.join('|'))
-  const storyDirty=Boolean(data)&&(storyPhotoId!==data!.story_photo_id||Math.abs(storyZoom-(data!.story_zoom||1))>0.001||Math.abs(storyOffsetX-(data!.story_offset_x||0))>0.001||Math.abs(storyOffsetY-(data!.story_offset_y||0))>0.001)
+  const storyDirty=Boolean(data)&&(storyPhotoId!==data!.story_photo_id||Math.abs(storyZoom-(data!.story_zoom||1))>0.001||Math.abs(storyOffsetX-(data!.story_offset_x||0))>0.001||Math.abs(storyOffsetY-(data!.story_offset_y||0))>0.001||Math.abs(storyTextScale-(data!.story_text_scale||1))>0.001||Math.abs(storyQrScale-(data!.story_qr_scale||1))>0.001||Math.abs(storyTextOffsetX-(data!.story_text_offset_x||0))>0.001||Math.abs(storyTextOffsetY-(data!.story_text_offset_y||0))>0.001||Math.abs(storyQrOffsetX-(data!.story_qr_offset_x||0))>0.001||Math.abs(storyQrOffsetY-(data!.story_qr_offset_y||0))>0.001)
 
   useEffect(()=>{
     setPreviewIndex(current=>selected.length===0?0:Math.min(current,selected.length-1))
@@ -177,6 +194,35 @@ export function PropertyInstagramPublicationPanel({propertyId,permissions}:Props
     setStoryZoom(1);setStoryOffsetX(0);setStoryOffsetY(0)
   }
 
+  function resetDetailsLayout(){
+    setStoryTextScale(1);setStoryQrScale(1);setStoryTextOffsetX(0);setStoryTextOffsetY(0);setStoryQrOffsetX(0);setStoryQrOffsetY(0)
+  }
+
+  function beginDetailsDrag(target:'text'|'qr',event:ReactPointerEvent<HTMLDivElement>){
+    if(!detailsFrameRef.current)return
+    event.currentTarget.setPointerCapture(event.pointerId)
+    detailsDragRef.current={
+      pointerId:event.pointerId,target,clientX:event.clientX,clientY:event.clientY,
+      offsetX:target==='text'?storyTextOffsetX:storyQrOffsetX,
+      offsetY:target==='text'?storyTextOffsetY:storyQrOffsetY,
+    }
+  }
+
+  function moveDetailsDrag(event:ReactPointerEvent<HTMLDivElement>){
+    const drag=detailsDragRef.current
+    const frame=detailsFrameRef.current
+    if(!drag||drag.pointerId!==event.pointerId||!frame)return
+    const rect=frame.getBoundingClientRect()
+    const nextX=Math.max(-1,Math.min(1,drag.offsetX+(event.clientX-drag.clientX)/(rect.width/2)))
+    const nextY=Math.max(-1,Math.min(1,drag.offsetY+(event.clientY-drag.clientY)/(rect.height/2)))
+    if(drag.target==='text'){setStoryTextOffsetX(Math.round(nextX*1000)/1000);setStoryTextOffsetY(Math.round(nextY*1000)/1000)}
+    else{setStoryQrOffsetX(Math.round(nextX*1000)/1000);setStoryQrOffsetY(Math.round(nextY*1000)/1000)}
+  }
+
+  function endDetailsDrag(event:ReactPointerEvent<HTMLDivElement>){
+    if(detailsDragRef.current?.pointerId===event.pointerId)detailsDragRef.current=null
+  }
+
   function beginStoryDrag(event:ReactPointerEvent<HTMLDivElement>){
     if(!cropFrameRef.current)return
     event.currentTarget.setPointerCapture(event.pointerId)
@@ -209,9 +255,9 @@ export function PropertyInstagramPublicationPanel({propertyId,permissions}:Props
     try{
       const result=await apiRequest<InstagramPublication>(`/properties/${propertyId}/instagram-publication/story`,{
         method:'PUT',
-        body:JSON.stringify({photo_id:storyPhotoId,zoom:storyZoom,offset_x:storyOffsetX,offset_y:storyOffsetY}),
+        body:JSON.stringify({photo_id:storyPhotoId,zoom:storyZoom,offset_x:storyOffsetX,offset_y:storyOffsetY,text_scale:storyTextScale,qr_scale:storyQrScale,text_offset_x:storyTextOffsetX,text_offset_y:storyTextOffsetY,qr_offset_x:storyQrOffsetX,qr_offset_y:storyQrOffsetY}),
       })
-      setData(result);setStoryPhotoId(result.story_photo_id);setStoryZoom(result.story_zoom||1);setStoryOffsetX(result.story_offset_x||0);setStoryOffsetY(result.story_offset_y||0)
+      setData(result);setStoryPhotoId(result.story_photo_id);setStoryZoom(result.story_zoom||1);setStoryOffsetX(result.story_offset_x||0);setStoryOffsetY(result.story_offset_y||0);setStoryTextScale(result.story_text_scale||1);setStoryQrScale(result.story_qr_scale||1);setStoryTextOffsetX(result.story_text_offset_x||0);setStoryTextOffsetY(result.story_text_offset_y||0);setStoryQrOffsetX(result.story_qr_offset_x||0);setStoryQrOffsetY(result.story_qr_offset_y||0)
       setSuccess('Story salvo. A imagem fica independente do carrossel do post.')
     }catch(cause){setError(cause instanceof ApiError?cause.detail:'Não foi possível salvar o Story.')}
     finally{setSavingStory(false)}
@@ -222,7 +268,7 @@ export function PropertyInstagramPublicationPanel({propertyId,permissions}:Props
     setPublishingStory(true);setError('');setSuccess('')
     try{
       const result=await apiRequest<InstagramPublication>(`/properties/${propertyId}/instagram-publication/story/publish`,{method:'POST'})
-      setData(result);setStoryPhotoId(result.story_photo_id);setStoryZoom(result.story_zoom||1);setStoryOffsetX(result.story_offset_x||0);setStoryOffsetY(result.story_offset_y||0)
+      setData(result);setStoryPhotoId(result.story_photo_id);setStoryZoom(result.story_zoom||1);setStoryOffsetX(result.story_offset_x||0);setStoryOffsetY(result.story_offset_y||0);setStoryTextScale(result.story_text_scale||1);setStoryQrScale(result.story_qr_scale||1);setStoryTextOffsetX(result.story_text_offset_x||0);setStoryTextOffsetY(result.story_text_offset_y||0);setStoryQrOffsetX(result.story_qr_offset_x||0);setStoryQrOffsetY(result.story_qr_offset_y||0)
       setSuccess('2 Stories publicados: foto enquadrada + card com detalhes e QR Code do imóvel.')
     }catch(cause){setError(cause instanceof ApiError?cause.detail:'Não foi possível publicar o Story no Instagram.')}
     finally{setPublishingStory(false)}
