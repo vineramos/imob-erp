@@ -20,6 +20,7 @@ from app.integrations.instagram import (
     public_media_url,
     publish_carousel,
     publish_single,
+    publish_story,
     validate_media_signature,
 )
 
@@ -60,6 +61,11 @@ class InstagramPublicationResponse(BaseModel):
     external_removal_pending: bool = False
     last_error: str | None = None
     history: list[InstagramPublicationHistoryItem] = Field(default_factory=list)
+    story_status: Literal["draft", "ready", "publishing", "published", "failed"] = "draft"
+    story_photo_id: UUID | None = None
+    story_media_id: str | None = None
+    story_published_at: str | None = None
+    story_last_error: str | None = None
     property_active: bool
     instagram_connected: bool = False
 
@@ -70,6 +76,12 @@ class InstagramPublicationUpdate(BaseModel):
     format: Literal["carousel", "single", "story", "reel"] = "carousel"
     caption: str = Field(default="", max_length=2200)
     photo_ids: list[UUID] = Field(default_factory=list, max_length=MAX_CAROUSEL_ITEMS)
+
+
+class InstagramStoryUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    photo_id: UUID
 
 
 def _property(db: Session, organization_id: UUID, property_id: UUID) -> Property:
@@ -202,6 +214,11 @@ def _response(db: Session, item: Property, photos: list[PropertyPhoto]) -> Insta
         external_removal_pending=bool(state.get("external_removal_pending")),
         last_error=(str(state.get("last_error") or "").strip() or None),
         history=history,
+        story_status=str((state.get("story") or {}).get("status") or "draft"),
+        story_photo_id=UUID(str((state.get("story") or {}).get("photo_id"))) if (state.get("story") or {}).get("photo_id") else None,
+        story_media_id=(str((state.get("story") or {}).get("media_id") or "").strip() or None),
+        story_published_at=(state.get("story") or {}).get("published_at"),
+        story_last_error=(str((state.get("story") or {}).get("last_error") or "").strip() or None),
         property_active=not inactive,
         instagram_connected=instagram_credentials(db, item.organization_id).configured,
     )
@@ -433,3 +450,156 @@ def publish_instagram_property(
     db.commit()
     db.refresh(item)
     return _response(db, item, photos)
+
+
+@router.put("/properties/{property_id}/instagram-publication/story", response_model=InstagramPublicationResponse)
+def update_instagram_story(
+    property_id: UUID,
+    payload: InstagramStoryUpdate,
+    request: Request,
+    context: UserContext = Depends(require_permission("properties.edit")),
+    db: Session = Depends(get_db),
+) -> InstagramPublicationResponse:
+    item = _property(db, context.user.organization_id, property_id)
+    if item.status in {"leased", "inactive"}:
+        raise HTTPException(status_code=409, detail="O imóvel está inativo/locado e não pode preparar Story.")
+
+    photos = _photos(db, context.user.organization_id, property_id)
+    valid_ids = {photo.id for photo in photos}
+    if payload.photo_id not in valid_ids:
+        raise HTTPException(status_code=422, detail="A foto selecionada não pertence a este imóvel.")
+
+    before = dict(item.instagram_publication or {})
+    story = dict(before.get("story") or {})
+    story.update({
+        "status": "ready",
+        "photo_id": str(payload.photo_id),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+        "last_error": None,
+    })
+    item.instagram_publication = {**before, "story": story}
+
+    forwarded = request.headers.get("x-forwarded-for", "").split(",", 1)[0].strip()
+    write_audit(
+        db,
+        context=context,
+        action="properties.instagram.story_draft_updated",
+        module="properties",
+        entity_type="property",
+        entity_id=str(item.id),
+        before_data={"story": before.get("story")},
+        after_data={"story": story},
+        ip_address=forwarded or (request.client.host if request.client else None),
+        user_agent=request.headers.get("user-agent"),
+    )
+    db.commit()
+    db.refresh(item)
+    return _response(db, item, photos)
+
+
+@router.post("/properties/{property_id}/instagram-publication/story/publish", response_model=InstagramPublicationResponse)
+def publish_instagram_story_property(
+    property_id: UUID,
+    request: Request,
+    context: UserContext = Depends(require_permission("properties.publish")),
+    db: Session = Depends(get_db),
+) -> InstagramPublicationResponse:
+    item = _property(db, context.user.organization_id, property_id)
+    if item.status in {"leased", "inactive"}:
+        raise HTTPException(status_code=409, detail="O imóvel está inativo/locado e não pode ser publicado em Story.")
+
+    state = dict(item.instagram_publication or {})
+    story = dict(state.get("story") or {})
+    photo_id_raw = str(story.get("photo_id") or "").strip()
+    if not photo_id_raw:
+        raise HTTPException(status_code=422, detail="Selecione e salve uma foto para o Story.")
+    try:
+        photo_id = UUID(photo_id_raw)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail="Foto do Story inválida.") from exc
+
+    photo = db.scalar(
+        select(PropertyPhoto).where(
+            PropertyPhoto.id == photo_id,
+            PropertyPhoto.property_id == property_id,
+            PropertyPhoto.organization_id == context.user.organization_id,
+        )
+    )
+    if photo is None:
+        raise HTTPException(status_code=422, detail="A foto selecionada para o Story não está mais disponível.")
+
+    creds = instagram_credentials(db, context.user.organization_id)
+    if not creds.configured:
+        raise HTTPException(status_code=422, detail="Conecte e teste a conta do Instagram em Configurações > Integrações.")
+
+    story["status"] = "publishing"
+    story["last_error"] = None
+    story["updated_at"] = datetime.now(timezone.utc).isoformat()
+    state["story"] = story
+    item.instagram_publication = state
+    db.commit()
+
+    image_url = public_media_url(
+        base_url=_public_base_url(request),
+        organization_id=context.user.organization_id,
+        property_id=item.id,
+        photo_id=photo.id,
+    )
+    try:
+        media_id = publish_story(creds, image_url=image_url)
+        details = media_details(creds, media_id)
+    except HTTPException as exc:
+        failed_state = dict(item.instagram_publication or {})
+        failed_story = dict(failed_state.get("story") or {})
+        failed_story.update({
+            "status": "failed",
+            "last_error": str(exc.detail)[:1000],
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        })
+        failed_state["story"] = failed_story
+        item.instagram_publication = failed_state
+        db.commit()
+        raise
+
+    now = datetime.now(timezone.utc)
+    final_state = dict(item.instagram_publication or {})
+    final_story = dict(final_state.get("story") or {})
+    permalink = str(details.get("permalink") or "").strip() or None
+    final_story.update({
+        "status": "published",
+        "media_id": media_id,
+        "permalink": permalink,
+        "published_at": now.isoformat(),
+        "updated_at": now.isoformat(),
+        "last_error": None,
+    })
+    previous_history = [
+        entry for entry in list(final_state.get("history") or [])
+        if isinstance(entry, dict) and str(entry.get("media_id") or "") != media_id
+    ]
+    history_entry = {
+        "media_id": media_id,
+        "permalink": permalink,
+        "published_at": now.isoformat(),
+        "format": "story",
+        "photo_count": 1,
+    }
+    final_state["story"] = final_story
+    final_state["history"] = [history_entry, *previous_history][:8]
+    item.instagram_publication = final_state
+
+    forwarded = request.headers.get("x-forwarded-for", "").split(",", 1)[0].strip()
+    write_audit(
+        db,
+        context=context,
+        action="properties.instagram.story_published",
+        module="properties",
+        entity_type="property",
+        entity_id=str(item.id),
+        after_data={"status": "published", "media_id": media_id, "format": "story", "photo_id": str(photo.id)},
+        ip_address=forwarded or (request.client.host if request.client else None),
+        user_agent=request.headers.get("user-agent"),
+    )
+    db.commit()
+    db.refresh(item)
+    return _response(db, item, _photos(db, context.user.organization_id, property_id))
