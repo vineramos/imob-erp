@@ -482,19 +482,8 @@ export function PropertyInstagramPublicationPanel({propertyId,permissions}:Props
               {storyPhotoId===photo.id&&<Check size={14}/>}
             </button>)}
           </div>
-          <div className="instagram-story-zoom-control">
-            <div className="instagram-story-zoom-head"><div><strong>Enquadramento</strong><span>Zoom e posição da imagem no Story</span></div><b>{Math.round(storyZoom*100)}%</b></div>
-            <div className="instagram-story-zoom-row">
-              <button type="button" disabled={!canEdit||inactive||storyZoom<=0.2} onClick={()=>setStoryZoom(current=>Math.max(.2,Math.round((current-.05)*100)/100))} aria-label="Diminuir zoom"><Minus size={14}/></button>
-              <input disabled={!canEdit||inactive} type="range" min="0.2" max="2" step="0.05" value={storyZoom} onChange={event=>setStoryZoom(Number(event.target.value))}/>
-              <button type="button" disabled={!canEdit||inactive||storyZoom>=2} onClick={()=>setStoryZoom(current=>Math.min(2,Math.round((current+.05)*100)/100))} aria-label="Aumentar zoom"><Plus size={14}/></button>
-              <button className="instagram-story-reset" type="button" disabled={!canEdit||inactive} onClick={resetStoryCrop}><RotateCcw size={13}/>Resetar</button>
-            </div>
-            <button className="button secondary instagram-story-edit-crop" type="button" disabled={!canEdit||inactive||!storyPhoto} onClick={()=>setCropOpen(true)}><Move size={14}/>Editar enquadramento</button>
-            <small>No editor você pode arrastar a foto, dar zoom e ver claramente o que fica dentro ou fora do Story.</small>
-          </div>
           <div className="instagram-story-sequence">
-            <article><b>1</b><div><strong>Story da foto</strong><span>Imagem com o enquadramento que você definiu.</span></div></article>
+            <article className="instagram-story-sequence-editable"><b>1</b><div><strong>Story da foto</strong><span>Enquadramento, zoom e posição da imagem.</span></div><button type="button" disabled={!canEdit||inactive||!storyPhoto} onClick={()=>setCropOpen(true)}><Move size={13}/>Editar</button></article>
             <article className="instagram-story-sequence-editable"><b>2</b><div><strong>Story com os detalhes</strong><span>Logo, texto e QR Code com tamanho e posição ajustáveis.</span></div><button type="button" disabled={!canEdit||inactive} onClick={()=>setDetailsOpen(true)}><Move size={13}/>Editar</button></article>
           </div>
           <div className="instagram-story-note"><CircleAlert size={14}/><span>O Story é publicado como mídia vertical. O Instagram não recebe uma legenda de post para Stories por este fluxo; qualquer texto precisa fazer parte da própria arte/imagem.</span></div>
