@@ -116,3 +116,18 @@
 .instagram-story-last-published{display:flex;align-items:center;gap:6px;color:var(--text-muted);font-size:10.5px}
 @media(max-width:980px){.instagram-story-layout{grid-template-columns:1fr}.instagram-story-preview-shell{align-items:flex-start}.instagram-story-photo-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:620px){.instagram-story-heading{flex-direction:column}.instagram-story-photo-grid{grid-template-columns:1fr}.instagram-story-actions{flex-direction:column}.instagram-story-actions .button{width:100%;justify-content:center}}
+
+.instagram-story-zoom-control{display:flex;flex-direction:column;gap:8px;padding:11px 12px;border:1px solid var(--border);border-radius:11px;background:var(--surface)}
+.instagram-story-zoom-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.instagram-story-zoom-head>div{display:flex;flex-direction:column;gap:2px}.instagram-story-zoom-head strong{font-size:12px}.instagram-story-zoom-head span{font-size:10.5px;color:var(--text-muted)}
+.instagram-story-zoom-head>b{padding:4px 7px;border-radius:999px;background:var(--app-bg);font-size:10.5px;color:var(--text-muted)}
+.instagram-story-zoom-row{display:grid;grid-template-columns:32px minmax(0,1fr) 32px auto;align-items:center;gap:8px}
+.instagram-story-zoom-row>button{display:grid;place-items:center;height:32px;padding:0;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text);cursor:pointer}
+.instagram-story-zoom-row>button:disabled{opacity:.4;cursor:not-allowed}
+.instagram-story-zoom-row input[type="range"]{width:100%;accent-color:var(--primary)}
+.instagram-story-zoom-row .instagram-story-reset{display:flex;align-items:center;justify-content:center;gap:5px;padding:0 9px;font-size:10.5px;font-weight:700}
+.instagram-story-zoom-control>small{font-size:10px;line-height:1.4;color:var(--text-muted)}
+.instagram-story-preview{background:#000}
+.instagram-story-preview>.instagram-photo-open img{transition:transform .15s ease}
+.instagram-story-preview>.instagram-photo-open:hover img{transform:inherit}
+@media(max-width:620px){.instagram-story-zoom-row{grid-template-columns:32px minmax(0,1fr) 32px}.instagram-story-zoom-row .instagram-story-reset{grid-column:1/-1;width:100%}}
