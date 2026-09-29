@@ -216,9 +216,13 @@ def sign_story_media_path(
     photo_id: UUID,
     expires: int,
     zoom: float,
+    offset_x: float = 0.0,
+    offset_y: float = 0.0,
 ) -> str:
     normalized_zoom = f"{zoom:.2f}"
-    message = f"{organization_id}:{property_id}:{photo_id}:{expires}:story:{normalized_zoom}".encode("utf-8")
+    normalized_x = f"{offset_x:.3f}"
+    normalized_y = f"{offset_y:.3f}"
+    message = f"{organization_id}:{property_id}:{photo_id}:{expires}:story:{normalized_zoom}:{normalized_x}:{normalized_y}".encode("utf-8")
     return hmac.new(_media_signing_key(), message, hashlib.sha256).hexdigest()
 
 
@@ -228,11 +232,13 @@ def validate_story_media_signature(
     photo_id: UUID,
     expires: int,
     zoom: float,
+    offset_x: float,
+    offset_y: float,
     signature: str,
 ) -> bool:
     if expires < int(time.time()):
         return False
-    expected = sign_story_media_path(organization_id, property_id, photo_id, expires, zoom)
+    expected = sign_story_media_path(organization_id, property_id, photo_id, expires, zoom, offset_x, offset_y)
     return hmac.compare_digest(expected, signature)
 
 
@@ -243,12 +249,24 @@ def public_story_media_url(
     property_id: UUID,
     photo_id: UUID,
     zoom: float,
+    offset_x: float = 0.0,
+    offset_y: float = 0.0,
     ttl_seconds: int = 3600,
 ) -> str:
     expires = int(time.time()) + ttl_seconds
     normalized_zoom = round(max(0.2, min(2.0, zoom)), 2)
-    signature = sign_story_media_path(organization_id, property_id, photo_id, expires, normalized_zoom)
-    query = urlencode({"expires": expires, "zoom": f"{normalized_zoom:.2f}", "signature": signature})
+    normalized_x = round(max(-1.0, min(1.0, offset_x)), 3)
+    normalized_y = round(max(-1.0, min(1.0, offset_y)), 3)
+    signature = sign_story_media_path(
+        organization_id, property_id, photo_id, expires, normalized_zoom, normalized_x, normalized_y
+    )
+    query = urlencode({
+        "expires": expires,
+        "zoom": f"{normalized_zoom:.2f}",
+        "offset_x": f"{normalized_x:.3f}",
+        "offset_y": f"{normalized_y:.3f}",
+        "signature": signature,
+    })
     return f"{base_url.rstrip('/')}/api/public/instagram-story-media/{organization_id}/{property_id}/{photo_id}?{query}"
 
 
