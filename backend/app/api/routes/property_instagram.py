@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import io
 from datetime import datetime, timezone
 from typing import Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
+from PIL import Image, ImageOps
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -18,10 +20,12 @@ from app.integrations.instagram import (
     credentials as instagram_credentials,
     media_details,
     public_media_url,
+    public_story_media_url,
     publish_carousel,
     publish_single,
     publish_story,
     validate_media_signature,
+    validate_story_media_signature,
 )
 
 router = APIRouter(tags=["property-instagram"])
@@ -64,6 +68,7 @@ class InstagramPublicationResponse(BaseModel):
     story_status: Literal["draft", "ready", "publishing", "published", "failed"] = "draft"
     story_photo_id: UUID | None = None
     story_media_id: str | None = None
+    story_zoom: float = 1.0
     story_published_at: str | None = None
     story_last_error: str | None = None
     property_active: bool
@@ -82,6 +87,7 @@ class InstagramStoryUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     photo_id: UUID
+    zoom: float = Field(default=1.0, ge=0.65, le=2.0)
 
 
 def _property(db: Session, organization_id: UUID, property_id: UUID) -> Property:
@@ -217,6 +223,7 @@ def _response(db: Session, item: Property, photos: list[PropertyPhoto]) -> Insta
         story_status=str((state.get("story") or {}).get("status") or "draft"),
         story_photo_id=UUID(str((state.get("story") or {}).get("photo_id"))) if (state.get("story") or {}).get("photo_id") else None,
         story_media_id=(str((state.get("story") or {}).get("media_id") or "").strip() or None),
+        story_zoom=float((state.get("story") or {}).get("zoom") or 1.0),
         story_published_at=(state.get("story") or {}).get("published_at"),
         story_last_error=(str((state.get("story") or {}).get("last_error") or "").strip() or None),
         property_active=not inactive,
@@ -330,6 +337,65 @@ def public_instagram_media(
     return Response(
         content=content,
         media_type=photo.content_type,
+        headers={"Cache-Control": "public, max-age=900"},
+    )
+
+
+@router.get("/public/instagram-story-media/{organization_id}/{property_id}/{photo_id}")
+def public_instagram_story_media(
+    organization_id: UUID,
+    property_id: UUID,
+    photo_id: UUID,
+    expires: int = Query(..., ge=1),
+    zoom: float = Query(..., ge=0.65, le=2.0),
+    signature: str = Query(..., min_length=32, max_length=128),
+    db: Session = Depends(get_db),
+) -> Response:
+    normalized_zoom = round(zoom, 2)
+    if not validate_story_media_signature(
+        organization_id,
+        property_id,
+        photo_id,
+        expires,
+        normalized_zoom,
+        signature,
+    ):
+        raise HTTPException(status_code=404, detail="Mídia temporária do Story não encontrada.")
+
+    photo = db.scalar(
+        select(PropertyPhoto).where(
+            PropertyPhoto.id == photo_id,
+            PropertyPhoto.property_id == property_id,
+            PropertyPhoto.organization_id == organization_id,
+        )
+    )
+    if photo is None:
+        raise HTTPException(status_code=404, detail="Foto não encontrada.")
+
+    try:
+        content = get_document_storage().download_bytes(photo.storage_reference)
+        source = Image.open(io.BytesIO(content))
+        source = ImageOps.exif_transpose(source).convert("RGB")
+    except (DocumentStorageError, OSError, ValueError) as exc:
+        raise HTTPException(status_code=404, detail="Foto indisponível para o Story.") from exc
+
+    target_width, target_height = 1080, 1920
+    base_scale = max(target_width / source.width, target_height / source.height)
+    scale = base_scale * normalized_zoom
+    resized_width = max(1, round(source.width * scale))
+    resized_height = max(1, round(source.height * scale))
+    resized = source.resize((resized_width, resized_height), Image.Resampling.LANCZOS)
+
+    canvas = Image.new("RGB", (target_width, target_height), (0, 0, 0))
+    left = (target_width - resized_width) // 2
+    top = (target_height - resized_height) // 2
+    canvas.paste(resized, (left, top))
+
+    output = io.BytesIO()
+    canvas.save(output, format="JPEG", quality=92, optimize=True)
+    return Response(
+        content=output.getvalue(),
+        media_type="image/jpeg",
         headers={"Cache-Control": "public, max-age=900"},
     )
 
@@ -474,6 +540,7 @@ def update_instagram_story(
     story.update({
         "status": "ready",
         "photo_id": str(payload.photo_id),
+        "zoom": round(payload.zoom, 2),
         "updated_at": datetime.now(timezone.utc).isoformat(),
         "last_error": None,
     })
@@ -539,11 +606,13 @@ def publish_instagram_story_property(
     item.instagram_publication = state
     db.commit()
 
-    image_url = public_media_url(
+    story_zoom = round(float(story.get("zoom") or 1.0), 2)
+    image_url = public_story_media_url(
         base_url=_public_base_url(request),
         organization_id=context.user.organization_id,
         property_id=item.id,
         photo_id=photo.id,
+        zoom=story_zoom,
     )
     try:
         media_id = publish_story(creds, image_url=image_url)
