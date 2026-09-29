@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from typing import Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -13,6 +13,15 @@ from app.core.database import get_db
 from app.domains.foundation.access import UserContext, require_permission
 from app.domains.foundation.audit import write_audit
 from app.domains.portfolio.models import Property, PropertyPhoto
+from app.integrations.document_storage import DocumentStorageError, get_document_storage
+from app.integrations.instagram import (
+    credentials as instagram_credentials,
+    media_details,
+    public_media_url,
+    publish_carousel,
+    publish_single,
+    validate_media_signature,
+)
 
 router = APIRouter(tags=["property-instagram"])
 
@@ -136,7 +145,7 @@ def _photo_payload(item: PropertyPhoto) -> InstagramPhotoItem:
     )
 
 
-def _response(item: Property, photos: list[PropertyPhoto]) -> InstagramPublicationResponse:
+def _response(db: Session, item: Property, photos: list[PropertyPhoto]) -> InstagramPublicationResponse:
     state = dict(item.instagram_publication or {})
     available_ids = {str(photo.id) for photo in photos}
     selected_raw = [str(value) for value in list(state.get("photo_ids") or [])]
@@ -165,8 +174,18 @@ def _response(item: Property, photos: list[PropertyPhoto]) -> InstagramPublicati
         inactivation_reason=state.get("inactivation_reason"),
         external_removal_pending=bool(state.get("external_removal_pending")),
         property_active=not inactive,
-        instagram_connected=False,
+        instagram_connected=instagram_credentials(db, item.organization_id).configured,
     )
+
+
+def _public_base_url(request: Request) -> str:
+    base = str(request.base_url).rstrip("/")
+    forwarded_proto = request.headers.get("x-forwarded-proto", "").split(",", 1)[0].strip().lower()
+    if forwarded_proto in {"http", "https"} and "://" in base:
+        base = forwarded_proto + "://" + base.split("://", 1)[1]
+    elif request.url.hostname and request.url.hostname.endswith(".run.app") and base.startswith("http://"):
+        base = "https://" + base.removeprefix("http://")
+    return base
 
 
 @router.get("/properties/{property_id}/instagram-publication", response_model=InstagramPublicationResponse)
@@ -176,7 +195,7 @@ def get_instagram_publication(
     db: Session = Depends(get_db),
 ) -> InstagramPublicationResponse:
     item = _property(db, context.user.organization_id, property_id)
-    return _response(item, _photos(db, context.user.organization_id, property_id))
+    return _response(db, item, _photos(db, context.user.organization_id, property_id))
 
 
 @router.put("/properties/{property_id}/instagram-publication", response_model=InstagramPublicationResponse)
@@ -235,4 +254,139 @@ def update_instagram_publication(
     )
     db.commit()
     db.refresh(item)
-    return _response(item, photos)
+    return _response(db, item, photos)
+
+
+@router.get("/public/instagram-media/{organization_id}/{property_id}/{photo_id}")
+def public_instagram_media(
+    organization_id: UUID,
+    property_id: UUID,
+    photo_id: UUID,
+    expires: int = Query(..., ge=1),
+    signature: str = Query(..., min_length=32, max_length=128),
+    db: Session = Depends(get_db),
+) -> Response:
+    if not validate_media_signature(organization_id, property_id, photo_id, expires, signature):
+        raise HTTPException(status_code=404, detail="Mídia temporária não encontrada.")
+    photo = db.scalar(
+        select(PropertyPhoto).where(
+            PropertyPhoto.id == photo_id,
+            PropertyPhoto.property_id == property_id,
+            PropertyPhoto.organization_id == organization_id,
+        )
+    )
+    if photo is None:
+        raise HTTPException(status_code=404, detail="Foto não encontrada.")
+    try:
+        content = get_document_storage().download_bytes(photo.storage_reference)
+    except DocumentStorageError as exc:
+        raise HTTPException(status_code=404, detail="Foto indisponível.") from exc
+    return Response(
+        content=content,
+        media_type=photo.content_type,
+        headers={"Cache-Control": "public, max-age=900"},
+    )
+
+
+@router.post("/properties/{property_id}/instagram-publication/publish", response_model=InstagramPublicationResponse)
+def publish_instagram_property(
+    property_id: UUID,
+    request: Request,
+    context: UserContext = Depends(require_permission("properties.publish")),
+    db: Session = Depends(get_db),
+) -> InstagramPublicationResponse:
+    item = _property(db, context.user.organization_id, property_id)
+    if item.status in {"leased", "inactive"}:
+        raise HTTPException(status_code=409, detail="O imóvel está inativo/locado e não pode ser publicado.")
+    state = dict(item.instagram_publication or {})
+    publication_format = str(state.get("format") or "carousel")
+    if publication_format not in {"single", "carousel"}:
+        raise HTTPException(status_code=422, detail="Neste momento o envio real está habilitado para Foto única e Carrossel.")
+
+    photos = _photos(db, context.user.organization_id, property_id)
+    by_id = {str(photo.id): photo for photo in photos}
+    selected_ids = [str(value) for value in list(state.get("photo_ids") or [])]
+    selected = [by_id[value] for value in selected_ids if value in by_id]
+    if not selected:
+        raise HTTPException(status_code=422, detail="Salve ao menos uma foto na publicação antes de enviar.")
+    if publication_format == "single" and len(selected) != 1:
+        raise HTTPException(status_code=422, detail="Foto única precisa conter exatamente uma imagem.")
+    if publication_format == "carousel" and not 2 <= len(selected) <= MAX_CAROUSEL_ITEMS:
+        raise HTTPException(status_code=422, detail="O carrossel precisa ter entre 2 e 10 imagens.")
+
+    caption = str(state.get("caption") or "").strip()
+    if not caption:
+        raise HTTPException(status_code=422, detail="Salve a legenda antes de publicar.")
+
+    creds = instagram_credentials(db, context.user.organization_id)
+    if not creds.configured:
+        raise HTTPException(status_code=422, detail="Conecte e teste a conta do Instagram em Configurações > Integrações.")
+
+    base_url = _public_base_url(request)
+    urls = [
+        public_media_url(
+            base_url=base_url,
+            organization_id=context.user.organization_id,
+            property_id=item.id,
+            photo_id=photo.id,
+        )
+        for photo in selected
+    ]
+    before = dict(state)
+    state["status"] = "publishing"
+    state["last_error"] = None
+    state["updated_at"] = datetime.now(timezone.utc).isoformat()
+    item.instagram_publication = state
+    db.commit()
+
+    try:
+        media_id = (
+            publish_single(creds, image_url=urls[0], caption=caption)
+            if publication_format == "single"
+            else publish_carousel(creds, image_urls=urls, caption=caption)
+        )
+        details = media_details(creds, media_id)
+    except HTTPException as exc:
+        failed = dict(item.instagram_publication or {})
+        failed["status"] = "failed"
+        failed["last_error"] = str(exc.detail)[:1000]
+        failed["updated_at"] = datetime.now(timezone.utc).isoformat()
+        item.instagram_publication = failed
+        db.commit()
+        raise
+
+    now = datetime.now(timezone.utc)
+    published = dict(item.instagram_publication or {})
+    published.update({
+        "status": "published",
+        "media_id": media_id,
+        "permalink": str(details.get("permalink") or "").strip() or None,
+        "published_at": now.isoformat(),
+        "updated_at": now.isoformat(),
+        "external_removal_pending": False,
+        "last_error": None,
+    })
+    item.instagram_publication = published
+
+    forwarded = request.headers.get("x-forwarded-for", "").split(",", 1)[0].strip()
+    write_audit(
+        db,
+        context=context,
+        action="properties.instagram.published",
+        module="properties",
+        entity_type="property",
+        entity_id=str(item.id),
+        before_data={"instagram_publication": before},
+        after_data={
+            "status": "published",
+            "media_id": media_id,
+            "permalink": published.get("permalink"),
+            "format": publication_format,
+            "photo_count": len(selected),
+        },
+        ip_address=forwarded or (request.client.host if request.client else None),
+        user_agent=request.headers.get("user-agent"),
+    )
+    db.commit()
+    db.refresh(item)
+    return _response(db, item, photos)
