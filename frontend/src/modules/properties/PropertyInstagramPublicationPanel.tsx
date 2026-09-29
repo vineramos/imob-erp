@@ -1,5 +1,5 @@
-import { ArrowDown, ArrowUp, Check, ChevronLeft, ChevronRight, CircleAlert, Clock3, ExternalLink, History, Instagram, Save, Send, X } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { ArrowDown, ArrowUp, Check, ChevronLeft, ChevronRight, CircleAlert, Clock3, ExternalLink, History, Instagram, Minus, Plus, RotateCcw, Save, Send, X } from 'lucide-react'
+import { type CSSProperties, useEffect, useMemo, useState } from 'react'
 import { ApiError, apiBlobRequest, apiRequest } from '../../api/client'
 import './property-instagram-publication.css'
 
@@ -36,6 +36,7 @@ type InstagramPublication = {
   story_status:'draft'|'ready'|'publishing'|'published'|'failed'
   story_photo_id:string|null
   story_media_id:string|null
+  story_zoom:number
   story_published_at:string|null
   story_last_error:string|null
   property_active:boolean
@@ -43,7 +44,7 @@ type InstagramPublication = {
 }
 type Props={propertyId:string;permissions:string[]}
 
-function PhotoPreview({photo,onOpen,className=''}:{photo:Photo;onOpen?:(photo:Photo)=>void;className?:string}){
+function PhotoPreview({photo,onOpen,className='',imageStyle}:{photo:Photo;onOpen?:(photo:Photo)=>void;className?:string;imageStyle?:CSSProperties}){
   const [src,setSrc]=useState('')
   useEffect(()=>{
     let active=true,objectUrl=''
@@ -55,8 +56,8 @@ function PhotoPreview({photo,onOpen,className=''}:{photo:Photo;onOpen?:(photo:Ph
     return()=>{active=false;if(objectUrl)URL.revokeObjectURL(objectUrl)}
   },[photo.content_url])
   if(!src)return <div className="instagram-photo-placeholder">Foto</div>
-  if(!onOpen)return <img className={className} src={src} alt={photo.caption||photo.filename}/>
-  return <button className={'instagram-photo-open '+className} type="button" onClick={()=>onOpen(photo)} title="Ampliar foto"><img src={src} alt={photo.caption||photo.filename}/></button>
+  if(!onOpen)return <img className={className} style={imageStyle} src={src} alt={photo.caption||photo.filename}/>
+  return <button className={'instagram-photo-open '+className} type="button" onClick={()=>onOpen(photo)} title="Ampliar foto"><img style={imageStyle} src={src} alt={photo.caption||photo.filename}/></button>
 }
 
 const statusLabel:Record<InstagramPublication['status'],string>={
@@ -84,6 +85,7 @@ export function PropertyInstagramPublicationPanel({propertyId,permissions}:Props
   const [openPhoto,setOpenPhoto]=useState<Photo|null>(null)
   const [previewIndex,setPreviewIndex]=useState(0)
   const [storyPhotoId,setStoryPhotoId]=useState<string|null>(null)
+  const [storyZoom,setStoryZoom]=useState(1)
   const [savingStory,setSavingStory]=useState(false)
   const [publishingStory,setPublishingStory]=useState(false)
 
@@ -91,7 +93,7 @@ export function PropertyInstagramPublicationPanel({propertyId,permissions}:Props
     let active=true
     setLoading(true);setError('')
     void apiRequest<InstagramPublication>(`/properties/${propertyId}/instagram-publication`)
-      .then(result=>{if(!active)return;setData(result);setCaption(result.caption);setPhotoIds(result.photo_ids);setFormat(result.format);setStoryPhotoId(result.story_photo_id)})
+      .then(result=>{if(!active)return;setData(result);setCaption(result.caption);setPhotoIds(result.photo_ids);setFormat(result.format);setStoryPhotoId(result.story_photo_id);setStoryZoom(result.story_zoom||1)})
       .catch(cause=>{if(active)setError(cause instanceof ApiError?cause.detail:'Não foi possível carregar a publicação do Instagram.')})
       .finally(()=>{if(active)setLoading(false)})
     return()=>{active=false}
@@ -112,7 +114,7 @@ export function PropertyInstagramPublicationPanel({propertyId,permissions}:Props
   const previewPhoto=selected[previewIndex]??selected[0]??null
   const storyPhoto=(data?.photos??[]).find(photo=>photo.id===storyPhotoId)??null
   const dirty=Boolean(data)&&(caption!==data!.caption||format!==data!.format||photoIds.join('|')!==data!.photo_ids.join('|'))
-  const storyDirty=Boolean(data)&&storyPhotoId!==data!.story_photo_id
+  const storyDirty=Boolean(data)&&(storyPhotoId!==data!.story_photo_id||Math.abs(storyZoom-(data!.story_zoom||1))>0.001)
 
   useEffect(()=>{
     setPreviewIndex(current=>selected.length===0?0:Math.min(current,selected.length-1))
@@ -168,9 +170,9 @@ export function PropertyInstagramPublicationPanel({propertyId,permissions}:Props
     try{
       const result=await apiRequest<InstagramPublication>(`/properties/${propertyId}/instagram-publication/story`,{
         method:'PUT',
-        body:JSON.stringify({photo_id:storyPhotoId}),
+        body:JSON.stringify({photo_id:storyPhotoId,zoom:storyZoom}),
       })
-      setData(result);setStoryPhotoId(result.story_photo_id)
+      setData(result);setStoryPhotoId(result.story_photo_id);setStoryZoom(result.story_zoom||1)
       setSuccess('Story salvo. A imagem fica independente do carrossel do post.')
     }catch(cause){setError(cause instanceof ApiError?cause.detail:'Não foi possível salvar o Story.')}
     finally{setSavingStory(false)}
@@ -314,6 +316,16 @@ export function PropertyInstagramPublicationPanel({propertyId,permissions}:Props
               {storyPhotoId===photo.id&&<Check size={14}/>}
             </button>)}
           </div>
+          <div className="instagram-story-zoom-control">
+            <div className="instagram-story-zoom-head"><div><strong>Enquadramento</strong><span>Zoom da imagem no Story</span></div><b>{Math.round(storyZoom*100)}%</b></div>
+            <div className="instagram-story-zoom-row">
+              <button type="button" disabled={!canEdit||inactive||storyZoom<=0.65} onClick={()=>setStoryZoom(current=>Math.max(.65,Math.round((current-.05)*100)/100))} aria-label="Diminuir zoom"><Minus size={14}/></button>
+              <input disabled={!canEdit||inactive} type="range" min="0.65" max="2" step="0.05" value={storyZoom} onChange={event=>setStoryZoom(Number(event.target.value))}/>
+              <button type="button" disabled={!canEdit||inactive||storyZoom>=2} onClick={()=>setStoryZoom(current=>Math.min(2,Math.round((current+.05)*100)/100))} aria-label="Aumentar zoom"><Plus size={14}/></button>
+              <button className="instagram-story-reset" type="button" disabled={!canEdit||inactive||Math.abs(storyZoom-1)<.001} onClick={()=>setStoryZoom(1)}><RotateCcw size={13}/>Resetar</button>
+            </div>
+            <small>A prévia reproduz o corte enviado à Meta. Abaixo de 100%, podem aparecer faixas para preservar mais da foto.</small>
+          </div>
           <div className="instagram-story-note"><CircleAlert size={14}/><span>O Story é publicado como mídia vertical. O Instagram não recebe uma legenda de post para Stories por este fluxo; qualquer texto precisa fazer parte da própria arte/imagem.</span></div>
           <div className="instagram-story-actions">
             <button className="button secondary" type="button" disabled={!canEdit||inactive||!storyDirty||!storyPhotoId||savingStory} onClick={()=>void saveStory()}><Save size={14}/>{savingStory?'Salvando...':storyDirty?'Salvar Story':'Story salvo'}</button>
@@ -323,7 +335,7 @@ export function PropertyInstagramPublicationPanel({propertyId,permissions}:Props
 
         <div className="instagram-story-preview-shell">
           <div className="instagram-story-preview">
-            {storyPhoto?<PhotoPreview photo={storyPhoto} onOpen={setOpenPhoto}/>:<div className="instagram-story-preview-empty"><Instagram size={24}/><span>Selecione uma foto</span></div>}
+            {storyPhoto?<PhotoPreview photo={storyPhoto} onOpen={setOpenPhoto} imageStyle={{transform:`scale(${storyZoom})`}}/>:<div className="instagram-story-preview-empty"><Instagram size={24}/><span>Selecione uma foto</span></div>}
             <div className="instagram-story-top"><span className="instagram-preview-avatar"><Instagram size={14}/></span><strong>imob.erp</strong><span>agora</span><b>•••</b></div>
           </div>
           {data.story_published_at&&<div className="instagram-story-last-published"><Check size={14}/><span>Último Story: {new Date(data.story_published_at).toLocaleString('pt-BR')}</span></div>}
