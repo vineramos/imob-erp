@@ -76,6 +76,12 @@ class InstagramPublicationResponse(BaseModel):
     story_offset_y: float = 0.0
     story_description_media_id: str | None = None
     story_site_url: str | None = None
+    story_text_scale: float = 1.0
+    story_qr_scale: float = 1.0
+    story_text_offset_x: float = 0.0
+    story_text_offset_y: float = 0.0
+    story_qr_offset_x: float = 0.0
+    story_qr_offset_y: float = 0.0
     story_published_at: str | None = None
     story_last_error: str | None = None
     property_active: bool
@@ -97,6 +103,12 @@ class InstagramStoryUpdate(BaseModel):
     zoom: float = Field(default=1.0, ge=0.2, le=2.0)
     offset_x: float = Field(default=0.0, ge=-1.0, le=1.0)
     offset_y: float = Field(default=0.0, ge=-1.0, le=1.0)
+    text_scale: float = Field(default=1.0, ge=0.6, le=1.8)
+    qr_scale: float = Field(default=1.0, ge=0.6, le=1.8)
+    text_offset_x: float = Field(default=0.0, ge=-1.0, le=1.0)
+    text_offset_y: float = Field(default=0.0, ge=-1.0, le=1.0)
+    qr_offset_x: float = Field(default=0.0, ge=-1.0, le=1.0)
+    qr_offset_y: float = Field(default=0.0, ge=-1.0, le=1.0)
 
 
 def _property(db: Session, organization_id: UUID, property_id: UUID) -> Property:
@@ -237,6 +249,12 @@ def _response(db: Session, item: Property, photos: list[PropertyPhoto]) -> Insta
         story_offset_y=float((state.get("story") or {}).get("offset_y") or 0.0),
         story_description_media_id=(str((state.get("story") or {}).get("description_media_id") or "").strip() or None),
         story_site_url=(str((state.get("story") or {}).get("site_url") or "").strip() or None),
+        story_text_scale=float((state.get("story") or {}).get("text_scale") or 1.0),
+        story_qr_scale=float((state.get("story") or {}).get("qr_scale") or 1.0),
+        story_text_offset_x=float((state.get("story") or {}).get("text_offset_x") or 0.0),
+        story_text_offset_y=float((state.get("story") or {}).get("text_offset_y") or 0.0),
+        story_qr_offset_x=float((state.get("story") or {}).get("qr_offset_x") or 0.0),
+        story_qr_offset_y=float((state.get("story") or {}).get("qr_offset_y") or 0.0),
         story_published_at=(state.get("story") or {}).get("published_at"),
         story_last_error=(str((state.get("story") or {}).get("last_error") or "").strip() or None),
         property_active=not inactive,
