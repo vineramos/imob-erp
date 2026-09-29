@@ -262,6 +262,31 @@ def publish_single(creds: InstagramCredentials, *, image_url: str, caption: str)
     return media_id
 
 
+def publish_story(creds: InstagramCredentials, *, image_url: str) -> str:
+    if not creds.account_id:
+        raise HTTPException(status_code=422, detail="ID da conta do Instagram ainda não configurado.")
+    payload = request_json(
+        creds,
+        "POST",
+        f"{creds.account_id}/media",
+        data={"media_type": "STORIES", "image_url": image_url},
+    )
+    creation_id = str(payload.get("id") or "").strip()
+    if not creation_id:
+        raise HTTPException(status_code=502, detail="A Meta não retornou o ID do container do Story.")
+    wait_for_container(creds, creation_id)
+    published = request_json(
+        creds,
+        "POST",
+        f"{creds.account_id}/media_publish",
+        data={"creation_id": creation_id},
+    )
+    media_id = str(published.get("id") or "").strip()
+    if not media_id:
+        raise HTTPException(status_code=502, detail="A Meta não retornou o ID do Story publicado.")
+    return media_id
+
+
 def publish_carousel(creds: InstagramCredentials, *, image_urls: list[str], caption: str) -> str:
     if not creds.account_id:
         raise HTTPException(status_code=422, detail="ID da conta do Instagram ainda não configurado.")
