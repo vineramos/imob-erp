@@ -254,6 +254,137 @@ def _public_base_url(request: Request) -> str:
     return base
 
 
+def _load_story_font(size: int, *, bold: bool = False):
+    candidates = [
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf" if bold else "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/dejavu/DejaVuSans.ttf",
+    ]
+    for path in candidates:
+        try:
+            return ImageFont.truetype(path, size=size)
+        except OSError:
+            continue
+    return ImageFont.load_default()
+
+
+def _wrap_story_text(draw: ImageDraw.ImageDraw, text: str, font, max_width: int, max_lines: int) -> list[str]:
+    words = text.split()
+    lines: list[str] = []
+    current = ""
+    for word in words:
+        candidate = f"{current} {word}".strip()
+        width = draw.textbbox((0, 0), candidate, font=font)[2]
+        if width <= max_width or not current:
+            current = candidate
+            continue
+        lines.append(current)
+        current = word
+        if len(lines) >= max_lines - 1:
+            break
+    if current and len(lines) < max_lines:
+        lines.append(current)
+    if len(lines) == max_lines and len(" ".join(lines)) < len(text):
+        lines[-1] = lines[-1].rstrip(" .") + "…"
+    return lines
+
+
+def _story_site_url(request: Request, item: Property) -> str:
+    base = _public_base_url(request)
+    if item.public_slug:
+        return f"{base}/site/{item.organization_id}/imoveis/{item.public_slug}"
+    return f"{base}/site/{item.organization_id}"
+
+
+def _story_description_image(request: Request, item: Property) -> bytes:
+    width, height = 1080, 1920
+    image = Image.new("RGB", (width, height), (16, 20, 27))
+    draw = ImageDraw.Draw(image)
+
+    title_font = _load_story_font(64, bold=True)
+    heading_font = _load_story_font(34, bold=True)
+    body_font = _load_story_font(30)
+    small_font = _load_story_font(24)
+
+    address = dict(item.address or {})
+    title = (item.public_title or "").strip() or {
+        "apartment": "Apartamento",
+        "house": "Casa",
+        "commercial": "Imóvel comercial",
+        "land": "Terreno",
+        "studio": "Studio",
+    }.get(item.property_type, "Imóvel")
+    location = ", ".join(
+        value for value in [
+            str(address.get("neighborhood") or "").strip(),
+            str(address.get("city") or "").strip(),
+        ] if value
+    )
+    details: list[str] = []
+    if item.area_m2:
+        details.append(f"{float(item.area_m2):g} m²")
+    if item.bedrooms:
+        details.append(f"{item.bedrooms} quartos")
+    if item.suites:
+        details.append(f"{item.suites} suítes")
+    if item.parking_spaces:
+        details.append(f"{item.parking_spaces} vagas")
+
+    accent = (202, 168, 91)
+    muted = (184, 191, 202)
+    white = (245, 247, 250)
+
+    draw.text((72, 90), "IMÓVEL EM DESTAQUE", font=small_font, fill=accent)
+    y = 160
+    for line in _wrap_story_text(draw, title, title_font, 930, 3):
+        draw.text((72, y), line, font=title_font, fill=white)
+        y += 78
+
+    if location:
+        y += 12
+        draw.text((72, y), location, font=heading_font, fill=muted)
+        y += 62
+
+    if details:
+        y += 30
+        detail_text = "  •  ".join(details)
+        for line in _wrap_story_text(draw, detail_text, heading_font, 930, 2):
+            draw.text((72, y), line, font=heading_font, fill=white)
+            y += 52
+
+    if item.rent_amount:
+        y += 28
+        draw.rounded_rectangle((72, y, 520, y + 96), radius=22, fill=(33, 40, 52))
+        draw.text((96, y + 24), _money(item.rent_amount), font=heading_font, fill=accent)
+        y += 126
+
+    description = (item.public_description or "").strip()
+    if description:
+        y += 16
+        for line in _wrap_story_text(draw, description, body_font, 930, 7):
+            draw.text((72, y), line, font=body_font, fill=white)
+            y += 46
+
+    site_url = _story_site_url(request, item)
+    qr = qrcode.QRCode(version=None, box_size=8, border=2)
+    qr.add_data(site_url)
+    qr.make(fit=True)
+    qr_image = qr.make_image(fill_color="black", back_color="white").convert("RGB").resize((280, 280), Image.Resampling.NEAREST)
+
+    footer_y = 1455
+    draw.rounded_rectangle((54, footer_y, 1026, 1840), radius=34, fill=(245, 247, 250))
+    draw.text((88, footer_y + 58), "Veja todos os detalhes no site", font=heading_font, fill=(22, 27, 35))
+    draw.text((88, footer_y + 112), "Aponte a câmera para o QR Code", font=body_font, fill=(75, 83, 95))
+    image.paste(qr_image, (700, footer_y + 48))
+    display_url = site_url.replace("https://", "").replace("http://", "")
+    for line in _wrap_story_text(draw, display_url, small_font, 560, 2):
+        draw.text((88, footer_y + 230), line, font=small_font, fill=(75, 83, 95))
+        footer_y += 28
+
+    output = io.BytesIO()
+    image.save(output, format="JPEG", quality=92, optimize=True)
+    return output.getvalue()
+
+
 @router.get("/properties/{property_id}/instagram-publication", response_model=InstagramPublicationResponse)
 def get_instagram_publication(
     property_id: UUID,
@@ -414,6 +545,26 @@ def public_instagram_story_media(
     canvas.save(output, format="JPEG", quality=92, optimize=True)
     return Response(
         content=output.getvalue(),
+        media_type="image/jpeg",
+        headers={"Cache-Control": "public, max-age=900"},
+    )
+
+
+@router.get("/public/instagram-story-description/{organization_id}/{property_id}")
+def public_instagram_story_description(
+    organization_id: UUID,
+    property_id: UUID,
+    request: Request,
+    expires: int = Query(..., ge=1),
+    signature: str = Query(..., min_length=32, max_length=128),
+    db: Session = Depends(get_db),
+) -> Response:
+    if not validate_story_description_signature(organization_id, property_id, expires, signature):
+        raise HTTPException(status_code=404, detail="Card temporário do Story não encontrado.")
+    item = _property(db, organization_id, property_id)
+    content = _story_description_image(request, item)
+    return Response(
+        content=content,
         media_type="image/jpeg",
         headers={"Cache-Control": "public, max-age=900"},
     )
