@@ -310,16 +310,26 @@ def public_story_description_url(
     return f"{base_url.rstrip('/')}/api/public/instagram-story-description/{organization_id}/{property_id}?{query}"
 
 
-def wait_for_container(creds: InstagramCredentials, creation_id: str, *, attempts: int = 8) -> None:
+def wait_for_container(creds: InstagramCredentials, creation_id: str, *, attempts: int = 12) -> None:
     for index in range(attempts):
-        payload = request_json(creds, "GET", creation_id, params={"fields": "status_code"})
+        try:
+            payload = request_json(creds, "GET", creation_id, params={"fields": "status_code"})
+        except HTTPException as exc:
+            detail = str(exc.detail)
+            # A Meta pode devolver 2207006 (Media Not Found) por alguns segundos
+            # logo após criar o container, antes de ele ficar visível para leitura.
+            if "2207006" not in detail or index >= attempts - 1:
+                raise
+            time.sleep(min(1.0 + (index * 0.5), 4.0))
+            continue
+
         status_code = str(payload.get("status_code") or "").upper()
         if status_code in {"FINISHED", "PUBLISHED"}:
             return
         if status_code in {"ERROR", "EXPIRED"}:
             raise HTTPException(status_code=502, detail=f"A Meta não conseguiu processar a mídia ({status_code}).")
         if index < attempts - 1:
-            time.sleep(1.0)
+            time.sleep(min(1.0 + (index * 0.5), 4.0))
     raise HTTPException(status_code=502, detail="A mídia ainda não ficou pronta para publicação na Meta.")
 
 
@@ -338,7 +348,7 @@ def create_image_container(creds: InstagramCredentials, *, image_url: str, is_ca
 
 
 def _publish_creation(creds: InstagramCredentials, creation_id: str, *, retry_media_builder: bool = True) -> str:
-    attempts = 3 if retry_media_builder else 1
+    attempts = 4 if retry_media_builder else 1
     last_error: HTTPException | None = None
     for attempt in range(attempts):
         try:
@@ -355,9 +365,10 @@ def _publish_creation(creds: InstagramCredentials, creation_id: str, *, retry_me
         except HTTPException as exc:
             last_error = exc
             detail = str(exc.detail)
-            if "2207008" not in detail or attempt >= attempts - 1:
+            transient_subcodes = ("2207006", "2207008")
+            if not any(subcode in detail for subcode in transient_subcodes) or attempt >= attempts - 1:
                 raise
-            time.sleep(5 * (attempt + 1))
+            time.sleep(4 * (attempt + 1))
     if last_error is not None:
         raise last_error
     raise HTTPException(status_code=502, detail="Não foi possível concluir a publicação na Meta.")
