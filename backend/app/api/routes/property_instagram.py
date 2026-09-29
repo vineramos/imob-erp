@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import io
+
+import httpx
 from datetime import datetime, timezone
 from typing import Literal
 from uuid import UUID
@@ -15,6 +17,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.domains.foundation.access import UserContext, require_permission
 from app.domains.foundation.audit import write_audit
+from app.domains.foundation.models import OrganizationSettings
 from app.domains.portfolio.models import Property, PropertyPhoto
 from app.integrations.document_storage import DocumentStorageError, get_document_storage
 from app.integrations.instagram import (
@@ -313,15 +316,45 @@ def _story_site_url(request: Request, item: Property) -> str:
     return f"{base}/site/{item.organization_id}"
 
 
-def _story_description_image(request: Request, item: Property) -> bytes:
+def _story_brand_logo(db: Session, request: Request, item: Property) -> Image.Image | None:
+    settings = db.scalar(
+        select(OrganizationSettings).where(OrganizationSettings.organization_id == item.organization_id)
+    )
+    theme = dict(settings.erp_theme or {}) if settings else {}
+    logo_url = str(theme.get("logoUrl") or "").strip()
+    if not logo_url:
+        return None
+    if logo_url.startswith("/"):
+        logo_url = f"{_public_base_url(request)}{logo_url}"
+    if not logo_url.startswith(("http://", "https://")):
+        return None
+    try:
+        response = httpx.get(logo_url, timeout=8.0, follow_redirects=True)
+        response.raise_for_status()
+        logo = Image.open(io.BytesIO(response.content))
+        return ImageOps.exif_transpose(logo).convert("RGBA")
+    except (httpx.HTTPError, OSError, ValueError):
+        return None
+
+
+def _story_description_image(request: Request, item: Property, db: Session) -> bytes:
     width, height = 1080, 1920
     image = Image.new("RGB", (width, height), (16, 20, 27))
     draw = ImageDraw.Draw(image)
 
-    title_font = _load_story_font(64, bold=True)
-    heading_font = _load_story_font(34, bold=True)
-    body_font = _load_story_font(30)
-    small_font = _load_story_font(24)
+    state = dict(item.instagram_publication or {})
+    story = dict(state.get("story") or {})
+    text_scale = max(0.6, min(1.8, float(story.get("text_scale") or 1.0)))
+    qr_scale = max(0.6, min(1.8, float(story.get("qr_scale") or 1.0)))
+    text_offset_x = max(-1.0, min(1.0, float(story.get("text_offset_x") or 0.0)))
+    text_offset_y = max(-1.0, min(1.0, float(story.get("text_offset_y") or 0.0)))
+    qr_offset_x = max(-1.0, min(1.0, float(story.get("qr_offset_x") or 0.0)))
+    qr_offset_y = max(-1.0, min(1.0, float(story.get("qr_offset_y") or 0.0)))
+
+    title_font = _load_story_font(max(34, round(64 * text_scale)), bold=True)
+    heading_font = _load_story_font(max(22, round(34 * text_scale)), bold=True)
+    body_font = _load_story_font(max(20, round(30 * text_scale)))
+    small_font = _load_story_font(max(16, round(24 * text_scale)))
 
     address = dict(item.address or {})
     title = (item.public_title or "").strip() or {
@@ -351,55 +384,92 @@ def _story_description_image(request: Request, item: Property) -> bytes:
     muted = (184, 191, 202)
     white = (245, 247, 250)
 
-    draw.text((72, 90), "IMÓVEL EM DESTAQUE", font=small_font, fill=accent)
-    y = 160
-    for line in _wrap_story_text(draw, title, title_font, 930, 3):
-        draw.text((72, y), line, font=title_font, fill=white)
-        y += 78
+    logo = _story_brand_logo(db, request, item)
+    if logo is not None:
+        max_w, max_h = 250, 120
+        ratio = min(max_w / logo.width, max_h / logo.height)
+        logo = logo.resize((max(1, round(logo.width * ratio)), max(1, round(logo.height * ratio))), Image.Resampling.LANCZOS)
+        image.paste(logo, (72, 72), logo)
+        brand_y = 72 + logo.height + 36
+    else:
+        settings = db.scalar(
+            select(OrganizationSettings).where(OrganizationSettings.organization_id == item.organization_id)
+        )
+        theme = dict(settings.erp_theme or {}) if settings else {}
+        brand_name = str(theme.get("companyShortName") or theme.get("companyName") or "Imobiliária").strip()
+        draw.rounded_rectangle((72, 72, 180, 180), radius=26, fill=(33, 40, 52))
+        initials = "".join(part[:1].upper() for part in brand_name.split()[:2]) or "IM"
+        draw.text((94, 96), initials, font=_load_story_font(36, bold=True), fill=accent)
+        draw.text((204, 104), brand_name, font=_load_story_font(34, bold=True), fill=white)
+        brand_y = 228
+
+    tx = 72 + round(text_offset_x * 120)
+    y = brand_y + 12 + round(text_offset_y * 250)
+    draw.text((tx, y), "IMÓVEL EM DESTAQUE", font=small_font, fill=accent)
+    y += max(54, round(70 * text_scale))
+
+    max_text_width = max(500, min(930, round(930 / max(0.8, text_scale))))
+    for line in _wrap_story_text(draw, title, title_font, max_text_width, 3):
+        draw.text((tx, y), line, font=title_font, fill=white)
+        y += max(50, round(78 * text_scale))
 
     if location:
         y += 12
-        draw.text((72, y), location, font=heading_font, fill=muted)
-        y += 62
+        draw.text((tx, y), location, font=heading_font, fill=muted)
+        y += max(42, round(62 * text_scale))
 
     if details:
-        y += 30
+        y += 26
         detail_text = "  •  ".join(details)
-        for line in _wrap_story_text(draw, detail_text, heading_font, 930, 2):
-            draw.text((72, y), line, font=heading_font, fill=white)
-            y += 52
+        for line in _wrap_story_text(draw, detail_text, heading_font, max_text_width, 2):
+            draw.text((tx, y), line, font=heading_font, fill=white)
+            y += max(38, round(52 * text_scale))
 
     if item.rent_amount:
-        y += 28
-        draw.rounded_rectangle((72, y, 520, y + 96), radius=22, fill=(33, 40, 52))
-        draw.text((96, y + 24), _money(item.rent_amount), font=heading_font, fill=accent)
-        y += 126
+        y += 24
+        price_w = max(300, round(448 * text_scale))
+        price_h = max(70, round(96 * text_scale))
+        draw.rounded_rectangle((tx, y, min(1008, tx + price_w), y + price_h), radius=22, fill=(33, 40, 52))
+        draw.text((tx + 24, y + max(16, round(24 * text_scale))), _money(item.rent_amount), font=heading_font, fill=accent)
+        y += price_h + 30
 
     description = (item.public_description or "").strip()
     if description:
-        y += 16
-        for line in _wrap_story_text(draw, description, body_font, 930, 7):
-            draw.text((72, y), line, font=body_font, fill=white)
-            y += 46
+        y += 8
+        for line in _wrap_story_text(draw, description, body_font, max_text_width, 6):
+            draw.text((tx, y), line, font=body_font, fill=white)
+            y += max(34, round(46 * text_scale))
 
     site_url = _story_site_url(request, item)
     qr = qrcode.QRCode(version=None, box_size=8, border=2)
     qr.add_data(site_url)
     qr.make(fit=True)
-    qr_image = qr.make_image(fill_color="black", back_color="white").convert("RGB").resize((280, 280), Image.Resampling.NEAREST)
+    qr_size = max(170, min(430, round(280 * qr_scale)))
+    qr_image = qr.make_image(fill_color="black", back_color="white").convert("RGB").resize((qr_size, qr_size), Image.Resampling.NEAREST)
 
     footer_y = 1455
     draw.rounded_rectangle((54, footer_y, 1026, 1840), radius=34, fill=(245, 247, 250))
-    draw.text((88, footer_y + 58), "Veja todos os detalhes no site", font=heading_font, fill=(22, 27, 35))
-    draw.text((88, footer_y + 112), "Aponte a câmera para o QR Code", font=body_font, fill=(75, 83, 95))
-    image.paste(qr_image, (700, footer_y + 48))
+    footer_heading = _load_story_font(max(22, round(34 * text_scale)), bold=True)
+    footer_body = _load_story_font(max(18, round(28 * text_scale)))
+    footer_small = _load_story_font(max(15, round(22 * text_scale)))
+    footer_tx = 88 + round(text_offset_x * 80)
+    draw.text((footer_tx, footer_y + 58), "Veja todos os detalhes no site", font=footer_heading, fill=(22, 27, 35))
+    draw.text((footer_tx, footer_y + 112), "Aponte a câmera para o QR Code", font=footer_body, fill=(75, 83, 95))
+
+    qr_x = 700 + round(qr_offset_x * 170) - (qr_size - 280) // 2
+    qr_y = footer_y + 48 + round(qr_offset_y * 100) - (qr_size - 280) // 2
+    qr_x = max(560, min(width - qr_size - 48, qr_x))
+    qr_y = max(footer_y + 18, min(height - qr_size - 48, qr_y))
+    image.paste(qr_image, (qr_x, qr_y))
+
     display_url = site_url.replace("https://", "").replace("http://", "")
-    for line in _wrap_story_text(draw, display_url, small_font, 560, 2):
-        draw.text((88, footer_y + 230), line, font=small_font, fill=(75, 83, 95))
-        footer_y += 28
+    link_y = footer_y + 230
+    for line in _wrap_story_text(draw, display_url, footer_small, 520, 2):
+        draw.text((footer_tx, link_y), line, font=footer_small, fill=(75, 83, 95))
+        link_y += max(24, round(30 * text_scale))
 
     output = io.BytesIO()
-    image.save(output, format="JPEG", quality=92, optimize=True)
+    image.save(output, format="JPEG", quality=94, optimize=True)
     return output.getvalue()
 
 
@@ -580,7 +650,7 @@ def public_instagram_story_description(
     if not validate_story_description_signature(organization_id, property_id, expires, signature):
         raise HTTPException(status_code=404, detail="Card temporário do Story não encontrado.")
     item = _property(db, organization_id, property_id)
-    content = _story_description_image(request, item)
+    content = _story_description_image(request, item, db)
     return Response(
         content=content,
         media_type="image/jpeg",
