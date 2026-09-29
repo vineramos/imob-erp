@@ -347,7 +347,7 @@ def public_instagram_story_media(
     property_id: UUID,
     photo_id: UUID,
     expires: int = Query(..., ge=1),
-    zoom: float = Query(..., ge=0.65, le=2.0),
+    zoom: float = Query(..., ge=0.2, le=2.0),
     signature: str = Query(..., min_length=32, max_length=128),
     db: Session = Depends(get_db),
 ) -> Response:
@@ -380,7 +380,7 @@ def public_instagram_story_media(
         raise HTTPException(status_code=404, detail="Foto indisponível para o Story.") from exc
 
     target_width, target_height = 1080, 1920
-    base_scale = max(target_width / source.width, target_height / source.height)
+    base_scale = min(target_width / source.width, target_height / source.height)
     scale = base_scale * normalized_zoom
     resized_width = max(1, round(source.width * scale))
     resized_height = max(1, round(source.height * scale))
