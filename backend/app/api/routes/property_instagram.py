@@ -361,16 +361,22 @@ def public_instagram_story_media(
     photo_id: UUID,
     expires: int = Query(..., ge=1),
     zoom: float = Query(..., ge=0.2, le=2.0),
+    offset_x: float = Query(default=0.0, ge=-1.0, le=1.0),
+    offset_y: float = Query(default=0.0, ge=-1.0, le=1.0),
     signature: str = Query(..., min_length=32, max_length=128),
     db: Session = Depends(get_db),
 ) -> Response:
     normalized_zoom = round(zoom, 2)
+    normalized_x = round(offset_x, 3)
+    normalized_y = round(offset_y, 3)
     if not validate_story_media_signature(
         organization_id,
         property_id,
         photo_id,
         expires,
         normalized_zoom,
+        normalized_x,
+        normalized_y,
         signature,
     ):
         raise HTTPException(status_code=404, detail="Mídia temporária do Story não encontrada.")
@@ -400,8 +406,8 @@ def public_instagram_story_media(
     resized = source.resize((resized_width, resized_height), Image.Resampling.LANCZOS)
 
     canvas = Image.new("RGB", (target_width, target_height), (0, 0, 0))
-    left = (target_width - resized_width) // 2
-    top = (target_height - resized_height) // 2
+    left = (target_width - resized_width) // 2 + round(normalized_x * target_width / 2)
+    top = (target_height - resized_height) // 2 + round(normalized_y * target_height / 2)
     canvas.paste(resized, (left, top))
 
     output = io.BytesIO()
