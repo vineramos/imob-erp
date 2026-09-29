@@ -33,6 +33,7 @@ from app.api.routes.foundation import router as foundation_router
 from app.api.routes.health import router as health_router
 from app.api.routes.inspections import router as inspections_router
 from app.api.routes.integrations import router as integrations_router
+from app.api.routes.instagram import router as instagram_router
 from app.api.routes.lease_exit import router as lease_exit_router
 from app.api.routes.leases import router as leases_router
 from app.api.routes.lease_lifecycle import router as lease_lifecycle_router
@@ -160,6 +161,7 @@ api_router.include_router(owner_portal_reports_router)
 api_router.include_router(inter_webhook_router)
 api_router.include_router(signature_events_router)
 api_router.include_router(integrations_router)
+api_router.include_router(instagram_router)
 api_router.include_router(public_captures_router)
 api_router.include_router(public_map_router)
 api_router.include_router(publication_router)
