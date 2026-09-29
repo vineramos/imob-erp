@@ -3,6 +3,7 @@ import { FormEvent, useEffect, useState } from 'react'
 import { ApiError, apiRequest } from '../../api/client'
 import type { BankIntegrationStatus, IntegrationReadiness, IntegrationsConfig, SignatureIntegrationStatus, SmtpConfiguration } from '../../api/types'
 import { authConfigured } from '../../auth/client'
+import { InstagramIntegrationSettingsPanel } from './InstagramIntegrationSettingsPanel'
 import { PortalIntegrationsSettingsPanel } from './PortalIntegrationsSettingsPanel'
 import { WhatsAppIntegrationSettingsPanel } from './WhatsAppIntegrationSettingsPanel'
 
@@ -206,6 +207,15 @@ export function IntegrationsSettingsPage({ canEdit }: Props) {
     } catch (cause) { add('whatsapp','WhatsApp Business','attention',failure(cause,'Falha ao validar a integração com a Meta.')) }
 
     try {
+      const instagram = await apiRequest<{configured:boolean;username:string}>('/meta-instagram/config')
+      if (!instagram.configured) add('instagram','Instagram','attention','Token da conta profissional ainda não foi configurado.')
+      else {
+        const meta = await apiRequest<{reachable:boolean;message:string;username:string}>('/meta-instagram/test',{method:'POST'})
+        add('instagram','Instagram',meta.reachable?'ok':'attention',meta.message)
+      }
+    } catch (cause) { add('instagram','Instagram','attention',failure(cause,'Falha ao validar a integração do Instagram.')) }
+
+    try {
       const portals = await apiRequest<PortalAuditConfig>('/integrations/portals')
       for (const channel of portals.channels) {
         try {
@@ -274,7 +284,7 @@ export function IntegrationsSettingsPage({ canEdit }: Props) {
       {auditItems.length>0&&<article className="panel integrations-audit-panel">
         <div className="panel-heading panel-heading-row"><div><span className="eyebrow">Diagnóstico ao vivo</span><h2>Validação consolidada</h2><p>{auditCheckedAt?`Executada em ${new Date(auditCheckedAt).toLocaleString('pt-BR')}.`:'Resultados da última validação.'}</p></div><Activity size={19}/></div>
         <div className="integrations-audit-grid">{auditItems.map(item=><div className={'integrations-audit-row '+item.status} key={item.key}>
-          <span className="integrations-audit-icon">{item.key==='storage'?<Database size={15}/>:item.key==='whatsapp'?<MessageCircle size={15}/>:item.key.startsWith('portal-')?<RadioTower size={15}/>:item.status==='ok'?<CheckCircle2 size={15}/>:<CircleAlert size={15}/>}</span>
+          <span className="integrations-audit-icon">{item.key==='storage'?<Database size={15}/>:item.key==='whatsapp'?<MessageCircle size={15}/>:item.key==='instagram'?<MessageCircle size={15}/>:item.key.startsWith('portal-')?<RadioTower size={15}/>:item.status==='ok'?<CheckCircle2 size={15}/>:<CircleAlert size={15}/>}</span>
           <div><strong>{item.label}</strong><span>{item.detail}</span></div>
           <i className={'status-badge '+(item.status==='ok'?'success':item.status==='disabled'?'neutral':'warning')}>{item.status==='ok'?'Validado':item.status==='disabled'?'Desativado':'Atenção'}</i>
         </div>)}</div>
@@ -343,6 +353,8 @@ export function IntegrationsSettingsPage({ canEdit }: Props) {
           </article>
 
           <WhatsAppIntegrationSettingsPanel canEdit={canEdit} />
+
+          <InstagramIntegrationSettingsPanel canEdit={canEdit} />
 
           <PortalIntegrationsSettingsPanel canEdit={canEdit} />
 
