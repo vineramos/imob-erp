@@ -160,6 +160,10 @@ def _money(value) -> str:
 
 def _story_attribute_items(item: Property) -> list[dict[str, str]]:
     items: list[dict[str, str]] = []
+    address = dict(item.address or {})
+    neighborhood = str(address.get("neighborhood") or "").strip()
+    if neighborhood:
+        items.append({"key": "neighborhood", "value": neighborhood, "label": "bairro"})
     if item.bedrooms:
         items.append({"key": "bedrooms", "value": str(item.bedrooms), "label": "quartos"})
     if item.bathrooms:
@@ -618,7 +622,11 @@ def public_instagram_media(
 
 def _draw_story_attribute_icon(draw: ImageDraw.ImageDraw, key: str, x: int, y: int, size: int, color: tuple[int, int, int]) -> None:
     stroke = max(2, round(size * 0.08))
-    if key == "bedrooms":
+    if key == "neighborhood":
+        draw.ellipse((x + size * 0.22, y + size * 0.08, x + size * 0.78, y + size * 0.64), outline=color, width=stroke)
+        draw.ellipse((x + size * 0.43, y + size * 0.28, x + size * 0.57, y + size * 0.42), fill=color)
+        draw.polygon([(x + size * 0.5, y + size * 0.92), (x + size * 0.3, y + size * 0.56), (x + size * 0.7, y + size * 0.56)], fill=color)
+    elif key == "bedrooms":
         draw.rectangle((x, y + size * 0.46, x + size, y + size * 0.78), outline=color, width=stroke)
         draw.rectangle((x + size * 0.08, y + size * 0.27, x + size * 0.42, y + size * 0.48), outline=color, width=stroke)
         draw.line((x, y + size * 0.22, x, y + size * 0.88), fill=color, width=stroke)
