@@ -178,8 +178,18 @@ jobs:
           HEALTH_FILE="$(mktemp)"
           READY_FILE="$(mktemp)"
           trap 'rm -f "$HEALTH_FILE" "$READY_FILE"' EXIT
-          curl --silent --show-error --fail --max-time 20 "${SERVICE_URL}/api/health" > "$HEALTH_FILE"
-          curl --silent --show-error --fail --max-time 20 "${SERVICE_URL}/api/health/ready" > "$READY_FILE"
+          for attempt in 1 2 3 4 5 6; do
+            if curl --silent --show-error --fail --max-time 20 "${SERVICE_URL}/api/health" > "$HEALTH_FILE" \
+              && curl --silent --show-error --fail --max-time 20 "${SERVICE_URL}/api/health/ready" > "$READY_FILE"; then
+              break
+            fi
+            if [[ "$attempt" == "6" ]]; then
+              echo "Application health/readiness did not become ready after retries."
+              exit 1
+            fi
+            echo "Health/readiness not ready yet (attempt ${attempt}/6); retrying in 10s..."
+            sleep 10
+          done
           python - "$HEALTH_FILE" "$READY_FILE" "$GITHUB_SHA" <<'PY'
           import json
           import sys
