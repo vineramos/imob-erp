@@ -85,6 +85,12 @@ class InstagramPublicationResponse(BaseModel):
     story_text_offset_y: float = 0.0
     story_qr_offset_x: float = 0.0
     story_qr_offset_y: float = 0.0
+    story_attributes_enabled: bool = True
+    story_attributes_layout: Literal["horizontal", "vertical", "chips", "bottom_bar"] = "bottom_bar"
+    story_attributes_scale: float = 1.0
+    story_attributes_offset_x: float = 0.0
+    story_attributes_offset_y: float = 0.0
+    story_attributes: list[dict[str, str]] = Field(default_factory=list)
     story_published_at: str | None = None
     story_last_error: str | None = None
     property_active: bool
@@ -112,6 +118,11 @@ class InstagramStoryUpdate(BaseModel):
     text_offset_y: float = Field(default=0.0, ge=-1.0, le=1.0)
     qr_offset_x: float = Field(default=0.0, ge=-1.0, le=1.0)
     qr_offset_y: float = Field(default=0.0, ge=-1.0, le=1.0)
+    attributes_enabled: bool = True
+    attributes_layout: Literal["horizontal", "vertical", "chips", "bottom_bar"] = "bottom_bar"
+    attributes_scale: float = Field(default=1.0, ge=0.6, le=1.6)
+    attributes_offset_x: float = Field(default=0.0, ge=-1.0, le=1.0)
+    attributes_offset_y: float = Field(default=0.0, ge=-1.0, le=1.0)
 
 
 def _property(db: Session, organization_id: UUID, property_id: UUID) -> Property:
@@ -145,6 +156,21 @@ def _money(value) -> str:
     amount = float(value)
     raw = f"{amount:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
     return f"R$ {raw}"
+
+
+def _story_attribute_items(item: Property) -> list[dict[str, str]]:
+    items: list[dict[str, str]] = []
+    if item.bedrooms:
+        items.append({"key": "bedrooms", "value": str(item.bedrooms), "label": "quartos"})
+    if item.bathrooms:
+        items.append({"key": "bathrooms", "value": str(item.bathrooms), "label": "banheiros"})
+    if item.area_m2:
+        items.append({"key": "area", "value": f"{float(item.area_m2):g}", "label": "m²"})
+    if item.parking_spaces:
+        items.append({"key": "parking", "value": str(item.parking_spaces), "label": "vagas"})
+    if item.rent_amount:
+        items.append({"key": "rent", "value": _money(item.rent_amount), "label": "aluguel"})
+    return items
 
 
 def _default_caption(item: Property) -> str:
@@ -258,6 +284,12 @@ def _response(db: Session, item: Property, photos: list[PropertyPhoto]) -> Insta
         story_text_offset_y=float((state.get("story") or {}).get("text_offset_y") or 0.0),
         story_qr_offset_x=float((state.get("story") or {}).get("qr_offset_x") or 0.0),
         story_qr_offset_y=float((state.get("story") or {}).get("qr_offset_y") or 0.0),
+        story_attributes_enabled=bool((state.get("story") or {}).get("attributes_enabled", True)),
+        story_attributes_layout=str((state.get("story") or {}).get("attributes_layout") or "bottom_bar"),
+        story_attributes_scale=float((state.get("story") or {}).get("attributes_scale") or 1.0),
+        story_attributes_offset_x=float((state.get("story") or {}).get("attributes_offset_x") or 0.0),
+        story_attributes_offset_y=float((state.get("story") or {}).get("attributes_offset_y") or 0.0),
+        story_attributes=_story_attribute_items(item),
         story_published_at=(state.get("story") or {}).get("published_at"),
         story_last_error=(str((state.get("story") or {}).get("last_error") or "").strip() or None),
         property_active=not inactive,
@@ -584,6 +616,140 @@ def public_instagram_media(
     )
 
 
+def _draw_story_attribute_icon(draw: ImageDraw.ImageDraw, key: str, x: int, y: int, size: int, color: tuple[int, int, int]) -> None:
+    stroke = max(2, round(size * 0.08))
+    if key == "bedrooms":
+        draw.rectangle((x, y + size * 0.46, x + size, y + size * 0.78), outline=color, width=stroke)
+        draw.rectangle((x + size * 0.08, y + size * 0.27, x + size * 0.42, y + size * 0.48), outline=color, width=stroke)
+        draw.line((x, y + size * 0.22, x, y + size * 0.88), fill=color, width=stroke)
+        draw.line((x + size, y + size * 0.44, x + size, y + size * 0.88), fill=color, width=stroke)
+    elif key == "bathrooms":
+        draw.arc((x + size * 0.08, y + size * 0.36, x + size * 0.92, y + size * 0.82), 0, 180, fill=color, width=stroke)
+        draw.line((x + size * 0.12, y + size * 0.58, x + size * 0.12, y + size * 0.25, x + size * 0.5, y + size * 0.25), fill=color, width=stroke)
+        draw.arc((x + size * 0.42, y + size * 0.14, x + size * 0.68, y + size * 0.4), 180, 300, fill=color, width=stroke)
+    elif key == "area":
+        draw.line((x + size * 0.12, y + size * 0.82, x + size * 0.82, y + size * 0.12), fill=color, width=stroke)
+        draw.line((x + size * 0.08, y + size * 0.62, x + size * 0.38, y + size * 0.92), fill=color, width=stroke)
+        draw.line((x + size * 0.62, y + size * 0.08, x + size * 0.92, y + size * 0.38), fill=color, width=stroke)
+    elif key == "parking":
+        draw.rounded_rectangle((x + size * 0.08, y + size * 0.34, x + size * 0.92, y + size * 0.72), radius=max(3, round(size * 0.12)), outline=color, width=stroke)
+        draw.line((x + size * 0.24, y + size * 0.34, x + size * 0.36, y + size * 0.16, x + size * 0.7, y + size * 0.16, x + size * 0.82, y + size * 0.34), fill=color, width=stroke)
+        draw.ellipse((x + size * 0.2, y + size * 0.66, x + size * 0.38, y + size * 0.84), outline=color, width=stroke)
+        draw.ellipse((x + size * 0.62, y + size * 0.66, x + size * 0.8, y + size * 0.84), outline=color, width=stroke)
+    else:
+        font = _load_story_font(max(18, round(size * 0.82)), bold=True)
+        draw.text((x + size * 0.08, y - size * 0.08), "$", font=font, fill=color)
+
+
+def _render_story_attributes(image: Image.Image, item: Property, story: dict) -> None:
+    if not bool(story.get("attributes_enabled", True)):
+        return
+    items = _story_attribute_items(item)
+    if not items:
+        return
+
+    width, height = image.size
+    layout = str(story.get("attributes_layout") or "bottom_bar")
+    if layout not in {"horizontal", "vertical", "chips", "bottom_bar"}:
+        layout = "bottom_bar"
+    scale = max(0.6, min(1.6, float(story.get("attributes_scale") or 1.0)))
+    offset_x = max(-1.0, min(1.0, float(story.get("attributes_offset_x") or 0.0)))
+    offset_y = max(-1.0, min(1.0, float(story.get("attributes_offset_y") or 0.0)))
+
+    overlay = Image.new("RGBA", image.size, (0, 0, 0, 0))
+    draw = ImageDraw.Draw(overlay)
+    white = (248, 250, 252, 255)
+    muted = (216, 222, 230, 255)
+    accent = (222, 186, 98, 255)
+    panel = (13, 18, 25, 205)
+    border = (255, 255, 255, 35)
+    value_font = _load_story_font(max(24, round(34 * scale)), bold=True)
+    label_font = _load_story_font(max(16, round(21 * scale)))
+    icon_size = max(28, round(38 * scale))
+    pad = max(18, round(24 * scale))
+    gap = max(12, round(18 * scale))
+
+    def item_size(entry: dict[str, str]) -> tuple[int, int]:
+        value_bbox = draw.textbbox((0, 0), entry["value"], font=value_font)
+        label_bbox = draw.textbbox((0, 0), entry["label"], font=label_font)
+        text_w = max(value_bbox[2] - value_bbox[0], label_bbox[2] - label_bbox[0])
+        return icon_size + gap + text_w + pad * 2, max(icon_size, 62 * scale) + pad * 2
+
+    sizes = [item_size(entry) for entry in items]
+    if layout == "vertical":
+        box_w = min(round(width * 0.52), max(w for w, _ in sizes))
+        box_h = sum(h for _, h in sizes) + gap * (len(items) - 1)
+        box_x = 74 + round(offset_x * 210)
+        box_y = round(height * 0.56 + offset_y * 330)
+        box_x = max(36, min(width - box_w - 36, box_x))
+        box_y = max(180, min(height - box_h - 150, box_y))
+        y = box_y
+        for entry, (_, h) in zip(items, sizes):
+            draw.rounded_rectangle((box_x, y, box_x + box_w, y + h), radius=24, fill=panel, outline=border, width=2)
+            iy = y + (h - icon_size) // 2
+            _draw_story_attribute_icon(draw, entry["key"], box_x + pad, iy, icon_size, accent if entry["key"] == "rent" else white)
+            tx = box_x + pad + icon_size + gap
+            draw.text((tx, y + pad - 2), entry["value"], font=value_font, fill=accent if entry["key"] == "rent" else white)
+            draw.text((tx, y + pad + round(35 * scale)), entry["label"], font=label_font, fill=muted)
+            y += h + gap
+    elif layout == "chips":
+        chip_gap = gap
+        max_row_w = width - 96
+        x = 48
+        y = round(height * 0.68 + offset_y * 300)
+        rows: list[tuple[dict[str, str], int, int, int]] = []
+        for entry, (w, h) in zip(items, sizes):
+            chip_w = min(w, round(width * 0.54))
+            if x + chip_w > 48 + max_row_w:
+                x = 48
+                y += h + chip_gap
+            rows.append((entry, x, y, chip_w))
+            x += chip_w + chip_gap
+        total_min_x = min(row[1] for row in rows)
+        shift_x = round(offset_x * 180)
+        shift_y = 0
+        last_h = sizes[-1][1]
+        bottom = max(row[2] + last_h for row in rows)
+        if y < 150:
+            shift_y += 150 - y
+        if bottom > height - 150:
+            shift_y -= bottom - (height - 150)
+        for entry, cx, cy, chip_w in rows:
+            h = item_size(entry)[1]
+            cx = max(30, min(width - chip_w - 30, cx + shift_x))
+            cy += shift_y
+            draw.rounded_rectangle((cx, cy, cx + chip_w, cy + h), radius=round(h / 2), fill=panel, outline=border, width=2)
+            iy = cy + (h - icon_size) // 2
+            _draw_story_attribute_icon(draw, entry["key"], cx + pad, iy, icon_size, accent if entry["key"] == "rent" else white)
+            tx = cx + pad + icon_size + gap
+            draw.text((tx, cy + pad - 2), entry["value"], font=value_font, fill=accent if entry["key"] == "rent" else white)
+            draw.text((tx, cy + pad + round(35 * scale)), entry["label"], font=label_font, fill=muted)
+    else:
+        bottom_bar = layout == "bottom_bar"
+        box_h = max(132, round(156 * scale))
+        box_w = width - (72 if bottom_bar else 108)
+        box_x = (width - box_w) // 2 + round(offset_x * 120)
+        default_y = height - box_h - 150 if bottom_bar else round(height * 0.68)
+        box_y = default_y + round(offset_y * 300)
+        box_x = max(28, min(width - box_w - 28, box_x))
+        box_y = max(150, min(height - box_h - 130, box_y))
+        draw.rounded_rectangle((box_x, box_y, box_x + box_w, box_y + box_h), radius=30, fill=panel, outline=border, width=2)
+        cell_w = box_w / len(items)
+        for index, entry in enumerate(items):
+            cx = box_x + index * cell_w
+            if index:
+                draw.line((cx, box_y + 24, cx, box_y + box_h - 24), fill=(255, 255, 255, 26), width=2)
+            icon_x = round(cx + cell_w / 2 - icon_size / 2)
+            icon_y = box_y + max(12, round(16 * scale))
+            _draw_story_attribute_icon(draw, entry["key"], icon_x, icon_y, icon_size, accent if entry["key"] == "rent" else white)
+            value_bbox = draw.textbbox((0, 0), entry["value"], font=value_font)
+            label_bbox = draw.textbbox((0, 0), entry["label"], font=label_font)
+            draw.text((round(cx + cell_w / 2 - (value_bbox[2]-value_bbox[0])/2), box_y + round(60 * scale)), entry["value"], font=value_font, fill=accent if entry["key"] == "rent" else white)
+            draw.text((round(cx + cell_w / 2 - (label_bbox[2]-label_bbox[0])/2), box_y + round(98 * scale)), entry["label"], font=label_font, fill=muted)
+
+    image.paste(overlay, (0, 0), overlay)
+
+
 @router.get("/public/instagram-story-media/{organization_id}/{property_id}/{photo_id}")
 def public_instagram_story_media(
     organization_id: UUID,
@@ -639,6 +805,10 @@ def public_instagram_story_media(
     left = (target_width - resized_width) // 2 + round(normalized_x * target_width / 2)
     top = (target_height - resized_height) // 2 + round(normalized_y * target_height / 2)
     canvas.paste(resized, (left, top))
+
+    item = _property(db, organization_id, property_id)
+    story_state = dict((dict(item.instagram_publication or {}).get("story") or {}))
+    _render_story_attributes(canvas, item, story_state)
 
     output = io.BytesIO()
     canvas.save(output, format="JPEG", quality=92, optimize=True)
@@ -818,6 +988,11 @@ def update_instagram_story(
         "text_offset_y": round(payload.text_offset_y, 3),
         "qr_offset_x": round(payload.qr_offset_x, 3),
         "qr_offset_y": round(payload.qr_offset_y, 3),
+        "attributes_enabled": payload.attributes_enabled,
+        "attributes_layout": payload.attributes_layout,
+        "attributes_scale": round(payload.attributes_scale, 2),
+        "attributes_offset_x": round(payload.attributes_offset_x, 3),
+        "attributes_offset_y": round(payload.attributes_offset_y, 3),
         "media_id": None,
         "description_media_id": None,
         "permalink": None,
