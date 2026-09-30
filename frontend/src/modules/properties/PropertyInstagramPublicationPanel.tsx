@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowUp, Bath, BedDouble, Car, Check, ChevronLeft, ChevronRight, CircleAlert, Clock3, Copy, DollarSign, ExternalLink, History, Instagram, Move, Minus, Plus, RotateCcw, Ruler, Save, Send, X } from 'lucide-react'
+import { ArrowDown, ArrowUp, Bath, BedDouble, Car, Check, ChevronLeft, ChevronRight, CircleAlert, Clock3, Copy, DollarSign, ExternalLink, History, Instagram, MapPin, Move, Minus, Plus, RotateCcw, Ruler, Save, Send, X } from 'lucide-react'
 import { type CSSProperties, type PointerEvent as ReactPointerEvent, useEffect, useMemo, useRef, useState } from 'react'
 import { ApiError, apiBlobRequest, apiRequest } from '../../api/client'
 import { useTheme } from '../../theme/ThemeProvider'
@@ -78,6 +78,7 @@ function PhotoPreview({photo,onOpen,className='',imageStyle}:{photo:Photo;onOpen
 }
 
 function StoryAttributeIcon({kind}:{kind:string}){
+  if(kind==='neighborhood')return <MapPin size={16}/>
   if(kind==='bedrooms')return <BedDouble size={16}/>
   if(kind==='bathrooms')return <Bath size={16}/>
   if(kind==='area')return <Ruler size={16}/>
