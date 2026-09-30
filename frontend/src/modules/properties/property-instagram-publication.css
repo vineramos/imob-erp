@@ -223,3 +223,17 @@
 .instagram-story-crop-secondary-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .instagram-story-crop-secondary-actions .button{width:100%;padding-inline:8px;font-size:10px}
 @media(max-width:820px){.instagram-story-crop-secondary-actions{grid-template-columns:1fr}.instagram-story-attributes-overlay.layout-horizontal,.instagram-story-attributes-overlay.layout-bottom_bar{width:86%;max-width:86%}}
+
+
+.instagram-story-sequence-toggle{grid-template-columns:30px minmax(0,1fr) auto auto!important}
+.instagram-story-inline-check{display:flex;align-items:center;gap:5px;padding:5px 7px;border:1px solid var(--border);border-radius:8px;background:var(--surface);font-size:9.5px;font-weight:700;color:var(--text);cursor:pointer}
+.instagram-story-inline-check input{width:14px;height:14px;margin:0;accent-color:var(--primary)}
+.instagram-story-inline-check:has(input:disabled){opacity:.45;cursor:not-allowed}
+.instagram-story-attribute-selector{display:flex!important;flex-direction:column;align-items:stretch!important;gap:7px!important}
+.instagram-story-attribute-selector>span{font-size:10.5px;font-weight:800;color:var(--text)}
+.instagram-story-attribute-selector>div{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.instagram-story-attribute-selector label{display:flex;align-items:center;gap:6px;min-width:0;padding:7px 8px;border:1px solid var(--border);border-radius:8px;background:var(--surface);cursor:pointer}
+.instagram-story-attribute-selector label:has(input:disabled){opacity:.45;cursor:not-allowed}
+.instagram-story-attribute-selector input{flex:0 0 auto;width:14px;height:14px;margin:0;accent-color:var(--primary)}
+.instagram-story-attribute-selector label span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:9.5px;color:var(--text)}
+@media(max-width:820px){.instagram-story-sequence-toggle{grid-template-columns:26px minmax(0,1fr) auto!important}.instagram-story-sequence-toggle .instagram-story-inline-check{grid-column:2/4;justify-self:start}.instagram-story-attribute-selector>div{grid-template-columns:1fr}}
