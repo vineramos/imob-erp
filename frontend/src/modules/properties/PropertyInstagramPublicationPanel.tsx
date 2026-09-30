@@ -120,7 +120,7 @@ export function PropertyInstagramPublicationPanel({propertyId,permissions}:Props
   const attributesOverlayRef=useRef<HTMLDivElement|null>(null)
   const detailsFrameRef=useRef<HTMLDivElement|null>(null)
   const cropDragRef=useRef<{pointerId:number;clientX:number;clientY:number;offsetX:number;offsetY:number}|null>(null)
-  const attributesDragRef=useRef<{pointerId:number;clientX:number;clientY:number;offsetX:number;offsetY:number}|null>(null)
+  const attributesDragRef=useRef<{pointerId:number;grabOffsetX:number;grabOffsetY:number}|null>(null)
   const detailsDragRef=useRef<{pointerId:number;target:'text'|'qr';clientX:number;clientY:number;offsetX:number;offsetY:number}|null>(null)
   const [storyTextScale,setStoryTextScale]=useState(1)
   const [storyQrScale,setStoryQrScale]=useState(1)
@@ -220,10 +220,16 @@ export function PropertyInstagramPublicationPanel({propertyId,permissions}:Props
   }
 
   function beginAttributesDrag(event:ReactPointerEvent<HTMLDivElement>){
-    if(!cropFrameRef.current)return
+    const overlay=attributesOverlayRef.current
+    if(!cropFrameRef.current||!overlay)return
     event.stopPropagation()
     event.currentTarget.setPointerCapture(event.pointerId)
-    attributesDragRef.current={pointerId:event.pointerId,clientX:event.clientX,clientY:event.clientY,offsetX:storyAttributesOffsetX,offsetY:storyAttributesOffsetY}
+    const rect=overlay.getBoundingClientRect()
+    attributesDragRef.current={
+      pointerId:event.pointerId,
+      grabOffsetX:event.clientX-(rect.left+rect.width/2),
+      grabOffsetY:event.clientY-(rect.top+rect.height/2),
+    }
   }
 
   function moveAttributesDrag(event:ReactPointerEvent<HTMLDivElement>){
@@ -235,15 +241,26 @@ export function PropertyInstagramPublicationPanel({propertyId,permissions}:Props
 
     const frameRect=frame.getBoundingClientRect()
     const overlayRect=overlay.getBoundingClientRect()
-    const rawDx=event.clientX-drag.clientX
-    const rawDy=event.clientY-drag.clientY
     const margin=8
+    const halfW=overlayRect.width/2
+    const halfH=overlayRect.height/2
 
-    const dx=Math.max(frameRect.left+margin-overlayRect.left,Math.min(frameRect.right-margin-overlayRect.right,rawDx))
-    const dy=Math.max(frameRect.top+margin-overlayRect.top,Math.min(frameRect.bottom-margin-overlayRect.bottom,rawDy))
-    const nextX=Math.max(-1,Math.min(1,drag.offsetX+dx/(frameRect.width*.35)))
-    const nextY=Math.max(-1,Math.min(1,drag.offsetY+dy/(frameRect.height*.35)))
+    const minCenterX=frameRect.left+margin+halfW
+    const maxCenterX=frameRect.right-margin-halfW
+    const minCenterY=frameRect.top+margin+halfH
+    const maxCenterY=frameRect.bottom-margin-halfH
 
+    const desiredCenterX=event.clientX-drag.grabOffsetX
+    const desiredCenterY=event.clientY-drag.grabOffsetY
+    const centerX=minCenterX>maxCenterX?frameRect.left+frameRect.width/2:Math.max(minCenterX,Math.min(maxCenterX,desiredCenterX))
+    const centerY=minCenterY>maxCenterY?frameRect.top+frameRect.height/2:Math.max(minCenterY,Math.min(maxCenterY,desiredCenterY))
+
+    const centerXPct=((centerX-frameRect.left)/frameRect.width)*100
+    const centerYPct=((centerY-frameRect.top)/frameRect.height)*100
+    const baseY=storyAttributesLayout==='vertical'?62:storyAttributesLayout==='chips'?74:storyAttributesLayout==='horizontal'?78:82
+
+    const nextX=Math.max(-1,Math.min(1,(centerXPct-50)/50))
+    const nextY=Math.max(-1,Math.min(1,(centerYPct-baseY)/50))
     setStoryAttributesOffsetX(Math.round(nextX*1000)/1000)
     setStoryAttributesOffsetY(Math.round(nextY*1000)/1000)
   }
@@ -354,8 +371,8 @@ export function PropertyInstagramPublicationPanel({propertyId,permissions}:Props
                 ref={attributesOverlayRef}
                 className={'instagram-story-attributes-overlay layout-'+storyAttributesLayout}
                 style={{
-                  left:`${50+storyAttributesOffsetX*35}%`,
-                  top:`${(storyAttributesLayout==='vertical'?62:storyAttributesLayout==='chips'?74:storyAttributesLayout==='horizontal'?78:82)+storyAttributesOffsetY*35}%`,
+                  left:`${50+storyAttributesOffsetX*50}%`,
+                  top:`${(storyAttributesLayout==='vertical'?62:storyAttributesLayout==='chips'?74:storyAttributesLayout==='horizontal'?78:82)+storyAttributesOffsetY*50}%`,
                   transform:`translate(-50%,-50%) scale(${storyAttributesScale})`,
                 }}
                 onPointerDown={beginAttributesDrag}
