@@ -207,7 +207,7 @@
 .instagram-story-attributes-overlay.layout-vertical{flex-direction:column;align-items:stretch;width:auto;max-width:52%}
 .instagram-story-attributes-overlay.layout-vertical .instagram-story-attribute-item{min-width:118px;max-width:100%}
 .instagram-story-attributes-overlay.layout-vertical .instagram-story-attribute-copy strong{white-space:normal;overflow-wrap:anywhere}
-.instagram-story-attributes-overlay.layout-chips{width:76%;flex-wrap:wrap;justify-content:flex-start}
+.instagram-story-attributes-overlay.layout-chips{width:76%;flex-wrap:wrap;justify-content:center;align-content:center}
 .instagram-story-attributes-overlay.layout-chips .instagram-story-attribute-item{max-width:100%;border-radius:999px}
 .instagram-story-attributes-overlay.layout-chips .instagram-story-attribute-item.rent{max-width:100%}
 .instagram-story-attributes-overlay.layout-chips .instagram-story-attribute-copy strong{white-space:normal;overflow-wrap:anywhere}
