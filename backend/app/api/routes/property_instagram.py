@@ -91,6 +91,8 @@ class InstagramPublicationResponse(BaseModel):
     story_attributes_offset_x: float = 0.0
     story_attributes_offset_y: float = 0.0
     story_attributes: list[dict[str, str]] = Field(default_factory=list)
+    story_attribute_keys: list[str] = Field(default_factory=lambda: ["neighborhood", "bedrooms", "bathrooms", "area", "parking", "rent"])
+    story_publish_details: bool = True
     story_published_at: str | None = None
     story_last_error: str | None = None
     property_active: bool
@@ -123,6 +125,8 @@ class InstagramStoryUpdate(BaseModel):
     attributes_scale: float = Field(default=1.0, ge=0.6, le=1.6)
     attributes_offset_x: float = Field(default=0.0, ge=-1.0, le=1.0)
     attributes_offset_y: float = Field(default=0.0, ge=-1.0, le=1.0)
+    attribute_keys: list[Literal["neighborhood", "bedrooms", "bathrooms", "area", "parking", "rent"]] = Field(default_factory=lambda: ["neighborhood", "bedrooms", "bathrooms", "area", "parking", "rent"])
+    publish_details: bool = True
 
 
 def _property(db: Session, organization_id: UUID, property_id: UUID) -> Property:
@@ -294,6 +298,11 @@ def _response(db: Session, item: Property, photos: list[PropertyPhoto]) -> Insta
         story_attributes_offset_x=float((state.get("story") or {}).get("attributes_offset_x") or 0.0),
         story_attributes_offset_y=float((state.get("story") or {}).get("attributes_offset_y") or 0.0),
         story_attributes=_story_attribute_items(item),
+        story_attribute_keys=[
+            key for key in list((state.get("story") or {}).get("attribute_keys") or ["neighborhood", "bedrooms", "bathrooms", "area", "parking", "rent"])
+            if key in {"neighborhood", "bedrooms", "bathrooms", "area", "parking", "rent"}
+        ],
+        story_publish_details=bool((state.get("story") or {}).get("publish_details", True)),
         story_published_at=(state.get("story") or {}).get("published_at"),
         story_last_error=(str((state.get("story") or {}).get("last_error") or "").strip() or None),
         property_active=not inactive,
@@ -653,6 +662,8 @@ def _render_story_attributes(image: Image.Image, item: Property, story: dict) ->
     if not bool(story.get("attributes_enabled", True)):
         return
     items = _story_attribute_items(item)
+    selected_keys = set(story.get("attribute_keys") or ["neighborhood", "bedrooms", "bathrooms", "area", "parking", "rent"])
+    items = [entry for entry in items if entry["key"] in selected_keys]
     if not items:
         return
 
@@ -1032,6 +1043,8 @@ def update_instagram_story(
         "attributes_scale": round(payload.attributes_scale, 2),
         "attributes_offset_x": round(payload.attributes_offset_x, 3),
         "attributes_offset_y": round(payload.attributes_offset_y, 3),
+        "attribute_keys": list(dict.fromkeys(payload.attribute_keys)),
+        "publish_details": payload.publish_details,
         "media_id": None,
         "description_media_id": None,
         "permalink": None,
@@ -1116,10 +1129,15 @@ def publish_instagram_story_property(
         offset_x=story_offset_x,
         offset_y=story_offset_y,
     )
-    description_url = public_story_description_url(
-        base_url=base_url,
-        organization_id=context.user.organization_id,
-        property_id=item.id,
+    publish_details = bool(story.get("publish_details", True))
+    description_url = (
+        public_story_description_url(
+            base_url=base_url,
+            organization_id=context.user.organization_id,
+            property_id=item.id,
+        )
+        if publish_details
+        else None
     )
     try:
         existing_media_id = str(story.get("media_id") or "").strip()
@@ -1141,11 +1159,14 @@ def publish_instagram_story_property(
             db.commit()
 
         current_story = dict((dict(item.instagram_publication or {}).get("story") or {}))
-        existing_description_media_id = str(current_story.get("description_media_id") or "").strip()
-        if existing_description_media_id:
-            description_media_id = existing_description_media_id
+        if publish_details:
+            existing_description_media_id = str(current_story.get("description_media_id") or "").strip()
+            if existing_description_media_id:
+                description_media_id = existing_description_media_id
+            else:
+                description_media_id = publish_story(creds, image_url=description_url)
         else:
-            description_media_id = publish_story(creds, image_url=description_url)
+            description_media_id = None
 
     except HTTPException as exc:
         failed_state = dict(item.instagram_publication or {})
@@ -1170,6 +1191,7 @@ def publish_instagram_story_property(
         "status": "published",
         "media_id": media_id,
         "description_media_id": description_media_id,
+        "publish_details": publish_details,
         "permalink": permalink,
         "description_permalink": description_permalink,
         "site_url": site_url,
@@ -1186,7 +1208,7 @@ def publish_instagram_story_property(
         "permalink": permalink,
         "published_at": now.isoformat(),
         "format": "story",
-        "photo_count": 2,
+        "photo_count": 2 if publish_details else 1,
     }
     final_state["story"] = final_story
     final_state["history"] = [history_entry, *previous_history][:8]
@@ -1205,7 +1227,7 @@ def publish_instagram_story_property(
             "media_id": media_id,
             "description_media_id": description_media_id,
             "format": "story",
-            "story_count": 2,
+            "story_count": 2 if publish_details else 1,
             "photo_id": str(photo.id),
             "site_url": site_url,
         },
