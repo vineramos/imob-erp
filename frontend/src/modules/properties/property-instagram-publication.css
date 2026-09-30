@@ -185,7 +185,7 @@
 @media(max-width:820px){.instagram-story-details-stage{min-height:62vh}.instagram-story-details-canvas{width:min(330px,78vw)}}
 
 
-.instagram-story-attributes-overlay{position:absolute;z-index:5;left:9%;bottom:10%;display:flex;max-width:82%;gap:8px;transform-origin:center center;touch-action:none;cursor:grab;user-select:none}
+.instagram-story-attributes-overlay{position:absolute;z-index:5;display:flex;max-width:86%;gap:8px;transform-origin:center center;touch-action:none;cursor:grab;user-select:none;pointer-events:auto}
 .instagram-story-attributes-overlay:active{cursor:grabbing}
 .instagram-story-attribute-item{display:flex;align-items:center;gap:7px;min-width:0;padding:8px 10px;border:1px solid rgba(255,255,255,.14);border-radius:12px;background:rgba(12,17,24,.82);box-shadow:0 7px 18px rgba(0,0,0,.22);backdrop-filter:blur(8px);color:#f8fafc}
 .instagram-story-attribute-icon{display:grid;place-items:center;flex:0 0 auto;color:#f8fafc}
@@ -195,12 +195,12 @@
 .instagram-story-attribute-copy small{margin-top:2px;color:#d3d9e2;font-size:7.5px;white-space:nowrap}
 .instagram-story-attributes-overlay.layout-horizontal,.instagram-story-attributes-overlay.layout-bottom_bar{width:82%;justify-content:stretch}
 .instagram-story-attributes-overlay.layout-horizontal .instagram-story-attribute-item,.instagram-story-attributes-overlay.layout-bottom_bar .instagram-story-attribute-item{flex:1 1 0;justify-content:center;padding:9px 6px}
-.instagram-story-attributes-overlay.layout-bottom_bar{bottom:8%;gap:0;overflow:hidden;border:1px solid rgba(255,255,255,.14);border-radius:15px;background:rgba(12,17,24,.84);box-shadow:0 8px 22px rgba(0,0,0,.24);backdrop-filter:blur(9px)}
+.instagram-story-attributes-overlay.layout-bottom_bar{gap:0;overflow:hidden;border:1px solid rgba(255,255,255,.14);border-radius:15px;background:rgba(12,17,24,.84);box-shadow:0 8px 22px rgba(0,0,0,.24);backdrop-filter:blur(9px)}
 .instagram-story-attributes-overlay.layout-bottom_bar .instagram-story-attribute-item{border:0;border-radius:0;background:transparent;box-shadow:none;backdrop-filter:none}
 .instagram-story-attributes-overlay.layout-bottom_bar .instagram-story-attribute-item+.instagram-story-attribute-item{border-left:1px solid rgba(255,255,255,.09)}
-.instagram-story-attributes-overlay.layout-vertical{left:10%;bottom:18%;flex-direction:column;align-items:stretch;width:auto;max-width:48%}
+.instagram-story-attributes-overlay.layout-vertical{flex-direction:column;align-items:stretch;width:auto;max-width:52%}
 .instagram-story-attributes-overlay.layout-vertical .instagram-story-attribute-item{min-width:128px}
-.instagram-story-attributes-overlay.layout-chips{left:12%;bottom:13%;width:76%;flex-wrap:wrap;justify-content:flex-start}
+.instagram-story-attributes-overlay.layout-chips{width:76%;flex-wrap:wrap;justify-content:flex-start}
 .instagram-story-attributes-overlay.layout-chips .instagram-story-attribute-item{border-radius:999px}
 .instagram-story-attributes-divider{height:1px;margin:2px 0;background:var(--border)}
 .instagram-story-attributes-toggle{display:flex;align-items:center;gap:10px;padding:10px;border:1px solid var(--border);border-radius:10px;background:var(--surface);cursor:pointer}
