@@ -5,7 +5,21 @@ set -eu
 # Alembic é idempotente: instâncias posteriores apenas confirmam que o banco já está no head.
 echo "==> Aplicando migrations do banco"
 cd /app/backend
-alembic upgrade head
+migration_ok=false
+attempt=1
+while [ "$attempt" -le 3 ]; do
+  if alembic upgrade head; then
+    migration_ok=true
+    break
+  fi
+  echo "Aviso: tentativa ${attempt}/3 de migration falhou; tentando novamente em 5s."
+  attempt=$((attempt + 1))
+  sleep 5
+done
+
+if [ "$migration_ok" != "true" ]; then
+  echo "Aviso: migrations não puderam ser confirmadas no startup; iniciando a aplicação e deixando o readiness validar o banco."
+fi
 
 if [ "${DOCUMENT_STORAGE_MIGRATE_ON_START:-false}" = "true" ]; then
   echo "==> Migrando documentos do PostgreSQL para o Cloud Storage"
