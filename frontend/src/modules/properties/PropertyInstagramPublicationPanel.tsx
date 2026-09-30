@@ -54,6 +54,8 @@ type InstagramPublication = {
   story_attributes_offset_x:number
   story_attributes_offset_y:number
   story_attributes:{key:string;value:string;label:string}[]
+  story_attribute_keys:string[]
+  story_publish_details:boolean
   story_published_at:string|null
   story_last_error:string|null
   property_active:boolean
@@ -134,6 +136,8 @@ export function PropertyInstagramPublicationPanel({propertyId,permissions}:Props
   const [storyAttributesScale,setStoryAttributesScale]=useState(1)
   const [storyAttributesOffsetX,setStoryAttributesOffsetX]=useState(0)
   const [storyAttributesOffsetY,setStoryAttributesOffsetY]=useState(0)
+  const [storyAttributeKeys,setStoryAttributeKeys]=useState<string[]>(['neighborhood','bedrooms','bathrooms','area','parking','rent'])
+  const [storyPublishDetails,setStoryPublishDetails]=useState(true)
   const [savingStory,setSavingStory]=useState(false)
   const [publishingStory,setPublishingStory]=useState(false)
 
@@ -141,7 +145,7 @@ export function PropertyInstagramPublicationPanel({propertyId,permissions}:Props
     let active=true
     setLoading(true);setError('')
     void apiRequest<InstagramPublication>(`/properties/${propertyId}/instagram-publication`)
-      .then(result=>{if(!active)return;setData(result);setCaption(result.caption);setPhotoIds(result.photo_ids);setFormat(result.format);setStoryPhotoId(result.story_photo_id);setStoryZoom(result.story_zoom||1);setStoryOffsetX(result.story_offset_x||0);setStoryOffsetY(result.story_offset_y||0);setStoryTextScale(result.story_text_scale||1);setStoryQrScale(result.story_qr_scale||1);setStoryTextOffsetX(result.story_text_offset_x||0);setStoryTextOffsetY(result.story_text_offset_y||0);setStoryQrOffsetX(result.story_qr_offset_x||0);setStoryQrOffsetY(result.story_qr_offset_y||0);setStoryAttributesEnabled(result.story_attributes_enabled??true);setStoryAttributesLayout(result.story_attributes_layout||'bottom_bar');setStoryAttributesScale(result.story_attributes_scale||1);setStoryAttributesOffsetX(result.story_attributes_offset_x||0);setStoryAttributesOffsetY(result.story_attributes_offset_y||0)})
+      .then(result=>{if(!active)return;setData(result);setCaption(result.caption);setPhotoIds(result.photo_ids);setFormat(result.format);setStoryPhotoId(result.story_photo_id);setStoryZoom(result.story_zoom||1);setStoryOffsetX(result.story_offset_x||0);setStoryOffsetY(result.story_offset_y||0);setStoryTextScale(result.story_text_scale||1);setStoryQrScale(result.story_qr_scale||1);setStoryTextOffsetX(result.story_text_offset_x||0);setStoryTextOffsetY(result.story_text_offset_y||0);setStoryQrOffsetX(result.story_qr_offset_x||0);setStoryQrOffsetY(result.story_qr_offset_y||0);setStoryAttributesEnabled(result.story_attributes_enabled??true);setStoryAttributesLayout(result.story_attributes_layout||'bottom_bar');setStoryAttributesScale(result.story_attributes_scale||1);setStoryAttributesOffsetX(result.story_attributes_offset_x||0);setStoryAttributesOffsetY(result.story_attributes_offset_y||0);setStoryAttributeKeys(result.story_attribute_keys?.length?result.story_attribute_keys:['neighborhood','bedrooms','bathrooms','area','parking','rent']);setStoryPublishDetails(result.story_publish_details??true)})
       .catch(cause=>{if(active)setError(cause instanceof ApiError?cause.detail:'Não foi possível carregar a publicação do Instagram.')})
       .finally(()=>{if(active)setLoading(false)})
     return()=>{active=false}
@@ -162,7 +166,7 @@ export function PropertyInstagramPublicationPanel({propertyId,permissions}:Props
   const previewPhoto=selected[previewIndex]??selected[0]??null
   const storyPhoto=(data?.photos??[]).find(photo=>photo.id===storyPhotoId)??null
   const dirty=Boolean(data)&&(caption!==data!.caption||format!==data!.format||photoIds.join('|')!==data!.photo_ids.join('|'))
-  const storyDirty=Boolean(data)&&(storyPhotoId!==data!.story_photo_id||Math.abs(storyZoom-(data!.story_zoom||1))>0.001||Math.abs(storyOffsetX-(data!.story_offset_x||0))>0.001||Math.abs(storyOffsetY-(data!.story_offset_y||0))>0.001||Math.abs(storyTextScale-(data!.story_text_scale||1))>0.001||Math.abs(storyQrScale-(data!.story_qr_scale||1))>0.001||Math.abs(storyTextOffsetX-(data!.story_text_offset_x||0))>0.001||Math.abs(storyTextOffsetY-(data!.story_text_offset_y||0))>0.001||Math.abs(storyQrOffsetX-(data!.story_qr_offset_x||0))>0.001||Math.abs(storyQrOffsetY-(data!.story_qr_offset_y||0))>0.001||storyAttributesEnabled!==(data!.story_attributes_enabled??true)||storyAttributesLayout!==(data!.story_attributes_layout||'bottom_bar')||Math.abs(storyAttributesScale-(data!.story_attributes_scale||1))>0.001||Math.abs(storyAttributesOffsetX-(data!.story_attributes_offset_x||0))>0.001||Math.abs(storyAttributesOffsetY-(data!.story_attributes_offset_y||0))>0.001)
+  const storyDirty=Boolean(data)&&(storyPhotoId!==data!.story_photo_id||Math.abs(storyZoom-(data!.story_zoom||1))>0.001||Math.abs(storyOffsetX-(data!.story_offset_x||0))>0.001||Math.abs(storyOffsetY-(data!.story_offset_y||0))>0.001||Math.abs(storyTextScale-(data!.story_text_scale||1))>0.001||Math.abs(storyQrScale-(data!.story_qr_scale||1))>0.001||Math.abs(storyTextOffsetX-(data!.story_text_offset_x||0))>0.001||Math.abs(storyTextOffsetY-(data!.story_text_offset_y||0))>0.001||Math.abs(storyQrOffsetX-(data!.story_qr_offset_x||0))>0.001||Math.abs(storyQrOffsetY-(data!.story_qr_offset_y||0))>0.001||storyAttributesEnabled!==(data!.story_attributes_enabled??true)||storyAttributesLayout!==(data!.story_attributes_layout||'bottom_bar')||Math.abs(storyAttributesScale-(data!.story_attributes_scale||1))>0.001||Math.abs(storyAttributesOffsetX-(data!.story_attributes_offset_x||0))>0.001||Math.abs(storyAttributesOffsetY-(data!.story_attributes_offset_y||0))>0.001||storyPublishDetails!==(data!.story_publish_details??true)||storyAttributeKeys.join('|')!==(data!.story_attribute_keys??['neighborhood','bedrooms','bathrooms','area','parking','rent']).join('|'))
 
   useEffect(()=>{
     setPreviewIndex(current=>selected.length===0?0:Math.min(current,selected.length-1))
@@ -217,7 +221,11 @@ export function PropertyInstagramPublicationPanel({propertyId,permissions}:Props
   }
 
   function resetStoryAttributes(){
-    setStoryAttributesEnabled(true);setStoryAttributesLayout('bottom_bar');setStoryAttributesScale(1);setStoryAttributesOffsetX(0);setStoryAttributesOffsetY(0)
+    setStoryAttributesEnabled(true);setStoryAttributesLayout('bottom_bar');setStoryAttributesScale(1);setStoryAttributesOffsetX(0);setStoryAttributesOffsetY(0);setStoryAttributeKeys(['neighborhood','bedrooms','bathrooms','area','parking','rent'])
+  }
+
+  function toggleStoryAttribute(key:string){
+    setStoryAttributeKeys(current=>current.includes(key)?current.filter(item=>item!==key):[...current,key])
   }
 
   function beginAttributesDrag(event:ReactPointerEvent<HTMLDivElement>){
@@ -333,9 +341,9 @@ export function PropertyInstagramPublicationPanel({propertyId,permissions}:Props
     try{
       const result=await apiRequest<InstagramPublication>(`/properties/${propertyId}/instagram-publication/story`,{
         method:'PUT',
-        body:JSON.stringify({photo_id:storyPhotoId,zoom:storyZoom,offset_x:storyOffsetX,offset_y:storyOffsetY,text_scale:storyTextScale,qr_scale:storyQrScale,text_offset_x:storyTextOffsetX,text_offset_y:storyTextOffsetY,qr_offset_x:storyQrOffsetX,qr_offset_y:storyQrOffsetY,attributes_enabled:storyAttributesEnabled,attributes_layout:storyAttributesLayout,attributes_scale:storyAttributesScale,attributes_offset_x:storyAttributesOffsetX,attributes_offset_y:storyAttributesOffsetY}),
+        body:JSON.stringify({photo_id:storyPhotoId,zoom:storyZoom,offset_x:storyOffsetX,offset_y:storyOffsetY,text_scale:storyTextScale,qr_scale:storyQrScale,text_offset_x:storyTextOffsetX,text_offset_y:storyTextOffsetY,qr_offset_x:storyQrOffsetX,qr_offset_y:storyQrOffsetY,attributes_enabled:storyAttributesEnabled,attributes_layout:storyAttributesLayout,attributes_scale:storyAttributesScale,attributes_offset_x:storyAttributesOffsetX,attributes_offset_y:storyAttributesOffsetY,attribute_keys:storyAttributeKeys,publish_details:storyPublishDetails}),
       })
-      setData(result);setStoryPhotoId(result.story_photo_id);setStoryZoom(result.story_zoom||1);setStoryOffsetX(result.story_offset_x||0);setStoryOffsetY(result.story_offset_y||0);setStoryTextScale(result.story_text_scale||1);setStoryQrScale(result.story_qr_scale||1);setStoryTextOffsetX(result.story_text_offset_x||0);setStoryTextOffsetY(result.story_text_offset_y||0);setStoryQrOffsetX(result.story_qr_offset_x||0);setStoryQrOffsetY(result.story_qr_offset_y||0);setStoryAttributesEnabled(result.story_attributes_enabled??true);setStoryAttributesLayout(result.story_attributes_layout||'bottom_bar');setStoryAttributesScale(result.story_attributes_scale||1);setStoryAttributesOffsetX(result.story_attributes_offset_x||0);setStoryAttributesOffsetY(result.story_attributes_offset_y||0)
+      setData(result);setStoryPhotoId(result.story_photo_id);setStoryZoom(result.story_zoom||1);setStoryOffsetX(result.story_offset_x||0);setStoryOffsetY(result.story_offset_y||0);setStoryTextScale(result.story_text_scale||1);setStoryQrScale(result.story_qr_scale||1);setStoryTextOffsetX(result.story_text_offset_x||0);setStoryTextOffsetY(result.story_text_offset_y||0);setStoryQrOffsetX(result.story_qr_offset_x||0);setStoryQrOffsetY(result.story_qr_offset_y||0);setStoryAttributesEnabled(result.story_attributes_enabled??true);setStoryAttributesLayout(result.story_attributes_layout||'bottom_bar');setStoryAttributesScale(result.story_attributes_scale||1);setStoryAttributesOffsetX(result.story_attributes_offset_x||0);setStoryAttributesOffsetY(result.story_attributes_offset_y||0);setStoryAttributeKeys(result.story_attribute_keys?.length?result.story_attribute_keys:['neighborhood','bedrooms','bathrooms','area','parking','rent']);setStoryPublishDetails(result.story_publish_details??true)
       setSuccess('Story salvo. A imagem fica independente do carrossel do post.')
     }catch(cause){setError(cause instanceof ApiError?cause.detail:'Não foi possível salvar o Story.')}
     finally{setSavingStory(false)}
@@ -346,8 +354,8 @@ export function PropertyInstagramPublicationPanel({propertyId,permissions}:Props
     setPublishingStory(true);setError('');setSuccess('')
     try{
       const result=await apiRequest<InstagramPublication>(`/properties/${propertyId}/instagram-publication/story/publish`,{method:'POST'})
-      setData(result);setStoryPhotoId(result.story_photo_id);setStoryZoom(result.story_zoom||1);setStoryOffsetX(result.story_offset_x||0);setStoryOffsetY(result.story_offset_y||0);setStoryTextScale(result.story_text_scale||1);setStoryQrScale(result.story_qr_scale||1);setStoryTextOffsetX(result.story_text_offset_x||0);setStoryTextOffsetY(result.story_text_offset_y||0);setStoryQrOffsetX(result.story_qr_offset_x||0);setStoryQrOffsetY(result.story_qr_offset_y||0);setStoryAttributesEnabled(result.story_attributes_enabled??true);setStoryAttributesLayout(result.story_attributes_layout||'bottom_bar');setStoryAttributesScale(result.story_attributes_scale||1);setStoryAttributesOffsetX(result.story_attributes_offset_x||0);setStoryAttributesOffsetY(result.story_attributes_offset_y||0)
-      setSuccess('2 Stories publicados: foto enquadrada + card com detalhes e QR Code do imóvel.')
+      setData(result);setStoryPhotoId(result.story_photo_id);setStoryZoom(result.story_zoom||1);setStoryOffsetX(result.story_offset_x||0);setStoryOffsetY(result.story_offset_y||0);setStoryTextScale(result.story_text_scale||1);setStoryQrScale(result.story_qr_scale||1);setStoryTextOffsetX(result.story_text_offset_x||0);setStoryTextOffsetY(result.story_text_offset_y||0);setStoryQrOffsetX(result.story_qr_offset_x||0);setStoryQrOffsetY(result.story_qr_offset_y||0);setStoryAttributesEnabled(result.story_attributes_enabled??true);setStoryAttributesLayout(result.story_attributes_layout||'bottom_bar');setStoryAttributesScale(result.story_attributes_scale||1);setStoryAttributesOffsetX(result.story_attributes_offset_x||0);setStoryAttributesOffsetY(result.story_attributes_offset_y||0);setStoryAttributeKeys(result.story_attribute_keys?.length?result.story_attribute_keys:['neighborhood','bedrooms','bathrooms','area','parking','rent']);setStoryPublishDetails(result.story_publish_details??true)
+      setSuccess(storyPublishDetails?'2 Stories publicados: foto enquadrada + card com detalhes e QR Code do imóvel.':'Story da foto publicado com sucesso.')
     }catch(cause){setError(cause instanceof ApiError?cause.detail:'Não foi possível publicar o Story no Instagram.')}
     finally{setPublishingStory(false)}
   }
@@ -369,7 +377,7 @@ export function PropertyInstagramPublicationPanel({propertyId,permissions}:Props
             </div>
             <div ref={cropFrameRef} className="instagram-story-crop-frame">
               <span>ÁREA QUE SERÁ PUBLICADA</span>
-              {storyAttributesEnabled&&data.story_attributes.length>0&&<div
+              {storyAttributesEnabled&&data.story_attributes.some(item=>storyAttributeKeys.includes(item.key))&&<div
                 ref={attributesOverlayRef}
                 className={'instagram-story-attributes-overlay layout-'+storyAttributesLayout}
                 style={{
@@ -382,7 +390,7 @@ export function PropertyInstagramPublicationPanel({propertyId,permissions}:Props
                 onPointerUp={endAttributesDrag}
                 onPointerCancel={endAttributesDrag}
               >
-                {data.story_attributes.map(item=><div className={'instagram-story-attribute-item '+(item.key==='rent'?'rent':'')} key={item.key}>
+                {data.story_attributes.filter(item=>storyAttributeKeys.includes(item.key)).map(item=><div className={'instagram-story-attribute-item '+(item.key==='rent'?'rent':'')} key={item.key}>
                   <span className="instagram-story-attribute-icon"><StoryAttributeIcon kind={item.key}/></span>
                   <span className="instagram-story-attribute-copy"><strong>{item.value}</strong><small>{item.label}</small></span>
                 </div>)}
@@ -417,6 +425,13 @@ export function PropertyInstagramPublicationPanel({propertyId,permissions}:Props
               <button type="button" disabled={!storyAttributesEnabled||storyAttributesScale<=.6} onClick={()=>setStoryAttributesScale(current=>Math.max(.6,Math.round((current-.05)*100)/100))}><Minus size={14}/></button>
               <input disabled={!storyAttributesEnabled} type="range" min=".6" max="1.6" step=".05" value={storyAttributesScale} onChange={event=>setStoryAttributesScale(Number(event.target.value))}/>
               <button type="button" disabled={!storyAttributesEnabled||storyAttributesScale>=1.6} onClick={()=>setStoryAttributesScale(current=>Math.min(1.6,Math.round((current+.05)*100)/100))}><Plus size={14}/></button>
+            </div>
+            <div className="instagram-story-attribute-selector">
+              <span>Itens do resumo</span>
+              <div>{data.story_attributes.map(item=><label key={item.key}>
+                <input type="checkbox" checked={storyAttributeKeys.includes(item.key)} onChange={()=>toggleStoryAttribute(item.key)} disabled={!storyAttributesEnabled}/>
+                <span>{item.value} · {item.label}</span>
+              </label>)}</div>
             </div>
             <div className="instagram-story-crop-position"><Move size={15}/><span>Arraste o resumo diretamente sobre a foto para escolher a melhor posição.</span></div>
             <div className="instagram-story-crop-secondary-actions">
@@ -607,12 +622,12 @@ export function PropertyInstagramPublicationPanel({propertyId,permissions}:Props
           </div>
           <div className="instagram-story-sequence">
             <article className="instagram-story-sequence-editable"><b>1</b><div><strong>Story da foto</strong><span>Enquadramento, zoom e posição da imagem.</span></div><button type="button" disabled={!canEdit||inactive||!storyPhoto} onClick={()=>setCropOpen(true)}><Move size={13}/>Editar</button></article>
-            <article className="instagram-story-sequence-editable"><b>2</b><div><strong>Story com os detalhes</strong><span>Logo, texto e QR Code com tamanho e posição ajustáveis.</span></div><button type="button" disabled={!canEdit||inactive} onClick={()=>setDetailsOpen(true)}><Move size={13}/>Editar</button></article>
+            <article className="instagram-story-sequence-editable instagram-story-sequence-toggle"><b>2</b><div><strong>Story com os detalhes</strong><span>Logo, texto e QR Code com tamanho e posição ajustáveis.</span></div><label className="instagram-story-inline-check"><input type="checkbox" checked={storyPublishDetails} onChange={event=>setStoryPublishDetails(event.target.checked)} disabled={!canEdit||inactive}/><span>Publicar</span></label><button type="button" disabled={!canEdit||inactive||!storyPublishDetails} onClick={()=>setDetailsOpen(true)}><Move size={13}/>Editar</button></article>
           </div>
           <div className="instagram-story-note"><CircleAlert size={14}/><span>O Story é publicado como mídia vertical. O Instagram não recebe uma legenda de post para Stories por este fluxo; qualquer texto precisa fazer parte da própria arte/imagem.</span></div>
           <div className="instagram-story-actions">
             <button className="button secondary" type="button" disabled={!canEdit||inactive||!storyDirty||!storyPhotoId||savingStory} onClick={()=>void saveStory()}><Save size={14}/>{savingStory?'Salvando...':storyDirty?'Salvar Story':'Story salvo'}</button>
-            <button className="button primary" type="button" disabled={!canPublish||inactive||!data.instagram_connected||!['ready','failed'].includes(data.story_status)||storyDirty||publishingStory} onClick={()=>void publishStory()}><Send size={14}/>{publishingStory?'Publicando...':data.story_status==='failed'&&data.story_media_id&&!data.story_description_media_id?'Tentar 2º Story novamente':data.story_status==='failed'?'Tentar novamente':'Publicar 2 Stories'}</button>
+            <button className="button primary" type="button" disabled={!canPublish||inactive||!data.instagram_connected||!['ready','failed'].includes(data.story_status)||storyDirty||publishingStory} onClick={()=>void publishStory()}><Send size={14}/>{publishingStory?'Publicando...':storyPublishDetails?(data.story_status==='failed'&&data.story_media_id&&!data.story_description_media_id?'Tentar 2º Story novamente':data.story_status==='failed'?'Tentar novamente':'Publicar 2 Stories'):(data.story_status==='failed'?'Tentar novamente':'Publicar 1 Story')}</button>
           </div>
         </div>
 
@@ -621,7 +636,7 @@ export function PropertyInstagramPublicationPanel({propertyId,permissions}:Props
             {storyPhoto?<PhotoPreview photo={storyPhoto} onOpen={setOpenPhoto} imageStyle={{transform:`translate(${storyOffsetX*50}%, ${storyOffsetY*50}%) scale(${storyZoom})`}}/>:<div className="instagram-story-preview-empty"><Instagram size={24}/><span>Selecione uma foto</span></div>}
             <div className="instagram-story-top"><span className="instagram-preview-avatar"><Instagram size={14}/></span><strong>imob.erp</strong><span>agora</span><b>•••</b></div>
           </div>
-          {data.story_published_at&&<div className="instagram-story-last-published"><Check size={14}/><span>Último envio: 2 Stories · {new Date(data.story_published_at).toLocaleString('pt-BR')}</span></div>}
+          {data.story_published_at&&<div className="instagram-story-last-published"><Check size={14}/><span>Último envio: {data.story_publish_details?'2 Stories':'1 Story'} · {new Date(data.story_published_at).toLocaleString('pt-BR')}</span></div>}
           {data.story_site_url&&<button className="instagram-story-site-link" type="button" onClick={()=>void copyStorySite()}><Copy size={13}/><span>Copiar link do imóvel</span></button>}
         </div>
       </div>
