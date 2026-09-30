@@ -737,7 +737,7 @@ def _render_story_attributes(image: Image.Image, item: Property, story: dict) ->
         block_h = sum(line_heights) + chip_gap * max(0, len(lines) - 1)
 
         center_x = width * 0.5 + offset_x * width * 0.5
-        center_y = height * 0.74 + offset_y * height * 0.5
+        center_y = height * 0.74 + offset_y * height * 0.8
         origin_x = round(center_x - block_w / 2)
         origin_y = round(center_y - block_h / 2)
         origin_x = max(30, min(width - block_w - 30, origin_x))
@@ -762,7 +762,7 @@ def _render_story_attributes(image: Image.Image, item: Property, story: dict) ->
         box_w = width - (72 if bottom_bar else 108)
         center_x = width * 0.5 + offset_x * width * 0.5
         base_y = 0.82 if bottom_bar else 0.78
-        center_y = height * base_y + offset_y * height * 0.5
+        center_y = height * base_y + offset_y * height * 0.8
         box_x = round(center_x - box_w / 2)
         box_y = round(center_y - box_h / 2)
         box_x = max(28, min(width - box_w - 28, box_x))
