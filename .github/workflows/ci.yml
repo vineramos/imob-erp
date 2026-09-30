@@ -140,6 +140,21 @@ jobs:
             "${STORAGE_ARGS[@]}" \
             --quiet
 
+      - name: Diagnose Cloud Run startup failure
+        if: failure()
+        env:
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          REGION: ${{ vars.GCP_REGION }}
+          SERVICE: ${{ vars.GCP_SERVICE }}
+        shell: bash
+        run: |
+          set +e
+          REVISION="$(gcloud run revisions list --service "$SERVICE" --project "$PROJECT_ID" --region "$REGION" --sort-by='~metadata.creationTimestamp' --limit=1 --format='value(metadata.name)')"
+          echo "Latest revision: ${REVISION}"
+          if [[ -n "$REVISION" ]]; then
+            gcloud logging read               "resource.type=cloud_run_revision AND resource.labels.service_name=$SERVICE AND resource.labels.revision_name=$REVISION"               --project "$PROJECT_ID"               --limit=80               --order=asc               --format='value(timestamp,severity,textPayload,jsonPayload.message)'
+          fi
+
       - name: Smoke test application health
         env:
           PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
