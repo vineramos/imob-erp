@@ -449,21 +449,35 @@ def _story_description_image(request: Request, item: Property, db: Session) -> b
 
     footer_y = 1455
     draw.rounded_rectangle((54, footer_y, 1026, 1840), radius=34, fill=(245, 247, 250))
-    footer_heading = _load_story_font(max(22, round(34 * text_scale)), bold=True)
-    footer_body = _load_story_font(max(18, round(28 * text_scale)))
-    footer_small = _load_story_font(max(15, round(22 * text_scale)))
+
+    # O CTA do rodapé tem tipografia própria e não acompanha o zoom da caixa
+    # de texto principal. Assim o QR pode crescer sem cortar a chamada.
+    footer_heading = _load_story_font(34, bold=True)
+    footer_body = _load_story_font(28)
     footer_tx = 88 + round(text_offset_x * 80)
-    draw.text((footer_tx, footer_y + 58), "Veja todos os detalhes no site", font=footer_heading, fill=(22, 27, 35))
-    draw.text((footer_tx, footer_y + 112), "Aponte a câmera para o QR Code", font=footer_body, fill=(75, 83, 95))
 
     qr_x = 700 + round(qr_offset_x * 170) - (qr_size - 280) // 2
     qr_y = footer_y + 48 + round(qr_offset_y * 100) - (qr_size - 280) // 2
     qr_x = max(560, min(width - qr_size - 48, qr_x))
     qr_y = max(footer_y + 18, min(height - qr_size - 48, qr_y))
+
+    # Reserva sempre uma faixa real entre o texto e o QR Code. Se o QR for
+    # ampliado ou movido para a esquerda, a chamada quebra de linha em vez de
+    # ficar escondida atrás dele.
+    footer_text_width = max(260, qr_x - footer_tx - 34)
+    footer_text_y = footer_y + 58
+    for line in _wrap_story_text(draw, "Veja todos os detalhes no site", footer_heading, footer_text_width, 2):
+        draw.text((footer_tx, footer_text_y), line, font=footer_heading, fill=(22, 27, 35))
+        footer_text_y += 44
+
+    footer_text_y += 8
+    for line in _wrap_story_text(draw, "Aponte a câmera para o QR Code", footer_body, footer_text_width, 2):
+        draw.text((footer_tx, footer_text_y), line, font=footer_body, fill=(75, 83, 95))
+        footer_text_y += 36
+
     image.paste(qr_image, (qr_x, qr_y))
 
-    # Não exibimos a URL bruta no card. Ela fica codificada somente no QR Code:
-    # além de poluir o layout, domínios longos podem invadir a área do QR.
+    # Não exibimos a URL bruta no card. Ela fica codificada somente no QR Code.
 
     output = io.BytesIO()
     image.save(output, format="JPEG", quality=94, optimize=True)
