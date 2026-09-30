@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowUp, Check, ChevronLeft, ChevronRight, CircleAlert, Clock3, Copy, ExternalLink, History, Instagram, Move, Minus, Plus, RotateCcw, Save, Send, X } from 'lucide-react'
+import { ArrowDown, ArrowUp, Bath, BedDouble, Car, Check, ChevronLeft, ChevronRight, CircleAlert, Clock3, Copy, DollarSign, ExternalLink, History, Instagram, Move, Minus, Plus, RotateCcw, Ruler, Save, Send, X } from 'lucide-react'
 import { type CSSProperties, type PointerEvent as ReactPointerEvent, useEffect, useMemo, useRef, useState } from 'react'
 import { ApiError, apiBlobRequest, apiRequest } from '../../api/client'
 import { useTheme } from '../../theme/ThemeProvider'
@@ -48,6 +48,12 @@ type InstagramPublication = {
   story_text_offset_y:number
   story_qr_offset_x:number
   story_qr_offset_y:number
+  story_attributes_enabled:boolean
+  story_attributes_layout:'horizontal'|'vertical'|'chips'|'bottom_bar'
+  story_attributes_scale:number
+  story_attributes_offset_x:number
+  story_attributes_offset_y:number
+  story_attributes:{key:string;value:string;label:string}[]
   story_published_at:string|null
   story_last_error:string|null
   property_active:boolean
@@ -69,6 +75,14 @@ function PhotoPreview({photo,onOpen,className='',imageStyle}:{photo:Photo;onOpen
   if(!src)return <div className="instagram-photo-placeholder">Foto</div>
   if(!onOpen)return <img className={className} style={imageStyle} src={src} alt={photo.caption||photo.filename}/>
   return <button className={'instagram-photo-open '+className} type="button" onClick={()=>onOpen(photo)} title="Ampliar foto"><img style={imageStyle} src={src} alt={photo.caption||photo.filename}/></button>
+}
+
+function StoryAttributeIcon({kind}:{kind:string}){
+  if(kind==='bedrooms')return <BedDouble size={16}/>
+  if(kind==='bathrooms')return <Bath size={16}/>
+  if(kind==='area')return <Ruler size={16}/>
+  if(kind==='parking')return <Car size={16}/>
+  return <DollarSign size={16}/>
 }
 
 const statusLabel:Record<InstagramPublication['status'],string>={
@@ -105,6 +119,7 @@ export function PropertyInstagramPublicationPanel({propertyId,permissions}:Props
   const cropFrameRef=useRef<HTMLDivElement|null>(null)
   const detailsFrameRef=useRef<HTMLDivElement|null>(null)
   const cropDragRef=useRef<{pointerId:number;clientX:number;clientY:number;offsetX:number;offsetY:number}|null>(null)
+  const attributesDragRef=useRef<{pointerId:number;clientX:number;clientY:number;offsetX:number;offsetY:number}|null>(null)
   const detailsDragRef=useRef<{pointerId:number;target:'text'|'qr';clientX:number;clientY:number;offsetX:number;offsetY:number}|null>(null)
   const [storyTextScale,setStoryTextScale]=useState(1)
   const [storyQrScale,setStoryQrScale]=useState(1)
@@ -112,6 +127,11 @@ export function PropertyInstagramPublicationPanel({propertyId,permissions}:Props
   const [storyTextOffsetY,setStoryTextOffsetY]=useState(0)
   const [storyQrOffsetX,setStoryQrOffsetX]=useState(0)
   const [storyQrOffsetY,setStoryQrOffsetY]=useState(0)
+  const [storyAttributesEnabled,setStoryAttributesEnabled]=useState(true)
+  const [storyAttributesLayout,setStoryAttributesLayout]=useState<InstagramPublication['story_attributes_layout']>('bottom_bar')
+  const [storyAttributesScale,setStoryAttributesScale]=useState(1)
+  const [storyAttributesOffsetX,setStoryAttributesOffsetX]=useState(0)
+  const [storyAttributesOffsetY,setStoryAttributesOffsetY]=useState(0)
   const [savingStory,setSavingStory]=useState(false)
   const [publishingStory,setPublishingStory]=useState(false)
 
@@ -119,7 +139,7 @@ export function PropertyInstagramPublicationPanel({propertyId,permissions}:Props
     let active=true
     setLoading(true);setError('')
     void apiRequest<InstagramPublication>(`/properties/${propertyId}/instagram-publication`)
-      .then(result=>{if(!active)return;setData(result);setCaption(result.caption);setPhotoIds(result.photo_ids);setFormat(result.format);setStoryPhotoId(result.story_photo_id);setStoryZoom(result.story_zoom||1);setStoryOffsetX(result.story_offset_x||0);setStoryOffsetY(result.story_offset_y||0);setStoryTextScale(result.story_text_scale||1);setStoryQrScale(result.story_qr_scale||1);setStoryTextOffsetX(result.story_text_offset_x||0);setStoryTextOffsetY(result.story_text_offset_y||0);setStoryQrOffsetX(result.story_qr_offset_x||0);setStoryQrOffsetY(result.story_qr_offset_y||0)})
+      .then(result=>{if(!active)return;setData(result);setCaption(result.caption);setPhotoIds(result.photo_ids);setFormat(result.format);setStoryPhotoId(result.story_photo_id);setStoryZoom(result.story_zoom||1);setStoryOffsetX(result.story_offset_x||0);setStoryOffsetY(result.story_offset_y||0);setStoryTextScale(result.story_text_scale||1);setStoryQrScale(result.story_qr_scale||1);setStoryTextOffsetX(result.story_text_offset_x||0);setStoryTextOffsetY(result.story_text_offset_y||0);setStoryQrOffsetX(result.story_qr_offset_x||0);setStoryQrOffsetY(result.story_qr_offset_y||0);setStoryAttributesEnabled(result.story_attributes_enabled??true);setStoryAttributesLayout(result.story_attributes_layout||'bottom_bar');setStoryAttributesScale(result.story_attributes_scale||1);setStoryAttributesOffsetX(result.story_attributes_offset_x||0);setStoryAttributesOffsetY(result.story_attributes_offset_y||0)})
       .catch(cause=>{if(active)setError(cause instanceof ApiError?cause.detail:'Não foi possível carregar a publicação do Instagram.')})
       .finally(()=>{if(active)setLoading(false)})
     return()=>{active=false}
@@ -140,7 +160,7 @@ export function PropertyInstagramPublicationPanel({propertyId,permissions}:Props
   const previewPhoto=selected[previewIndex]??selected[0]??null
   const storyPhoto=(data?.photos??[]).find(photo=>photo.id===storyPhotoId)??null
   const dirty=Boolean(data)&&(caption!==data!.caption||format!==data!.format||photoIds.join('|')!==data!.photo_ids.join('|'))
-  const storyDirty=Boolean(data)&&(storyPhotoId!==data!.story_photo_id||Math.abs(storyZoom-(data!.story_zoom||1))>0.001||Math.abs(storyOffsetX-(data!.story_offset_x||0))>0.001||Math.abs(storyOffsetY-(data!.story_offset_y||0))>0.001||Math.abs(storyTextScale-(data!.story_text_scale||1))>0.001||Math.abs(storyQrScale-(data!.story_qr_scale||1))>0.001||Math.abs(storyTextOffsetX-(data!.story_text_offset_x||0))>0.001||Math.abs(storyTextOffsetY-(data!.story_text_offset_y||0))>0.001||Math.abs(storyQrOffsetX-(data!.story_qr_offset_x||0))>0.001||Math.abs(storyQrOffsetY-(data!.story_qr_offset_y||0))>0.001)
+  const storyDirty=Boolean(data)&&(storyPhotoId!==data!.story_photo_id||Math.abs(storyZoom-(data!.story_zoom||1))>0.001||Math.abs(storyOffsetX-(data!.story_offset_x||0))>0.001||Math.abs(storyOffsetY-(data!.story_offset_y||0))>0.001||Math.abs(storyTextScale-(data!.story_text_scale||1))>0.001||Math.abs(storyQrScale-(data!.story_qr_scale||1))>0.001||Math.abs(storyTextOffsetX-(data!.story_text_offset_x||0))>0.001||Math.abs(storyTextOffsetY-(data!.story_text_offset_y||0))>0.001||Math.abs(storyQrOffsetX-(data!.story_qr_offset_x||0))>0.001||Math.abs(storyQrOffsetY-(data!.story_qr_offset_y||0))>0.001||storyAttributesEnabled!==(data!.story_attributes_enabled??true)||storyAttributesLayout!==(data!.story_attributes_layout||'bottom_bar')||Math.abs(storyAttributesScale-(data!.story_attributes_scale||1))>0.001||Math.abs(storyAttributesOffsetX-(data!.story_attributes_offset_x||0))>0.001||Math.abs(storyAttributesOffsetY-(data!.story_attributes_offset_y||0))>0.001)
 
   useEffect(()=>{
     setPreviewIndex(current=>selected.length===0?0:Math.min(current,selected.length-1))
@@ -192,6 +212,34 @@ export function PropertyInstagramPublicationPanel({propertyId,permissions}:Props
 
   function resetStoryCrop(){
     setStoryZoom(1);setStoryOffsetX(0);setStoryOffsetY(0)
+  }
+
+  function resetStoryAttributes(){
+    setStoryAttributesEnabled(true);setStoryAttributesLayout('bottom_bar');setStoryAttributesScale(1);setStoryAttributesOffsetX(0);setStoryAttributesOffsetY(0)
+  }
+
+  function beginAttributesDrag(event:ReactPointerEvent<HTMLDivElement>){
+    if(!cropFrameRef.current)return
+    event.stopPropagation()
+    event.currentTarget.setPointerCapture(event.pointerId)
+    attributesDragRef.current={pointerId:event.pointerId,clientX:event.clientX,clientY:event.clientY,offsetX:storyAttributesOffsetX,offsetY:storyAttributesOffsetY}
+  }
+
+  function moveAttributesDrag(event:ReactPointerEvent<HTMLDivElement>){
+    const drag=attributesDragRef.current
+    const frame=cropFrameRef.current
+    if(!drag||drag.pointerId!==event.pointerId||!frame)return
+    event.stopPropagation()
+    const rect=frame.getBoundingClientRect()
+    const nextX=Math.max(-1,Math.min(1,drag.offsetX+(event.clientX-drag.clientX)/(rect.width/2)))
+    const nextY=Math.max(-1,Math.min(1,drag.offsetY+(event.clientY-drag.clientY)/(rect.height/2)))
+    setStoryAttributesOffsetX(Math.round(nextX*1000)/1000)
+    setStoryAttributesOffsetY(Math.round(nextY*1000)/1000)
+  }
+
+  function endAttributesDrag(event:ReactPointerEvent<HTMLDivElement>){
+    event.stopPropagation()
+    if(attributesDragRef.current?.pointerId===event.pointerId)attributesDragRef.current=null
   }
 
   function resetDetailsLayout(){
@@ -255,9 +303,9 @@ export function PropertyInstagramPublicationPanel({propertyId,permissions}:Props
     try{
       const result=await apiRequest<InstagramPublication>(`/properties/${propertyId}/instagram-publication/story`,{
         method:'PUT',
-        body:JSON.stringify({photo_id:storyPhotoId,zoom:storyZoom,offset_x:storyOffsetX,offset_y:storyOffsetY,text_scale:storyTextScale,qr_scale:storyQrScale,text_offset_x:storyTextOffsetX,text_offset_y:storyTextOffsetY,qr_offset_x:storyQrOffsetX,qr_offset_y:storyQrOffsetY}),
+        body:JSON.stringify({photo_id:storyPhotoId,zoom:storyZoom,offset_x:storyOffsetX,offset_y:storyOffsetY,text_scale:storyTextScale,qr_scale:storyQrScale,text_offset_x:storyTextOffsetX,text_offset_y:storyTextOffsetY,qr_offset_x:storyQrOffsetX,qr_offset_y:storyQrOffsetY,attributes_enabled:storyAttributesEnabled,attributes_layout:storyAttributesLayout,attributes_scale:storyAttributesScale,attributes_offset_x:storyAttributesOffsetX,attributes_offset_y:storyAttributesOffsetY}),
       })
-      setData(result);setStoryPhotoId(result.story_photo_id);setStoryZoom(result.story_zoom||1);setStoryOffsetX(result.story_offset_x||0);setStoryOffsetY(result.story_offset_y||0);setStoryTextScale(result.story_text_scale||1);setStoryQrScale(result.story_qr_scale||1);setStoryTextOffsetX(result.story_text_offset_x||0);setStoryTextOffsetY(result.story_text_offset_y||0);setStoryQrOffsetX(result.story_qr_offset_x||0);setStoryQrOffsetY(result.story_qr_offset_y||0)
+      setData(result);setStoryPhotoId(result.story_photo_id);setStoryZoom(result.story_zoom||1);setStoryOffsetX(result.story_offset_x||0);setStoryOffsetY(result.story_offset_y||0);setStoryTextScale(result.story_text_scale||1);setStoryQrScale(result.story_qr_scale||1);setStoryTextOffsetX(result.story_text_offset_x||0);setStoryTextOffsetY(result.story_text_offset_y||0);setStoryQrOffsetX(result.story_qr_offset_x||0);setStoryQrOffsetY(result.story_qr_offset_y||0);setStoryAttributesEnabled(result.story_attributes_enabled??true);setStoryAttributesLayout(result.story_attributes_layout||'bottom_bar');setStoryAttributesScale(result.story_attributes_scale||1);setStoryAttributesOffsetX(result.story_attributes_offset_x||0);setStoryAttributesOffsetY(result.story_attributes_offset_y||0)
       setSuccess('Story salvo. A imagem fica independente do carrossel do post.')
     }catch(cause){setError(cause instanceof ApiError?cause.detail:'Não foi possível salvar o Story.')}
     finally{setSavingStory(false)}
@@ -268,7 +316,7 @@ export function PropertyInstagramPublicationPanel({propertyId,permissions}:Props
     setPublishingStory(true);setError('');setSuccess('')
     try{
       const result=await apiRequest<InstagramPublication>(`/properties/${propertyId}/instagram-publication/story/publish`,{method:'POST'})
-      setData(result);setStoryPhotoId(result.story_photo_id);setStoryZoom(result.story_zoom||1);setStoryOffsetX(result.story_offset_x||0);setStoryOffsetY(result.story_offset_y||0);setStoryTextScale(result.story_text_scale||1);setStoryQrScale(result.story_qr_scale||1);setStoryTextOffsetX(result.story_text_offset_x||0);setStoryTextOffsetY(result.story_text_offset_y||0);setStoryQrOffsetX(result.story_qr_offset_x||0);setStoryQrOffsetY(result.story_qr_offset_y||0)
+      setData(result);setStoryPhotoId(result.story_photo_id);setStoryZoom(result.story_zoom||1);setStoryOffsetX(result.story_offset_x||0);setStoryOffsetY(result.story_offset_y||0);setStoryTextScale(result.story_text_scale||1);setStoryQrScale(result.story_qr_scale||1);setStoryTextOffsetX(result.story_text_offset_x||0);setStoryTextOffsetY(result.story_text_offset_y||0);setStoryQrOffsetX(result.story_qr_offset_x||0);setStoryQrOffsetY(result.story_qr_offset_y||0);setStoryAttributesEnabled(result.story_attributes_enabled??true);setStoryAttributesLayout(result.story_attributes_layout||'bottom_bar');setStoryAttributesScale(result.story_attributes_scale||1);setStoryAttributesOffsetX(result.story_attributes_offset_x||0);setStoryAttributesOffsetY(result.story_attributes_offset_y||0)
       setSuccess('2 Stories publicados: foto enquadrada + card com detalhes e QR Code do imóvel.')
     }catch(cause){setError(cause instanceof ApiError?cause.detail:'Não foi possível publicar o Story no Instagram.')}
     finally{setPublishingStory(false)}
@@ -290,16 +338,54 @@ export function PropertyInstagramPublicationPanel({propertyId,permissions}:Props
               <PhotoPreview photo={storyPhoto} imageStyle={{transform:`translate(${storyOffsetX*50}%, ${storyOffsetY*50}%) scale(${storyZoom})`}}/>
             </div>
             <div ref={cropFrameRef} className="instagram-story-crop-frame"><span>ÁREA QUE SERÁ PUBLICADA</span></div>
+            {storyAttributesEnabled&&data.story_attributes.length>0&&<div
+              className={'instagram-story-attributes-overlay layout-'+storyAttributesLayout}
+              style={{transform:`translate(${storyAttributesOffsetX*38}%, ${storyAttributesOffsetY*38}%) scale(${storyAttributesScale})`}}
+              onPointerDown={beginAttributesDrag}
+              onPointerMove={moveAttributesDrag}
+              onPointerUp={endAttributesDrag}
+              onPointerCancel={endAttributesDrag}
+            >
+              {data.story_attributes.map(item=><div className={'instagram-story-attribute-item '+(item.key==='rent'?'rent':'')} key={item.key}>
+                <span className="instagram-story-attribute-icon"><StoryAttributeIcon kind={item.key}/></span>
+                <span className="instagram-story-attribute-copy"><strong>{item.value}</strong><small>{item.label}</small></span>
+              </div>)}
+            </div>}
           </div>
           <aside className="instagram-story-crop-controls">
-            <div><span>Zoom</span><b>{Math.round(storyZoom*100)}%</b></div>
+            <div><span>Zoom da foto</span><b>{Math.round(storyZoom*100)}%</b></div>
             <div className="instagram-story-zoom-row">
               <button type="button" disabled={storyZoom<=.2} onClick={()=>setStoryZoom(current=>Math.max(.2,Math.round((current-.05)*100)/100))}><Minus size={14}/></button>
               <input type="range" min=".2" max="2" step=".05" value={storyZoom} onChange={event=>setStoryZoom(Number(event.target.value))}/>
               <button type="button" disabled={storyZoom>=2} onClick={()=>setStoryZoom(current=>Math.min(2,Math.round((current+.05)*100)/100))}><Plus size={14}/></button>
             </div>
             <div className="instagram-story-crop-position"><Move size={15}/><span>Arraste a foto diretamente para mudar o ponto central.</span></div>
-            <button className="button secondary" type="button" onClick={resetStoryCrop}><RotateCcw size={14}/>Centralizar e resetar</button>
+
+            <div className="instagram-story-attributes-divider"/>
+            <label className="instagram-story-attributes-toggle">
+              <input type="checkbox" checked={storyAttributesEnabled} onChange={event=>setStoryAttributesEnabled(event.target.checked)}/>
+              <span><strong>Resumo do imóvel</strong><small>Exibir atributos sobre a foto</small></span>
+            </label>
+            <label className="instagram-story-attributes-field">
+              <span>Layout</span>
+              <select disabled={!storyAttributesEnabled} value={storyAttributesLayout} onChange={event=>setStoryAttributesLayout(event.target.value as InstagramPublication['story_attributes_layout'])}>
+                <option value="horizontal">Horizontal</option>
+                <option value="vertical">Vertical</option>
+                <option value="chips">Chips separados</option>
+                <option value="bottom_bar">Barra inferior</option>
+              </select>
+            </label>
+            <div><span>Tamanho da caixa</span><b>{Math.round(storyAttributesScale*100)}%</b></div>
+            <div className="instagram-story-zoom-row">
+              <button type="button" disabled={!storyAttributesEnabled||storyAttributesScale<=.6} onClick={()=>setStoryAttributesScale(current=>Math.max(.6,Math.round((current-.05)*100)/100))}><Minus size={14}/></button>
+              <input disabled={!storyAttributesEnabled} type="range" min=".6" max="1.6" step=".05" value={storyAttributesScale} onChange={event=>setStoryAttributesScale(Number(event.target.value))}/>
+              <button type="button" disabled={!storyAttributesEnabled||storyAttributesScale>=1.6} onClick={()=>setStoryAttributesScale(current=>Math.min(1.6,Math.round((current+.05)*100)/100))}><Plus size={14}/></button>
+            </div>
+            <div className="instagram-story-crop-position"><Move size={15}/><span>Arraste o resumo diretamente sobre a foto para escolher a melhor posição.</span></div>
+            <div className="instagram-story-crop-secondary-actions">
+              <button className="button secondary" type="button" onClick={resetStoryCrop}><RotateCcw size={14}/>Resetar foto</button>
+              <button className="button secondary" type="button" onClick={resetStoryAttributes}><RotateCcw size={14}/>Resetar resumo</button>
+            </div>
             <button className="button primary" type="button" onClick={()=>setCropOpen(false)}><Check size={14}/>Usar este enquadramento</button>
           </aside>
         </div>
