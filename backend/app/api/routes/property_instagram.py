@@ -715,22 +715,27 @@ def _render_story_attributes(image: Image.Image, item: Property, story: dict) ->
     elif layout == "chips":
         chip_gap = gap
         max_row_w = width - 96
-        x = 0
-        y = 0
-        row_h = 0
-        rows: list[tuple[dict[str, str], int, int, int, int]] = []
+        lines: list[list[tuple[dict[str, str], int, int]]] = []
+        current_line: list[tuple[dict[str, str], int, int]] = []
+        current_width = 0
+
         for entry, (w, h) in zip(items, sizes):
             chip_w = min(w, round(width * 0.54))
-            if x and x + chip_w > max_row_w:
-                x = 0
-                y += row_h + chip_gap
-                row_h = 0
-            rows.append((entry, x, y, chip_w, h))
-            x += chip_w + chip_gap
-            row_h = max(row_h, h)
+            projected = chip_w if not current_line else current_width + chip_gap + chip_w
+            if current_line and projected > max_row_w:
+                lines.append(current_line)
+                current_line = []
+                current_width = 0
+            current_line.append((entry, chip_w, h))
+            current_width = chip_w if len(current_line) == 1 else current_width + chip_gap + chip_w
+        if current_line:
+            lines.append(current_line)
 
-        block_w = max(cx + chip_w for _, cx, _, chip_w, _ in rows)
-        block_h = max(cy + h for _, _, cy, _, h in rows)
+        line_widths = [sum(chip_w for _, chip_w, _ in line) + chip_gap * max(0, len(line) - 1) for line in lines]
+        line_heights = [max(h for _, _, h in line) for line in lines]
+        block_w = max(line_widths)
+        block_h = sum(line_heights) + chip_gap * max(0, len(lines) - 1)
+
         center_x = width * 0.5 + offset_x * width * 0.5
         center_y = height * 0.74 + offset_y * height * 0.5
         origin_x = round(center_x - block_w / 2)
@@ -738,15 +743,19 @@ def _render_story_attributes(image: Image.Image, item: Property, story: dict) ->
         origin_x = max(30, min(width - block_w - 30, origin_x))
         origin_y = max(30, min(height - block_h - 30, origin_y))
 
-        for entry, local_x, local_y, chip_w, h in rows:
-            cx = origin_x + local_x
-            cy = origin_y + local_y
-            draw.rounded_rectangle((cx, cy, cx + chip_w, cy + h), radius=round(h / 2), fill=panel, outline=border, width=2)
-            iy = cy + (h - icon_size) // 2
-            _draw_story_attribute_icon(draw, entry["key"], cx + pad, iy, icon_size, accent if entry["key"] == "rent" else white)
-            tx = cx + pad + icon_size + gap
-            draw.text((tx, cy + pad - 2), entry["value"], font=value_font, fill=accent if entry["key"] == "rent" else white)
-            draw.text((tx, cy + pad + round(35 * scale)), entry["label"], font=label_font, fill=muted)
+        cy = origin_y
+        for line, line_width, line_height in zip(lines, line_widths, line_heights):
+            cx = origin_x + round((block_w - line_width) / 2)
+            for entry, chip_w, h in line:
+                item_y = cy + round((line_height - h) / 2)
+                draw.rounded_rectangle((cx, item_y, cx + chip_w, item_y + h), radius=round(h / 2), fill=panel, outline=border, width=2)
+                iy = item_y + (h - icon_size) // 2
+                _draw_story_attribute_icon(draw, entry["key"], cx + pad, iy, icon_size, accent if entry["key"] == "rent" else white)
+                tx = cx + pad + icon_size + gap
+                draw.text((tx, item_y + pad - 2), entry["value"], font=value_font, fill=accent if entry["key"] == "rent" else white)
+                draw.text((tx, item_y + pad + round(35 * scale)), entry["label"], font=label_font, fill=muted)
+                cx += chip_w + chip_gap
+            cy += line_height + chip_gap
     else:
         bottom_bar = layout == "bottom_bar"
         box_h = max(132, round(156 * scale))
