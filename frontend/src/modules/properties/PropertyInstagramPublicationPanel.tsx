@@ -117,6 +117,7 @@ export function PropertyInstagramPublicationPanel({propertyId,permissions}:Props
   const [cropOpen,setCropOpen]=useState(false)
   const [detailsOpen,setDetailsOpen]=useState(false)
   const cropFrameRef=useRef<HTMLDivElement|null>(null)
+  const attributesOverlayRef=useRef<HTMLDivElement|null>(null)
   const detailsFrameRef=useRef<HTMLDivElement|null>(null)
   const cropDragRef=useRef<{pointerId:number;clientX:number;clientY:number;offsetX:number;offsetY:number}|null>(null)
   const attributesDragRef=useRef<{pointerId:number;clientX:number;clientY:number;offsetX:number;offsetY:number}|null>(null)
@@ -228,11 +229,21 @@ export function PropertyInstagramPublicationPanel({propertyId,permissions}:Props
   function moveAttributesDrag(event:ReactPointerEvent<HTMLDivElement>){
     const drag=attributesDragRef.current
     const frame=cropFrameRef.current
-    if(!drag||drag.pointerId!==event.pointerId||!frame)return
+    const overlay=attributesOverlayRef.current
+    if(!drag||drag.pointerId!==event.pointerId||!frame||!overlay)return
     event.stopPropagation()
-    const rect=frame.getBoundingClientRect()
-    const nextX=Math.max(-1,Math.min(1,drag.offsetX+(event.clientX-drag.clientX)/(rect.width/2)))
-    const nextY=Math.max(-1,Math.min(1,drag.offsetY+(event.clientY-drag.clientY)/(rect.height/2)))
+
+    const frameRect=frame.getBoundingClientRect()
+    const overlayRect=overlay.getBoundingClientRect()
+    const rawDx=event.clientX-drag.clientX
+    const rawDy=event.clientY-drag.clientY
+    const margin=8
+
+    const dx=Math.max(frameRect.left+margin-overlayRect.left,Math.min(frameRect.right-margin-overlayRect.right,rawDx))
+    const dy=Math.max(frameRect.top+margin-overlayRect.top,Math.min(frameRect.bottom-margin-overlayRect.bottom,rawDy))
+    const nextX=Math.max(-1,Math.min(1,drag.offsetX+dx/(frameRect.width*.35)))
+    const nextY=Math.max(-1,Math.min(1,drag.offsetY+dy/(frameRect.height*.35)))
+
     setStoryAttributesOffsetX(Math.round(nextX*1000)/1000)
     setStoryAttributesOffsetY(Math.round(nextY*1000)/1000)
   }
@@ -337,20 +348,27 @@ export function PropertyInstagramPublicationPanel({propertyId,permissions}:Props
             <div className="instagram-story-crop-image-layer">
               <PhotoPreview photo={storyPhoto} imageStyle={{transform:`translate(${storyOffsetX*50}%, ${storyOffsetY*50}%) scale(${storyZoom})`}}/>
             </div>
-            <div ref={cropFrameRef} className="instagram-story-crop-frame"><span>ÁREA QUE SERÁ PUBLICADA</span></div>
-            {storyAttributesEnabled&&data.story_attributes.length>0&&<div
-              className={'instagram-story-attributes-overlay layout-'+storyAttributesLayout}
-              style={{transform:`translate(${storyAttributesOffsetX*38}%, ${storyAttributesOffsetY*38}%) scale(${storyAttributesScale})`}}
-              onPointerDown={beginAttributesDrag}
-              onPointerMove={moveAttributesDrag}
-              onPointerUp={endAttributesDrag}
-              onPointerCancel={endAttributesDrag}
-            >
-              {data.story_attributes.map(item=><div className={'instagram-story-attribute-item '+(item.key==='rent'?'rent':'')} key={item.key}>
-                <span className="instagram-story-attribute-icon"><StoryAttributeIcon kind={item.key}/></span>
-                <span className="instagram-story-attribute-copy"><strong>{item.value}</strong><small>{item.label}</small></span>
-              </div>)}
-            </div>}
+            <div ref={cropFrameRef} className="instagram-story-crop-frame">
+              <span>ÁREA QUE SERÁ PUBLICADA</span>
+              {storyAttributesEnabled&&data.story_attributes.length>0&&<div
+                ref={attributesOverlayRef}
+                className={'instagram-story-attributes-overlay layout-'+storyAttributesLayout}
+                style={{
+                  left:`${50+storyAttributesOffsetX*35}%`,
+                  top:`${(storyAttributesLayout==='vertical'?62:storyAttributesLayout==='chips'?74:storyAttributesLayout==='horizontal'?78:82)+storyAttributesOffsetY*35}%`,
+                  transform:`translate(-50%,-50%) scale(${storyAttributesScale})`,
+                }}
+                onPointerDown={beginAttributesDrag}
+                onPointerMove={moveAttributesDrag}
+                onPointerUp={endAttributesDrag}
+                onPointerCancel={endAttributesDrag}
+              >
+                {data.story_attributes.map(item=><div className={'instagram-story-attribute-item '+(item.key==='rent'?'rent':'')} key={item.key}>
+                  <span className="instagram-story-attribute-icon"><StoryAttributeIcon kind={item.key}/></span>
+                  <span className="instagram-story-attribute-copy"><strong>{item.value}</strong><small>{item.label}</small></span>
+                </div>)}
+              </div>}
+            </div>
           </div>
           <aside className="instagram-story-crop-controls">
             <div><span>Zoom da foto</span><b>{Math.round(storyZoom*100)}%</b></div>
@@ -368,7 +386,7 @@ export function PropertyInstagramPublicationPanel({propertyId,permissions}:Props
             </label>
             <label className="instagram-story-attributes-field">
               <span>Layout</span>
-              <select disabled={!storyAttributesEnabled} value={storyAttributesLayout} onChange={event=>setStoryAttributesLayout(event.target.value as InstagramPublication['story_attributes_layout'])}>
+              <select disabled={!storyAttributesEnabled} value={storyAttributesLayout} onChange={event=>{setStoryAttributesLayout(event.target.value as InstagramPublication['story_attributes_layout']);setStoryAttributesOffsetX(0);setStoryAttributesOffsetY(0)}}>
                 <option value="horizontal">Horizontal</option>
                 <option value="vertical">Vertical</option>
                 <option value="chips">Chips separados</option>
