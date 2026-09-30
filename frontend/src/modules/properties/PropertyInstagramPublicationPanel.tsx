@@ -259,9 +259,10 @@ export function PropertyInstagramPublicationPanel({propertyId,permissions}:Props
     const centerXPct=((centerX-frameRect.left)/frameRect.width)*100
     const centerYPct=((centerY-frameRect.top)/frameRect.height)*100
     const baseY=storyAttributesLayout==='vertical'?62:storyAttributesLayout==='chips'?74:storyAttributesLayout==='horizontal'?78:82
+    const yTravel=storyAttributesLayout==='vertical'?50:80
 
     const nextX=Math.max(-1,Math.min(1,(centerXPct-50)/50))
-    const nextY=Math.max(-1,Math.min(1,(centerYPct-baseY)/50))
+    const nextY=Math.max(-1,Math.min(1,(centerYPct-baseY)/yTravel))
     setStoryAttributesOffsetX(Math.round(nextX*1000)/1000)
     setStoryAttributesOffsetY(Math.round(nextY*1000)/1000)
   }
@@ -373,7 +374,7 @@ export function PropertyInstagramPublicationPanel({propertyId,permissions}:Props
                 className={'instagram-story-attributes-overlay layout-'+storyAttributesLayout}
                 style={{
                   left:`${50+storyAttributesOffsetX*50}%`,
-                  top:`${(storyAttributesLayout==='vertical'?62:storyAttributesLayout==='chips'?74:storyAttributesLayout==='horizontal'?78:82)+storyAttributesOffsetY*50}%`,
+                  top:`${(storyAttributesLayout==='vertical'?62:storyAttributesLayout==='chips'?74:storyAttributesLayout==='horizontal'?78:82)+storyAttributesOffsetY*(storyAttributesLayout==='vertical'?50:80)}%`,
                   transform:`translate(-50%,-50%) scale(${storyAttributesScale})`,
                 }}
                 onPointerDown={beginAttributesDrag}
