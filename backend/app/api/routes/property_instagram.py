@@ -299,7 +299,11 @@ def _response(db: Session, item: Property, photos: list[PropertyPhoto]) -> Insta
         story_attributes_offset_y=float((state.get("story") or {}).get("attributes_offset_y") or 0.0),
         story_attributes=_story_attribute_items(item),
         story_attribute_keys=[
-            key for key in list((state.get("story") or {}).get("attribute_keys") or ["neighborhood", "bedrooms", "bathrooms", "area", "parking", "rent"])
+            key for key in list(
+                (state.get("story") or {}).get("attribute_keys")
+                if "attribute_keys" in (state.get("story") or {})
+                else ["neighborhood", "bedrooms", "bathrooms", "area", "parking", "rent"]
+            )
             if key in {"neighborhood", "bedrooms", "bathrooms", "area", "parking", "rent"}
         ],
         story_publish_details=bool((state.get("story") or {}).get("publish_details", True)),
@@ -662,7 +666,11 @@ def _render_story_attributes(image: Image.Image, item: Property, story: dict) ->
     if not bool(story.get("attributes_enabled", True)):
         return
     items = _story_attribute_items(item)
-    selected_keys = set(story.get("attribute_keys") or ["neighborhood", "bedrooms", "bathrooms", "area", "parking", "rent"])
+    selected_keys = set(
+        story.get("attribute_keys")
+        if "attribute_keys" in story
+        else ["neighborhood", "bedrooms", "bathrooms", "area", "parking", "rent"]
+    )
     items = [entry for entry in items if entry["key"] in selected_keys]
     if not items:
         return
