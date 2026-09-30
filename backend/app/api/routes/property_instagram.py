@@ -676,13 +676,25 @@ def _render_story_attributes(image: Image.Image, item: Property, story: dict) ->
         return icon_size + gap + text_w + pad * 2, max(icon_size, 62 * scale) + pad * 2
 
     sizes = [item_size(entry) for entry in items]
+
+    def fit_font(text: str, max_size: int, min_size: int, max_width: int, *, bold: bool = False):
+        size = max_size
+        while size > min_size:
+            candidate = _load_story_font(size, bold=bold)
+            bbox = draw.textbbox((0, 0), text, font=candidate)
+            if bbox[2] - bbox[0] <= max_width:
+                return candidate
+            size -= 2
+        return _load_story_font(min_size, bold=bold)
     if layout == "vertical":
         box_w = min(round(width * 0.52), max(w for w, _ in sizes))
         box_h = sum(h for _, h in sizes) + gap * (len(items) - 1)
-        box_x = 74 + round(offset_x * 210)
-        box_y = round(height * 0.56 + offset_y * 330)
+        center_x = width * 0.5 + offset_x * width * 0.5
+        center_y = height * 0.62 + offset_y * height * 0.5
+        box_x = round(center_x - box_w / 2)
+        box_y = round(center_y - box_h / 2)
         box_x = max(36, min(width - box_w - 36, box_x))
-        box_y = max(180, min(height - box_h - 150, box_y))
+        box_y = max(36, min(height - box_h - 36, box_y))
         y = box_y
         for entry, (_, h) in zip(items, sizes):
             draw.rounded_rectangle((box_x, y, box_x + box_w, y + h), radius=24, fill=panel, outline=border, width=2)
@@ -695,29 +707,32 @@ def _render_story_attributes(image: Image.Image, item: Property, story: dict) ->
     elif layout == "chips":
         chip_gap = gap
         max_row_w = width - 96
-        x = 48
-        y = round(height * 0.68 + offset_y * 300)
-        rows: list[tuple[dict[str, str], int, int, int]] = []
+        x = 0
+        y = 0
+        row_h = 0
+        rows: list[tuple[dict[str, str], int, int, int, int]] = []
         for entry, (w, h) in zip(items, sizes):
             chip_w = min(w, round(width * 0.54))
-            if x + chip_w > 48 + max_row_w:
-                x = 48
-                y += h + chip_gap
-            rows.append((entry, x, y, chip_w))
+            if x and x + chip_w > max_row_w:
+                x = 0
+                y += row_h + chip_gap
+                row_h = 0
+            rows.append((entry, x, y, chip_w, h))
             x += chip_w + chip_gap
-        total_min_x = min(row[1] for row in rows)
-        shift_x = round(offset_x * 180)
-        shift_y = 0
-        last_h = sizes[-1][1]
-        bottom = max(row[2] + last_h for row in rows)
-        if y < 150:
-            shift_y += 150 - y
-        if bottom > height - 150:
-            shift_y -= bottom - (height - 150)
-        for entry, cx, cy, chip_w in rows:
-            h = item_size(entry)[1]
-            cx = max(30, min(width - chip_w - 30, cx + shift_x))
-            cy += shift_y
+            row_h = max(row_h, h)
+
+        block_w = max(cx + chip_w for _, cx, _, chip_w, _ in rows)
+        block_h = max(cy + h for _, _, cy, _, h in rows)
+        center_x = width * 0.5 + offset_x * width * 0.5
+        center_y = height * 0.74 + offset_y * height * 0.5
+        origin_x = round(center_x - block_w / 2)
+        origin_y = round(center_y - block_h / 2)
+        origin_x = max(30, min(width - block_w - 30, origin_x))
+        origin_y = max(30, min(height - block_h - 30, origin_y))
+
+        for entry, local_x, local_y, chip_w, h in rows:
+            cx = origin_x + local_x
+            cy = origin_y + local_y
             draw.rounded_rectangle((cx, cy, cx + chip_w, cy + h), radius=round(h / 2), fill=panel, outline=border, width=2)
             iy = cy + (h - icon_size) // 2
             _draw_story_attribute_icon(draw, entry["key"], cx + pad, iy, icon_size, accent if entry["key"] == "rent" else white)
@@ -728,24 +743,31 @@ def _render_story_attributes(image: Image.Image, item: Property, story: dict) ->
         bottom_bar = layout == "bottom_bar"
         box_h = max(132, round(156 * scale))
         box_w = width - (72 if bottom_bar else 108)
-        box_x = (width - box_w) // 2 + round(offset_x * 120)
-        default_y = height - box_h - 150 if bottom_bar else round(height * 0.68)
-        box_y = default_y + round(offset_y * 300)
+        center_x = width * 0.5 + offset_x * width * 0.5
+        base_y = 0.82 if bottom_bar else 0.78
+        center_y = height * base_y + offset_y * height * 0.5
+        box_x = round(center_x - box_w / 2)
+        box_y = round(center_y - box_h / 2)
         box_x = max(28, min(width - box_w - 28, box_x))
-        box_y = max(150, min(height - box_h - 130, box_y))
+        box_y = max(28, min(height - box_h - 28, box_y))
         draw.rounded_rectangle((box_x, box_y, box_x + box_w, box_y + box_h), radius=30, fill=panel, outline=border, width=2)
         cell_w = box_w / len(items)
         for index, entry in enumerate(items):
             cx = box_x + index * cell_w
             if index:
                 draw.line((cx, box_y + 24, cx, box_y + box_h - 24), fill=(255, 255, 255, 26), width=2)
-            icon_x = round(cx + cell_w / 2 - icon_size / 2)
-            icon_y = box_y + max(12, round(16 * scale))
-            _draw_story_attribute_icon(draw, entry["key"], icon_x, icon_y, icon_size, accent if entry["key"] == "rent" else white)
-            value_bbox = draw.textbbox((0, 0), entry["value"], font=value_font)
-            label_bbox = draw.textbbox((0, 0), entry["label"], font=label_font)
-            draw.text((round(cx + cell_w / 2 - (value_bbox[2]-value_bbox[0])/2), box_y + round(60 * scale)), entry["value"], font=value_font, fill=accent if entry["key"] == "rent" else white)
-            draw.text((round(cx + cell_w / 2 - (label_bbox[2]-label_bbox[0])/2), box_y + round(98 * scale)), entry["label"], font=label_font, fill=muted)
+            local_icon_size = min(icon_size, max(24, round(cell_w * 0.2)))
+            icon_x = round(cx + cell_w / 2 - local_icon_size / 2)
+            icon_y = box_y + max(10, round(13 * scale))
+            _draw_story_attribute_icon(draw, entry["key"], icon_x, icon_y, local_icon_size, accent if entry["key"] == "rent" else white)
+
+            usable_width = max(44, round(cell_w - 18))
+            local_value_font = fit_font(entry["value"], max(18, round(30 * scale)), 16, usable_width, bold=True)
+            local_label_font = fit_font(entry["label"], max(13, round(18 * scale)), 11, usable_width)
+            value_bbox = draw.textbbox((0, 0), entry["value"], font=local_value_font)
+            label_bbox = draw.textbbox((0, 0), entry["label"], font=local_label_font)
+            draw.text((round(cx + cell_w / 2 - (value_bbox[2]-value_bbox[0])/2), box_y + round(55 * scale)), entry["value"], font=local_value_font, fill=accent if entry["key"] == "rent" else white)
+            draw.text((round(cx + cell_w / 2 - (label_bbox[2]-label_bbox[0])/2), box_y + round(96 * scale)), entry["label"], font=local_label_font, fill=muted)
 
     image.paste(overlay, (0, 0), overlay)
 
