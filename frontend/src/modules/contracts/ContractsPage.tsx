@@ -230,10 +230,10 @@ export function ContractsPage({ permissions }: Props) {
         document_number: company?.document_number || null,
         phone: company?.contact_phone || null,
         representative_person_id: null,
-        representative_name: null,
-        representative_email: null,
-        representative_document_number: null,
-        representative_phone: null,
+        representative_name: company?.representative_name || null,
+        representative_email: company?.representative_email || null,
+        representative_document_number: company?.representative_document_number || null,
+        representative_phone: company?.representative_phone || null,
       })
       return
     }
@@ -414,7 +414,9 @@ export function ContractsPage({ permissions }: Props) {
             <label className="field"><span>E-mail da parte</span><input required={!requiresRepresentative} type="email" value={signer.email} onChange={(e) => updateSigner(index, { email: e.target.value })}/></label>
             <label className="field"><span>{requiresRepresentative ? 'CNPJ da parte' : 'CPF/CNPJ'}</span><input data-format="cpf-cnpj" value={signer.document_number ?? ''} onChange={(e) => updateSigner(index, { document_number: e.target.value || null })}/></label>
             {requiresRepresentative && <>
-              <label className="field signer-representative-field"><span>Representante que assinará</span><select required value={signer.representative_person_id ?? ''} onChange={(e) => selectSignerRepresentative(index, e.target.value)}><option value="">Selecione uma pessoa física...</option>{representativePeople.map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}</select></label>
+              {signer.role === 'agency'
+                ? <label className="field signer-representative-field"><span>Representante padrão da imobiliária</span><input required readOnly value={signer.representative_name ?? ''} placeholder="Cadastre em Configurações → Dados da empresa"/></label>
+                : <label className="field signer-representative-field"><span>Representante que assinará</span><select required value={signer.representative_person_id ?? ''} onChange={(e) => selectSignerRepresentative(index, e.target.value)}><option value="">Selecione uma pessoa física...</option>{representativePeople.map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}</select></label>}
               <label className="field"><span>E-mail do representante</span><input required readOnly type="email" value={signer.representative_email ?? ''}/></label>
               <label className="field"><span>CPF do representante</span><input required readOnly data-format="cpf-cnpj" value={signer.representative_document_number ?? ''}/></label>
             </>}
