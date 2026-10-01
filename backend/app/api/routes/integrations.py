@@ -21,7 +21,7 @@ from app.domains.leases.models import LeaseContract
 from app.domains.portfolio.models import Property
 from app.integrations.document_storage import DocumentStorageError, DocumentStorageStatus, get_document_storage
 from app.integrations.signature import SignatureProviderError, SignatureProviderStatus, get_signature_provider, get_signature_provider_for_organization
-from app.integrations.credential_crypto import CredentialCryptoError, encrypt_secret
+from app.integrations.credential_crypto import CredentialCryptoError, decrypt_secret, encrypt_secret
 from app.integrations.email import EmailDeliveryError, SmtpConfig, send_email_message, smtp_config_for_organization, test_smtp_connection
 
 router = APIRouter(tags=["integrations"])
@@ -75,6 +75,9 @@ class SignatureConfigurationResponse(BaseModel):
     environment: Literal["sandbox", "production"] = "sandbox"
     token_configured: bool = False
     source: Literal["erp", "environment", "none"] = "none"
+    webhook_configured: bool = False
+    webhook_endpoint: str | None = None
+    webhook_id: str | None = None
 
 
 class SignatureConfigurationUpdate(BaseModel):
@@ -137,14 +140,27 @@ def _signature_row(db: Session, organization_id) -> OrganizationIntegrationCrede
     ))
 
 
+def _signature_webhook_row(db: Session, organization_id) -> OrganizationIntegrationCredential | None:
+    return db.scalar(select(OrganizationIntegrationCredential).where(
+        OrganizationIntegrationCredential.organization_id == organization_id,
+        OrganizationIntegrationCredential.provider == "clicksign_webhook",
+    ))
+
+
 def _signature_config_response(db: Session, organization_id) -> SignatureConfigurationResponse:
     row = _signature_row(db, organization_id)
+    webhook_row = _signature_webhook_row(db, organization_id)
+    webhook_value = dict(webhook_row.non_secret_config or {}) if webhook_row is not None else {}
+    webhook_configured = bool(webhook_row and webhook_row.encrypted_secret)
     if row is not None:
         value = dict(row.non_secret_config or {})
         return SignatureConfigurationResponse(
             environment=str(value.get("environment") or "sandbox"),
             token_configured=bool(row.encrypted_secret),
             source="erp",
+            webhook_configured=webhook_configured,
+            webhook_endpoint=str(webhook_value.get("endpoint") or "") or None,
+            webhook_id=str(webhook_value.get("webhook_id") or "") or None,
         )
     environment = get_settings()
     if environment.clicksign_access_token.strip():
@@ -152,8 +168,15 @@ def _signature_config_response(db: Session, organization_id) -> SignatureConfigu
             environment="production" if environment.clicksign_environment.strip().lower() == "production" else "sandbox",
             token_configured=True,
             source="environment",
+            webhook_configured=webhook_configured or bool(environment.clicksign_webhook_secret.strip()),
+            webhook_endpoint=str(webhook_value.get("endpoint") or "") or None,
+            webhook_id=str(webhook_value.get("webhook_id") or "") or None,
         )
-    return SignatureConfigurationResponse()
+    return SignatureConfigurationResponse(
+        webhook_configured=webhook_configured,
+        webhook_endpoint=str(webhook_value.get("endpoint") or "") or None,
+        webhook_id=str(webhook_value.get("webhook_id") or "") or None,
+    )
 
 
 def _smtp_row(db: Session, organization_id) -> OrganizationIntegrationCredential | None:
@@ -617,6 +640,67 @@ def update_signature_configuration(
     return _signature_config_response(db, context.user.organization_id)
 
 
+@router.post("/integrations/signature/webhook/setup", response_model=SignatureConfigurationResponse)
+def setup_signature_webhook(
+    request: Request,
+    context: UserContext = Depends(require_permission("settings.company.manage")),
+    db: Session = Depends(get_db),
+) -> SignatureConfigurationResponse:
+    provider = get_signature_provider_for_organization(db, context.user.organization_id, "clicksign")
+    if provider is None or not provider.configured:
+        raise HTTPException(status_code=422, detail="Cadastre e valide o Access Token da Clicksign antes de configurar o webhook.")
+
+    endpoint = str(request.url_for("clicksign_webhook"))
+    row = _signature_webhook_row(db, context.user.organization_id)
+    if row is not None and row.encrypted_secret:
+        value = dict(row.non_secret_config or {})
+        if str(value.get("endpoint") or "") == endpoint:
+            return _signature_config_response(db, context.user.organization_id)
+
+    try:
+        created = provider.create_webhook(endpoint=endpoint, events=["document_closed"])
+        encrypted_secret = encrypt_secret(
+            created["secret"],
+            scope=f"{context.user.organization_id}:clicksign_webhook",
+        )
+    except (SignatureProviderError, CredentialCryptoError) as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    if row is None:
+        row = OrganizationIntegrationCredential(
+            organization_id=context.user.organization_id,
+            provider="clicksign_webhook",
+            non_secret_config={},
+            updated_by_user_id=context.user.id,
+        )
+        db.add(row)
+        db.flush()
+
+    row.encrypted_secret = encrypted_secret
+    row.non_secret_config = {
+        "webhook_id": created["id"],
+        "endpoint": endpoint,
+        "events": ["document_closed"],
+        "status": "active",
+    }
+    row.updated_by_user_id = context.user.id
+
+    forwarded = request.headers.get("x-forwarded-for", "").split(",", 1)[0].strip()
+    write_audit(
+        db,
+        context=context,
+        action="settings.integrations.clicksign_webhook.configured",
+        module="settings",
+        entity_type="organization_integration_credential",
+        entity_id=str(row.id),
+        after_data={"webhook_id": created["id"], "endpoint": endpoint, "events": ["document_closed"]},
+        ip_address=forwarded or (request.client.host if request.client else None),
+        user_agent=request.headers.get("user-agent"),
+    )
+    db.commit()
+    return _signature_config_response(db, context.user.organization_id)
+
+
 @router.get("/integrations/signature/status", response_model=SignatureIntegrationStatusResponse)
 def signature_status(
     context: UserContext = Depends(require_permission("settings.view")),
@@ -683,6 +767,28 @@ def test_document_storage(
     context: UserContext = Depends(require_permission("settings.company.manage")),
 ) -> DocumentStorageStatusResponse:
     return _storage_response(get_document_storage().status(probe=True))
+
+
+def _extract_document_id(payload: dict[str, Any]) -> str | None:
+    document = payload.get("document")
+    candidates: list[Any] = []
+    if isinstance(document, dict):
+        candidates.extend([document.get("id"), document.get("key")])
+    data = payload.get("data")
+    if isinstance(data, dict):
+        if str(data.get("type") or "").lower() == "documents":
+            candidates.append(data.get("id"))
+        relationships = data.get("relationships")
+        if isinstance(relationships, dict):
+            document_rel = relationships.get("document")
+            if isinstance(document_rel, dict):
+                document_data = document_rel.get("data")
+                if isinstance(document_data, dict):
+                    candidates.append(document_data.get("id"))
+    return next(
+        (str(value) for value in candidates if isinstance(value, (str, int)) and str(value).strip()),
+        None,
+    )
 
 
 def _extract_envelope_id(payload: dict[str, Any]) -> str | None:
@@ -787,26 +893,7 @@ def _try_auto_archive(db: Session, contract: AdministrationContract | LeaseContr
 
 @router.post("/webhooks/clicksign", status_code=status.HTTP_200_OK)
 async def clicksign_webhook(request: Request, db: Session = Depends(get_db)) -> dict[str, str]:
-    settings = get_settings()
-    secret = settings.clicksign_webhook_secret.strip()
-    if not secret:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Webhook Clicksign ainda não possui HMAC Secret configurado.",
-        )
-
     raw_body = await request.body()
-    received_hmac = _received_signature(request)
-    expected = hmac.new(secret.encode("utf-8"), raw_body, hashlib.sha256).hexdigest()
-    received_digest = received_hmac.removeprefix("sha256=")
-    if not (bool(received_digest) and hmac.compare_digest(received_digest.lower(), expected.lower())):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Assinatura HMAC do webhook inválida.")
-
-    event_name = request.headers.get("event", "unknown")[:120]
-    event_fingerprint = hashlib.sha256(event_name.encode("utf-8") + b"\0" + raw_body).hexdigest()
-    if db.scalar(select(SignatureWebhookEvent.id).where(SignatureWebhookEvent.event_fingerprint == event_fingerprint)) is not None:
-        return {"status": "accepted_duplicate"}
-
     try:
         payload = json.loads(raw_body.decode("utf-8")) if raw_body else {}
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
@@ -815,6 +902,7 @@ async def clicksign_webhook(request: Request, db: Session = Depends(get_db)) -> 
         raise HTTPException(status_code=400, detail="Payload do webhook deve ser um objeto JSON.")
 
     envelope_id = _extract_envelope_id(payload)
+    document_id = _extract_document_id(payload)
     administration_contract: AdministrationContract | None = None
     lease_contract: LeaseContract | None = None
 
@@ -826,13 +914,52 @@ async def clicksign_webhook(request: Request, db: Session = Depends(get_db)) -> 
             lease_contract = db.scalar(
                 select(LeaseContract).where(LeaseContract.signing_envelope_id == envelope_id)
             )
+    elif document_id:
+        administration_contract = db.scalar(
+            select(AdministrationContract).where(AdministrationContract.signing_document_id == document_id)
+        )
+        if administration_contract is None:
+            lease_contract = db.scalar(
+                select(LeaseContract).where(LeaseContract.signing_document_id == document_id)
+            )
 
-        contract = administration_contract or lease_contract
-        if contract is not None:
-            contract.signing_status = _provider_status_from_event(event_name, payload)
-            if contract.signing_status == "provider_closed_pending_archive":
-                contract.archive_status = "pending"
-                _try_auto_archive(db, contract)
+    contract = administration_contract or lease_contract
+    organization_id = contract.organization_id if contract is not None else None
+    secret = ""
+    if organization_id is not None:
+        webhook_row = _signature_webhook_row(db, organization_id)
+        if webhook_row is not None and webhook_row.encrypted_secret:
+            try:
+                secret = decrypt_secret(
+                    webhook_row.encrypted_secret,
+                    scope=f"{organization_id}:clicksign_webhook",
+                )
+            except CredentialCryptoError as exc:
+                raise HTTPException(status_code=503, detail=str(exc)) from exc
+    if not secret:
+        secret = get_settings().clicksign_webhook_secret.strip()
+    if not secret:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Webhook Clicksign ainda não possui HMAC Secret configurado.",
+        )
+
+    received_hmac = _received_signature(request)
+    expected = hmac.new(secret.encode("utf-8"), raw_body, hashlib.sha256).hexdigest()
+    received_digest = received_hmac.removeprefix("sha256=")
+    if not (bool(received_digest) and hmac.compare_digest(received_digest.lower(), expected.lower())):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Assinatura HMAC do webhook inválida.")
+
+    event_name = request.headers.get("event", "unknown")[:120]
+    event_fingerprint = hashlib.sha256(event_name.encode("utf-8") + b"\0" + raw_body).hexdigest()
+    if db.scalar(select(SignatureWebhookEvent.id).where(SignatureWebhookEvent.event_fingerprint == event_fingerprint)) is not None:
+        return {"status": "accepted_duplicate"}
+
+    if contract is not None:
+        contract.signing_status = _provider_status_from_event(event_name, payload)
+        if contract.signing_status == "provider_closed_pending_archive":
+            contract.archive_status = "pending"
+            _try_auto_archive(db, contract)
 
     db.add(
         SignatureWebhookEvent(
