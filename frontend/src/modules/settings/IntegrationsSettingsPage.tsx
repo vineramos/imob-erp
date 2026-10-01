@@ -354,7 +354,21 @@ export function IntegrationsSettingsPage({ canEdit }: Props) {
                 <div className="smtp-config-panel">
                   <div className="form-grid smtp-config-grid">
                     <label className="field"><span>Ambiente</span><select disabled={!canEdit} value={clicksign.environment} onChange={(e)=>setClicksign((current)=>({...current,environment:e.target.value as ClicksignConfiguration['environment']}))}><option value="sandbox">Sandbox · testes</option><option value="production">Produção</option></select></label>
-                    <label className="field"><span>Access Token {clicksign.token_configured ? '· cadastrado' : ''}</span><input disabled={!canEdit} type="password" autoComplete="new-password" placeholder={clicksign.token_configured ? 'Deixe vazio para manter o token atual' : 'Cole aqui o Access Token da Clicksign'} value={clicksignToken} onChange={(e)=>setClicksignToken(e.target.value)}/></label>
+                    <label className="field clicksign-token-field">
+                      <span className="clicksign-token-label">
+                        <span>Access Token</span>
+                        {clicksign.token_configured && <i className="status-badge success">Cadastrado</i>}
+                      </span>
+                      <input
+                        disabled={!canEdit}
+                        type="password"
+                        autoComplete="new-password"
+                        placeholder={clicksign.token_configured ? 'Cole um novo token somente se quiser substituir o atual' : 'Cole aqui o Access Token da Clicksign'}
+                        value={clicksignToken}
+                        onChange={(e)=>setClicksignToken(e.target.value)}
+                      />
+                      {clicksign.token_configured && <small className="smtp-security-note clicksign-token-hint">Deixe em branco para manter o token já salvo.</small>}
+                    </label>
                   </div>
                   <div className="smtp-test-row">
                     <button className="button primary compact-button" disabled={!canEdit || savingSignature || (!clicksign.token_configured && !clicksignToken.trim())} type="button" onClick={()=>void saveClicksign()}><Save size={14}/>{savingSignature ? 'Salvando...' : 'Salvar Clicksign'}</button>
