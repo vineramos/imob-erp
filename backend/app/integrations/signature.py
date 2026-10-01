@@ -49,7 +49,7 @@ class ClicksignProvider:
         if not self.token:
             raise SignatureProviderError("Access Token da Clicksign ainda não foi configurado no Secret Manager.")
         return {
-            "Authorization": f"Bearer {self.token}",
+            "Authorization": self.token,
             "Accept": "application/vnd.api+json",
             "Content-Type": "application/vnd.api+json",
         }
