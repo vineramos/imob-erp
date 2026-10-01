@@ -18,6 +18,10 @@ export type OrganizationProfile = {
   creci_pj: string | null
   contact_email: string | null
   contact_phone: string | null
+  representative_name: string | null
+  representative_email: string | null
+  representative_document_number: string | null
+  representative_phone: string | null
   address: Record<string, string>
 }
 
