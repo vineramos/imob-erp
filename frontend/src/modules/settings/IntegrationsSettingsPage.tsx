@@ -1,7 +1,7 @@
 import { Activity, Banknote, CheckCircle2, CircleAlert, Database, FileSignature, Mail, MessageCircle, RadioTower, RefreshCw, Save, ShieldCheck, Webhook } from 'lucide-react'
 import { FormEvent, useEffect, useState } from 'react'
 import { ApiError, apiRequest } from '../../api/client'
-import type { BankIntegrationStatus, IntegrationReadiness, IntegrationsConfig, SignatureIntegrationStatus, SmtpConfiguration } from '../../api/types'
+import type { BankIntegrationStatus, ClicksignConfiguration, IntegrationReadiness, IntegrationsConfig, SignatureIntegrationStatus, SmtpConfiguration } from '../../api/types'
 import { authConfigured } from '../../auth/client'
 import { InstagramIntegrationSettingsPanel } from './InstagramIntegrationSettingsPanel'
 import { PortalIntegrationsSettingsPanel } from './PortalIntegrationsSettingsPanel'
@@ -17,6 +17,7 @@ const defaults: IntegrationsConfig = {
 }
 
 const smtpDefaults: SmtpConfiguration = { host: '', port: 587, username: '', from_email: '', from_name: '', use_tls: true, use_ssl: false, password_configured: false, source: 'none' }
+const clicksignDefaults: ClicksignConfiguration = { environment: 'sandbox', token_configured: false, source: 'none' }
 
 type Props = { canEdit: boolean }
 
@@ -52,6 +53,8 @@ export function IntegrationsSettingsPage({ canEdit }: Props) {
   const [form, setForm] = useState<IntegrationsConfig>(defaults)
   const [bankStatus, setBankStatus] = useState<BankIntegrationStatus | null>(null)
   const [signatureStatus, setSignatureStatus] = useState<SignatureIntegrationStatus | null>(null)
+  const [clicksign, setClicksign] = useState<ClicksignConfiguration>(clicksignDefaults)
+  const [clicksignToken, setClicksignToken] = useState('')
   const [readiness, setReadiness] = useState<IntegrationReadiness | null>(null)
   const [smtp, setSmtp] = useState<SmtpConfiguration>(smtpDefaults)
   const [smtpPassword, setSmtpPassword] = useState('')
@@ -60,6 +63,7 @@ export function IntegrationsSettingsPage({ canEdit }: Props) {
   const [saving, setSaving] = useState(false)
   const [testingBank, setTestingBank] = useState(false)
   const [testingSignature, setTestingSignature] = useState(false)
+  const [savingSignature, setSavingSignature] = useState(false)
   const [savingSmtp, setSavingSmtp] = useState(false)
   const [testingSmtp, setTestingSmtp] = useState(false)
   const [auditing, setAuditing] = useState(false)
@@ -75,14 +79,16 @@ export function IntegrationsSettingsPage({ canEdit }: Props) {
       apiRequest<IntegrationsConfig>('/settings/integrations'),
       apiRequest<BankIntegrationStatus>('/integrations/bank/status').catch(() => null),
       apiRequest<SignatureIntegrationStatus>('/integrations/signature/status').catch(() => null),
+      apiRequest<ClicksignConfiguration>('/integrations/signature/config').catch(() => clicksignDefaults),
       apiRequest<IntegrationReadiness>('/integrations/readiness').catch(() => null),
       apiRequest<SmtpConfiguration>('/integrations/email/config').catch(() => smtpDefaults),
     ])
-      .then(([data, bankStatusData, statusData, readinessData, smtpData]) => {
+      .then(([data, bankStatusData, statusData, clicksignData, readinessData, smtpData]) => {
         if (!active) return
         setForm(data)
         setBankStatus(bankStatusData)
         setSignatureStatus(statusData)
+        setClicksign(clicksignData)
         setReadiness(readinessData)
         setSmtp(smtpData)
         setTestRecipient(smtpData.from_email)
@@ -147,6 +153,29 @@ export function IntegrationsSettingsPage({ canEdit }: Props) {
       setError(cause instanceof ApiError ? cause.detail : 'Não foi possível testar a Clicksign.')
     } finally {
       setTestingSignature(false)
+    }
+  }
+
+  async function saveClicksign() {
+    if (!canEdit || !authConfigured) return
+    setSavingSignature(true)
+    setError('')
+    setSuccess('')
+    try {
+      const updated = await apiRequest<ClicksignConfiguration>('/integrations/signature/config', {
+        method: 'PUT',
+        body: JSON.stringify({ environment: clicksign.environment, access_token: clicksignToken || null }),
+      })
+      setClicksign(updated)
+      setClicksignToken('')
+      const status = await apiRequest<SignatureIntegrationStatus>('/integrations/signature/status').catch(() => null)
+      setSignatureStatus(status)
+      setReadiness(await apiRequest<IntegrationReadiness>('/integrations/readiness').catch(() => null))
+      setSuccess('Token da Clicksign salvo com criptografia. Agora você pode testar a conexão.')
+    } catch (cause) {
+      setError(cause instanceof ApiError ? cause.detail : 'Não foi possível salvar a configuração da Clicksign.')
+    } finally {
+      setSavingSignature(false)
     }
   }
 
@@ -315,13 +344,25 @@ export function IntegrationsSettingsPage({ canEdit }: Props) {
             <select disabled={!canEdit} value={form.signature_provider} onChange={(e) => setForm((current) => ({ ...current, signature_provider: e.target.value as IntegrationsConfig['signature_provider'] }))}><option value="clicksign">Clicksign</option><option value="none">Nenhum</option></select>
             {form.signature_provider === 'clicksign' ? connectionBadge(signatureStatus) : providerStatus(false)}
             {form.signature_provider === 'clicksign' && (
-              <div className="integration-health">
-                <div className="integration-health-copy">
-                  {signatureStatus?.reachable ? <CheckCircle2 size={16}/> : <CircleAlert size={16}/>} 
-                  <div><strong>{signatureStatus ? `Ambiente ${signatureStatus.environment}` : 'Clicksign'}</strong><span>{signatureStatus?.message ?? 'Consulte o status para saber se a credencial segura já está disponível.'}</span></div>
+              <>
+                <div className="integration-health">
+                  <div className="integration-health-copy">
+                    {signatureStatus?.reachable ? <CheckCircle2 size={16}/> : <CircleAlert size={16}/>} 
+                    <div><strong>{signatureStatus ? `Ambiente ${signatureStatus.environment}` : 'Clicksign'}</strong><span>{signatureStatus?.message ?? 'Configure o Access Token do Sandbox abaixo e valide a conexão.'}</span></div>
+                  </div>
                 </div>
-                <button className="button secondary compact-button" disabled={!canEdit || testingSignature} type="button" onClick={() => void testSignatureConnection()}><RefreshCw size={14}/>{testingSignature ? 'Testando...' : 'Testar conexão'}</button>
-              </div>
+                <div className="smtp-config-panel">
+                  <div className="form-grid smtp-config-grid">
+                    <label className="field"><span>Ambiente</span><select disabled={!canEdit} value={clicksign.environment} onChange={(e)=>setClicksign((current)=>({...current,environment:e.target.value as ClicksignConfiguration['environment']}))}><option value="sandbox">Sandbox · testes</option><option value="production">Produção</option></select></label>
+                    <label className="field"><span>Access Token {clicksign.token_configured ? '· cadastrado' : ''}</span><input disabled={!canEdit} type="password" autoComplete="new-password" placeholder={clicksign.token_configured ? 'Deixe vazio para manter o token atual' : 'Cole aqui o Access Token da Clicksign'} value={clicksignToken} onChange={(e)=>setClicksignToken(e.target.value)}/></label>
+                  </div>
+                  <div className="smtp-test-row">
+                    <button className="button primary compact-button" disabled={!canEdit || savingSignature || (!clicksign.token_configured && !clicksignToken.trim())} type="button" onClick={()=>void saveClicksign()}><Save size={14}/>{savingSignature ? 'Salvando...' : 'Salvar Clicksign'}</button>
+                    <button className="button secondary compact-button" disabled={!canEdit || testingSignature || (!clicksign.token_configured && !clicksignToken.trim())} type="button" onClick={() => void testSignatureConnection()}><RefreshCw size={14}/>{testingSignature ? 'Testando...' : 'Testar conexão'}</button>
+                  </div>
+                  <small className="smtp-security-note">O token é criptografado antes de ser armazenado e nunca é exibido novamente. Para seu token de teste, mantenha o ambiente em Sandbox.</small>
+                </div>
+              </>
             )}
           </article>
 
@@ -404,7 +445,7 @@ export function IntegrationsSettingsPage({ canEdit }: Props) {
 
           <article className="panel governance-note-card">
             <ShieldCheck size={22} />
-            <div><span className="eyebrow">Segurança</span><h2>Segredos ficam fora do banco operacional</h2><p>Esta tela guarda somente escolha de provider e parâmetros não sensíveis. Token e HMAC Secret da Clicksign entram pela configuração segura do Cloud Run/Secret Manager e nunca aparecem de volta na interface.</p></div>
+            <div><span className="eyebrow">Segurança</span><h2>Credenciais protegidas</h2><p>O Access Token da Clicksign e senhas de integrações cadastradas pelo ERP são armazenados de forma criptografada e nunca são exibidos novamente na interface. Segredos de infraestrutura também podem permanecer no Secret Manager.</p></div>
           </article>
           <article className="panel governance-note-card">
             <Webhook size={22}/>
