@@ -355,6 +355,11 @@ export type ContractSigner = {
   email: string
   document_number: string | null
   phone: string | null
+  representative_person_id?: string | null
+  representative_name?: string | null
+  representative_email?: string | null
+  representative_document_number?: string | null
+  representative_phone?: string | null
   sign_order: number
   communication: ContractSignerCommunication
 }
