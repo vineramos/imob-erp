@@ -144,7 +144,7 @@ class ClicksignProvider:
     def create_signer(self, envelope_id: str, signer: dict) -> str:
         communication = str(signer.get("communication") or "email")
         phone = _digits(str(signer.get("phone") or "")) or None
-        document = _digits(str(signer.get("document_number") or "")) or None
+        document = _clicksign_cpf(str(signer.get("document_number") or ""))
         attributes: dict = {
             "name": str(signer.get("name") or "").strip(),
             "email": str(signer.get("email") or "").strip().lower(),
@@ -307,6 +307,13 @@ def _safe_response_detail(response: httpx.Response) -> str:
         return str(payload)[:300]
     except ValueError:
         return (response.text or "resposta sem detalhes").strip()[:300]
+
+
+def _clicksign_cpf(value: str) -> str | None:
+    digits = "".join(ch for ch in value if ch.isdigit())
+    if len(digits) != 11:
+        return None
+    return f"{digits[:3]}.{digits[3:6]}.{digits[6:9]}-{digits[9:]}"
 
 
 def _digits(value: str) -> str:
