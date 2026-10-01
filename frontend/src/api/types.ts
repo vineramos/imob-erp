@@ -62,6 +62,12 @@ export type SignatureIntegrationStatus = {
 
 export type BankIntegrationStatus = SignatureIntegrationStatus
 
+export type ClicksignConfiguration = {
+  environment: 'sandbox' | 'production'
+  token_configured: boolean
+  source: 'erp' | 'environment' | 'none'
+}
+
 export type SmtpConfiguration = {
   host: string
   port: number
