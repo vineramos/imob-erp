@@ -135,6 +135,9 @@ class FakeSignatureProvider:
     def activate_envelope(self, envelope_id: str) -> None:
         return None
 
+    def notify_envelope(self, envelope_id: str) -> None:
+        return None
+
     def signed_document_bytes(self, envelope_id: str, document_id: str) -> bytes:
         return b"%PDF-1.4\n% documento assinado pelo provider de teste\n%%EOF"
 
