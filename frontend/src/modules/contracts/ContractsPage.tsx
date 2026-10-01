@@ -499,7 +499,9 @@ export function ContractsPage({ permissions }: Props) {
                 {selectedContract.status==='pending_signature'&&canSign&&['provider_closed_pending_archive','archive_failed'].includes(selectedContract.signing_status)&&<button className="button primary" type="button" disabled={saving} onClick={()=>void archiveFinal(selectedContract)}><FileCheck2 size={14}/> Arquivar PDF final</button>}
                 {(selectedContract.status==='review'||selectedContract.status==='approved'||selectedContract.status==='pending_signature')&&canEdit&&<button className="button secondary" type="button" disabled={saving} onClick={()=>void workflow(selectedContract,'return_draft')}><RotateCcw size={14}/> Rascunho</button>}
                 {selectedContract.status!=='cancelled'&&selectedContract.status!=='signed'&&canEdit&&<button className="button ghost-danger" type="button" disabled={saving} onClick={()=>{setCancelTarget(selectedContract);setCancelReason('')}}>Cancelar</button>}
-                {documentCurrent&&<a className="button secondary" href={'/api/administration-contracts/'+selectedContract.id+'/document/pdf'} target="_blank" rel="noreferrer"><Download size={14}/> Ver PDF</a>}
+                {selectedContract.archive_status==='archived'&&selectedContract.archived_document_reference
+                  ? <a className="button secondary" href={'/api/administration-contracts/'+selectedContract.id+'/signature/final/pdf'} target="_blank" rel="noreferrer"><FileCheck2 size={14}/> Ver PDF assinado</a>
+                  : documentCurrent&&<a className="button secondary" href={'/api/administration-contracts/'+selectedContract.id+'/document/pdf'} target="_blank" rel="noreferrer"><Download size={14}/> Ver PDF</a>}
               </div>
             </header>
             <div className="contract-essential-strip admin-essential-strip">
@@ -586,7 +588,9 @@ export function ContractsPage({ permissions }: Props) {
                     <div><span>SHA-256 final</span><strong title={selectedContract.final_document_hash||undefined}>{selectedContract.final_document_hash||'Pendente'}</strong></div>
                     <div><span>Arquivo final</span><strong>{selectedContract.archive_status==='archived'?'Arquivado':selectedContract.archive_status.replaceAll('_',' ')}</strong></div>
                   </div>
-                  {documentCurrent&&<a className="button secondary admin-document-link" href={'/api/administration-contracts/'+selectedContract.id+'/document/pdf'} target="_blank" rel="noreferrer"><Download size={14}/> Visualizar PDF atual</a>}
+                  {selectedContract.archive_status==='archived'&&selectedContract.archived_document_reference
+                    ? <a className="button primary admin-document-link" href={'/api/administration-contracts/'+selectedContract.id+'/signature/final/pdf'} target="_blank" rel="noreferrer"><FileCheck2 size={14}/> Visualizar PDF assinado</a>
+                    : documentCurrent&&<a className="button secondary admin-document-link" href={'/api/administration-contracts/'+selectedContract.id+'/document/pdf'} target="_blank" rel="noreferrer"><Download size={14}/> Visualizar PDF atual</a>}
                 </article>
                 <EntityDocumentsPanel key={selectedContract.id} entityType="administration_contract" entityId={selectedContract.id} entityLabel={selectedContract.code} permissions={permissions} compact/>
               </div>}
