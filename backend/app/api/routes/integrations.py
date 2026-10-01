@@ -774,6 +774,23 @@ def test_document_storage(
     return _storage_response(get_document_storage().status(probe=True))
 
 
+def _document_metadata(payload: dict[str, Any]) -> dict[str, Any]:
+    document = payload.get("document")
+    if isinstance(document, dict):
+        metadata = document.get("metadata")
+        if isinstance(metadata, dict):
+            return metadata
+        attributes = document.get("attributes")
+        if isinstance(attributes, dict) and isinstance(attributes.get("metadata"), dict):
+            return attributes["metadata"]
+    data = payload.get("data")
+    if isinstance(data, dict):
+        attributes = data.get("attributes")
+        if isinstance(attributes, dict) and isinstance(attributes.get("metadata"), dict):
+            return attributes["metadata"]
+    return {}
+
+
 def _extract_document_id(payload: dict[str, Any]) -> str | None:
     document = payload.get("document")
     candidates: list[Any] = []
@@ -908,10 +925,28 @@ async def clicksign_webhook(request: Request, db: Session = Depends(get_db)) -> 
 
     envelope_id = _extract_envelope_id(payload)
     document_id = _extract_document_id(payload)
+    metadata = _document_metadata(payload)
+    metadata_contract_id = str(metadata.get("contract_id") or "").strip()
+    metadata_contract_type = str(metadata.get("contract_type") or "").strip().lower()
     administration_contract: AdministrationContract | None = None
     lease_contract: LeaseContract | None = None
 
-    if envelope_id:
+    if metadata_contract_id:
+        try:
+            metadata_uuid = UUID(metadata_contract_id)
+        except ValueError:
+            metadata_uuid = None
+        if metadata_uuid is not None:
+            if metadata_contract_type == "lease":
+                lease_contract = db.scalar(select(LeaseContract).where(LeaseContract.id == metadata_uuid))
+            elif metadata_contract_type in {"administration", "administration_contract"}:
+                administration_contract = db.scalar(select(AdministrationContract).where(AdministrationContract.id == metadata_uuid))
+            else:
+                administration_contract = db.scalar(select(AdministrationContract).where(AdministrationContract.id == metadata_uuid))
+                if administration_contract is None:
+                    lease_contract = db.scalar(select(LeaseContract).where(LeaseContract.id == metadata_uuid))
+
+    if administration_contract is None and lease_contract is None and envelope_id:
         administration_contract = db.scalar(
             select(AdministrationContract).where(AdministrationContract.signing_envelope_id == envelope_id)
         )
@@ -919,7 +954,7 @@ async def clicksign_webhook(request: Request, db: Session = Depends(get_db)) -> 
             lease_contract = db.scalar(
                 select(LeaseContract).where(LeaseContract.signing_envelope_id == envelope_id)
             )
-    elif document_id:
+    if administration_contract is None and lease_contract is None and document_id:
         administration_contract = db.scalar(
             select(AdministrationContract).where(AdministrationContract.signing_document_id == document_id)
         )
@@ -955,7 +990,9 @@ async def clicksign_webhook(request: Request, db: Session = Depends(get_db)) -> 
     if not (bool(received_digest) and hmac.compare_digest(received_digest.lower(), expected.lower())):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Assinatura HMAC do webhook inválida.")
 
-    event_name = request.headers.get("event", "unknown")[:120]
+    payload_event = payload.get("event")
+    payload_event_name = str(payload_event.get("name") or "").strip() if isinstance(payload_event, dict) else ""
+    event_name = (request.headers.get("event") or payload_event_name or "unknown")[:120]
     event_fingerprint = hashlib.sha256(event_name.encode("utf-8") + b"\0" + raw_body).hexdigest()
     if db.scalar(select(SignatureWebhookEvent.id).where(SignatureWebhookEvent.event_fingerprint == event_fingerprint)) is not None:
         return {"status": "accepted_duplicate"}
