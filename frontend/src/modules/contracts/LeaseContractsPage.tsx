@@ -499,7 +499,12 @@ export function LeaseContractsPage({ permissions }: Props) {
     setSuccess('')
     try {
       if (!form.rent_amount || form.tenant_ids.length === 0) throw new Error('Informe o aluguel e ao menos um locatário.')
-      const body = editing ? { ...form, change_summary: changeSummary } : form
+      const body = editing
+        ? (() => {
+            const { property_id: _propertyId, ...updatePayload } = form
+            return { ...updatePayload, change_summary: changeSummary.trim() }
+          })()
+        : form
       const updated = await apiRequest<Lease>(
         editing ? `/lease-contracts/${editing.id}` : '/lease-contracts',
         { method: editing ? 'PUT' : 'POST', body: JSON.stringify(body) },
