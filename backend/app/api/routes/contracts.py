@@ -566,6 +566,29 @@ def sync_contract_signature(
     return _contract_response(_load_contract(db, context.user.organization_id, item.id))
 
 
+@router.get("/administration-contracts/{contract_id}/signature/final/pdf")
+def download_signed_contract_pdf(
+    contract_id: UUID,
+    context: UserContext = Depends(require_permission("contracts.view")),
+    db: Session = Depends(get_db),
+) -> Response:
+    item = _load_contract(db, context.user.organization_id, contract_id)
+    if item.archive_status != "archived" or not item.archived_document_reference:
+        raise HTTPException(status_code=409, detail="O PDF final assinado ainda não está arquivado.")
+    storage = get_document_storage()
+    if not storage.configured:
+        raise HTTPException(status_code=422, detail="Storage de documentos não está configurado.")
+    try:
+        pdf = storage.download_bytes(item.archived_document_reference)
+    except DocumentStorageError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    return Response(
+        content=pdf,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'inline; filename="{contract_code(item)}-v{item.current_version}-ASSINADO.pdf"'},
+    )
+
+
 @router.post("/administration-contracts/{contract_id}/signature/archive", response_model=AdministrationContractResponse)
 def archive_signed_contract(
     contract_id: UUID,
