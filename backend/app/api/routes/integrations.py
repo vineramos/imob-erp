@@ -414,16 +414,21 @@ def integrations_readiness(
     else:
         provider = get_signature_provider_for_organization(db, context.user.organization_id, signature_key)
         signature_status = provider.status() if provider is not None else None
+        webhook_row = _signature_webhook_row(db, context.user.organization_id)
+        webhook_configured = bool(
+            (webhook_row is not None and webhook_row.encrypted_secret)
+            or settings.clicksign_webhook_secret.strip()
+        )
         signature_configured = bool(
             signature_status
             and signature_status.configured
-            and settings.clicksign_webhook_secret.strip()
+            and webhook_configured
         )
         signature_message = (
-            "Access Token e HMAC Secret do webhook estão configurados."
+            "Access Token e webhook automático estão configurados."
             if signature_configured
             else (
-                "Provider de assinatura selecionado; configure o Access Token e o HMAC Secret do webhook."
+                "Provider de assinatura selecionado; valide a conexão para configurar o webhook automático."
                 if provider is not None
                 else "Provider de assinatura não suportado."
             )
