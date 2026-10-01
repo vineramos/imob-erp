@@ -213,7 +213,14 @@ export function ContractsPage({ permissions }: Props) {
       maintenance_limit_amount: null, emergency_limit_amount: null,
       start_date: item.start_date, end_date: item.end_date,
       end_of_term_action: item.end_of_term_action ?? 'renew_indefinite', notes: item.notes ?? '',
-      signers: item.signers.map((signer) => ({ ...signer, person_id: resolveSignerPersonId(signer) })),
+      signers: item.signers.map((signer) => ({
+        ...signer,
+        person_id: resolveSignerPersonId(signer),
+        representative_name: signer.role === 'agency' ? (signer.representative_name || company?.representative_name || null) : signer.representative_name,
+        representative_email: signer.role === 'agency' ? (signer.representative_email || company?.representative_email || null) : signer.representative_email,
+        representative_document_number: signer.role === 'agency' ? (signer.representative_document_number || company?.representative_document_number || null) : signer.representative_document_number,
+        representative_phone: signer.role === 'agency' ? (signer.representative_phone || company?.representative_phone || null) : signer.representative_phone,
+      })),
     })
     setChangeSummary(''); setShowForm(true); setError(''); setSuccess('')
   }
