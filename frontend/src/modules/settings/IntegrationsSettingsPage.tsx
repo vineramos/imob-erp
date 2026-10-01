@@ -17,7 +17,7 @@ const defaults: IntegrationsConfig = {
 }
 
 const smtpDefaults: SmtpConfiguration = { host: '', port: 587, username: '', from_email: '', from_name: '', use_tls: true, use_ssl: false, password_configured: false, source: 'none' }
-const clicksignDefaults: ClicksignConfiguration = { environment: 'sandbox', token_configured: false, source: 'none' }
+const clicksignDefaults: ClicksignConfiguration = { environment: 'sandbox', token_configured: false, source: 'none', webhook_configured: false, webhook_endpoint: null, webhook_id: null }
 
 type Props = { canEdit: boolean }
 
@@ -159,8 +159,11 @@ export function IntegrationsSettingsPage({ canEdit }: Props) {
       if (form.signature_provider === 'clicksign') await ensureClicksignProviderSelected()
       const result = await apiRequest<SignatureIntegrationStatus>('/integrations/signature/test', { method: 'POST' })
       setSignatureStatus(result)
-      if (result.reachable) setSuccess('Conexão com a Clicksign validada com sucesso.')
-      else setError(result.message)
+      if (result.reachable) {
+        const webhook = await apiRequest<ClicksignConfiguration>('/integrations/signature/webhook/setup', { method: 'POST' })
+        setClicksign(webhook)
+        setSuccess(webhook.webhook_configured ? 'Conexão e webhook da Clicksign validados com sucesso.' : 'Conexão com a Clicksign validada com sucesso.')
+      } else setError(result.message)
     } catch (cause) {
       setError(cause instanceof ApiError ? cause.detail : 'Não foi possível testar a Clicksign.')
     } finally {
@@ -184,7 +187,7 @@ export function IntegrationsSettingsPage({ canEdit }: Props) {
       const status = await apiRequest<SignatureIntegrationStatus>('/integrations/signature/status').catch(() => null)
       setSignatureStatus(status)
       setReadiness(await apiRequest<IntegrationReadiness>('/integrations/readiness').catch(() => null))
-      setSuccess('Token da Clicksign salvo com criptografia. Agora você pode testar a conexão.')
+      setSuccess('Token da Clicksign salvo com criptografia. Teste a conexão para validar e configurar o webhook automático.')
     } catch (cause) {
       setError(cause instanceof ApiError ? cause.detail : 'Não foi possível salvar a configuração da Clicksign.')
     } finally {
@@ -388,6 +391,16 @@ export function IntegrationsSettingsPage({ canEdit }: Props) {
                     <button className="button secondary compact-button" disabled={!canEdit || testingSignature || !clicksign.token_configured || Boolean(clicksignToken.trim())} type="button" onClick={() => void testSignatureConnection()} title={clicksignToken.trim() ? 'Salve o token antes de testar' : undefined}><RefreshCw size={14}/>{testingSignature ? 'Testando...' : 'Testar conexão'}</button>
                   </div>
                   <small className="smtp-security-note">O token é criptografado antes de ser armazenado e nunca é exibido novamente. Para seu token de teste, mantenha o ambiente em Sandbox.</small>
+                  <div className="integration-health clicksign-webhook-health">
+                    <div className="integration-health-copy">
+                      {clicksign.webhook_configured ? <CheckCircle2 size={16}/> : <CircleAlert size={16}/>}
+                      <div>
+                        <strong>Retorno automático da Clicksign</strong>
+                        <span>{clicksign.webhook_configured ? 'Webhook ativo. Ao finalizar um documento, a Clicksign avisa o Imob automaticamente.' : 'Ao testar a conexão, o Imob cria e protege o webhook automaticamente.'}</span>
+                        {clicksign.webhook_endpoint && <small>{clicksign.webhook_endpoint}</small>}
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </>
             )}
