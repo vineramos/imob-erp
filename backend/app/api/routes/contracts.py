@@ -459,12 +459,33 @@ def send_contract_to_signature(
         metadata = dict(item.signing_metadata or {})
         signer_ids = dict(metadata.get("signer_ids") or {})
         for signer in item.signers_snapshot or []:
-            email = str(signer.get("email") or "").strip().lower()
+            legal_document = "".join(ch for ch in str(signer.get("document_number") or "") if ch.isdigit())
+            representative_name = str(signer.get("representative_name") or "").strip()
+            representative_email = str(signer.get("representative_email") or "").strip().lower()
+            representative_document = "".join(ch for ch in str(signer.get("representative_document_number") or "") if ch.isdigit())
+            is_company = len(legal_document) == 14
+
+            if is_company:
+                if not representative_name or not representative_email or len(representative_document) != 11:
+                    raise SignatureProviderError(
+                        f"A parte jurídica {signer.get('name') or 'informada'} precisa ter um representante pessoa física com nome, e-mail e CPF antes do envio."
+                    )
+                provider_signer = {
+                    **signer,
+                    "name": representative_name,
+                    "email": representative_email,
+                    "document_number": signer.get("representative_document_number"),
+                    "phone": signer.get("representative_phone"),
+                }
+            else:
+                provider_signer = signer
+
+            email = str(provider_signer.get("email") or "").strip().lower()
             if not email:
                 raise SignatureProviderError("Todos os signatários precisam possuir e-mail antes do envio.")
             signer_id = signer_ids.get(email)
             if not signer_id:
-                signer_id = provider.create_signer(envelope_id, signer)
+                signer_id = provider.create_signer(envelope_id, provider_signer)
                 signer_ids[email] = signer_id
                 provider.create_signature_requirements(envelope_id, document_id=document_id, signer_id=signer_id, role=str(signer.get("role") or "owner"))
         metadata["signer_ids"] = signer_ids
