@@ -192,8 +192,19 @@ class ClicksignProvider:
         self._post_no_id(f"/envelopes/{envelope_id}/requirements", authentication, expected={200, 201})
 
     def activate_envelope(self, envelope_id: str) -> None:
+        payload = {
+            "data": {
+                "id": envelope_id,
+                "type": "envelopes",
+                "attributes": {"status": "running"},
+            }
+        }
         with httpx.Client(timeout=18.0) as client:
-            response = client.post(f"{self.base_url}/envelopes/{envelope_id}/activate", headers=self._headers())
+            response = client.patch(
+                f"{self.base_url}/envelopes/{envelope_id}",
+                headers=self._headers(),
+                json=payload,
+            )
         if response.status_code not in {200, 202, 204}:
             raise SignatureProviderError(
                 f"Falha ao ativar envelope Clicksign (HTTP {response.status_code}): {_safe_response_detail(response)}"
