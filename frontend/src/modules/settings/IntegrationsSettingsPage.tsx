@@ -139,12 +139,24 @@ export function IntegrationsSettingsPage({ canEdit }: Props) {
     }
   }
 
+  async function ensureClicksignProviderSelected() {
+    const persisted = await apiRequest<IntegrationsConfig>('/settings/integrations')
+    if (persisted.signature_provider === 'clicksign') return persisted
+    const updated = await apiRequest<IntegrationsConfig>('/settings/integrations', {
+      method: 'PUT',
+      body: JSON.stringify({ ...persisted, signature_provider: 'clicksign' }),
+    })
+    setForm((current) => ({ ...current, signature_provider: updated.signature_provider }))
+    return updated
+  }
+
   async function testSignatureConnection() {
     if (!canEdit || !authConfigured) return
     setTestingSignature(true)
     setError('')
     setSuccess('')
     try {
+      if (form.signature_provider === 'clicksign') await ensureClicksignProviderSelected()
       const result = await apiRequest<SignatureIntegrationStatus>('/integrations/signature/test', { method: 'POST' })
       setSignatureStatus(result)
       if (result.reachable) setSuccess('Conexão com a Clicksign validada com sucesso.')
@@ -162,6 +174,7 @@ export function IntegrationsSettingsPage({ canEdit }: Props) {
     setError('')
     setSuccess('')
     try {
+      if (form.signature_provider === 'clicksign') await ensureClicksignProviderSelected()
       const updated = await apiRequest<ClicksignConfiguration>('/integrations/signature/config', {
         method: 'PUT',
         body: JSON.stringify({ environment: clicksign.environment, access_token: clicksignToken || null }),
