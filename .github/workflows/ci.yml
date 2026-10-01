@@ -418,7 +418,7 @@ jobs:
             --max-time 15 \
             --get "${BASE_URL}/envelopes" \
             --data-urlencode 'page[size]=1' \
-            --header "Authorization: Bearer $(cat "$TOKEN_FILE")" \
+            --header "Authorization: $(cat "$TOKEN_FILE")" \
             --header 'Accept: application/vnd.api+json' || true)"
 
           if [[ "$HTTP_CODE" == "200" ]]; then
