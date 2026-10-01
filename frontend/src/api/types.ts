@@ -70,6 +70,9 @@ export type ClicksignConfiguration = {
   environment: 'sandbox' | 'production'
   token_configured: boolean
   source: 'erp' | 'environment' | 'none'
+  webhook_configured: boolean
+  webhook_endpoint: string | null
+  webhook_id: string | null
 }
 
 export type SmtpConfiguration = {
