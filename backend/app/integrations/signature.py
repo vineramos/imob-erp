@@ -215,6 +215,27 @@ class ClicksignProvider:
                 f"Falha ao ativar envelope Clicksign (HTTP {response.status_code}): {_safe_response_detail(response)}"
             )
 
+    def envelope_status(self, envelope_id: str) -> str:
+        with httpx.Client(timeout=18.0) as client:
+            response = client.get(
+                f"{self.base_url}/envelopes/{envelope_id}",
+                headers=self._headers(),
+            )
+        if response.status_code != 200:
+            raise SignatureProviderError(
+                f"Falha ao consultar envelope Clicksign (HTTP {response.status_code}): {_safe_response_detail(response)}"
+            )
+        try:
+            payload = response.json()
+            data = payload.get("data") if isinstance(payload, dict) else None
+            attributes = data.get("attributes") if isinstance(data, dict) else None
+            value = str((attributes or {}).get("status") or "").strip().lower()
+        except (TypeError, ValueError):
+            value = ""
+        if value not in {"draft", "running", "closed", "canceled"}:
+            raise SignatureProviderError("A Clicksign retornou um status de envelope desconhecido.")
+        return value
+
     def cancel_envelope(self, envelope_id: str) -> None:
         with httpx.Client(timeout=18.0) as client:
             current = client.get(
