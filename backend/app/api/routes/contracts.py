@@ -463,7 +463,7 @@ def send_contract_to_signature(
             representative_name = str(signer.get("representative_name") or "").strip()
             representative_email = str(signer.get("representative_email") or "").strip().lower()
             representative_document = "".join(ch for ch in str(signer.get("representative_document_number") or "") if ch.isdigit())
-            is_company = len(legal_document) == 14
+            is_company = len(legal_document) == 14 or str(signer.get("role") or "") == "agency"
 
             if is_company:
                 if not representative_name or not representative_email or len(representative_document) != 11:
