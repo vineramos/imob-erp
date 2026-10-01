@@ -372,6 +372,16 @@ def administration_contract_workflow(
             raise HTTPException(status_code=403, detail="Permissão necessária: contracts.edit")
         if item.status not in {"review", "approved", "pending_signature"}:
             raise HTTPException(status_code=409, detail="Este contrato não pode retornar para rascunho neste estado.")
+        if item.signing_envelope_id:
+            provider = get_signature_provider(item.signing_provider)
+            if provider is None or not provider.configured:
+                provider = get_signature_provider_for_organization(db, context.user.organization_id, item.signing_provider)
+            if provider is None or not provider.configured:
+                raise HTTPException(status_code=422, detail="Não foi possível acessar o provider para cancelar o envio existente.")
+            try:
+                provider.cancel_envelope(item.signing_envelope_id)
+            except SignatureProviderError as exc:
+                raise HTTPException(status_code=502, detail=str(exc)) from exc
         item.status = "draft"
         item.approved_at = None
         item.approved_by_user_id = None
@@ -383,6 +393,17 @@ def administration_contract_workflow(
             raise HTTPException(status_code=409, detail="Este contrato não pode ser cancelado por este fluxo.")
         if not (payload.reason or "").strip():
             raise HTTPException(status_code=422, detail="Informe o motivo do cancelamento.")
+        if item.signing_envelope_id:
+            provider = get_signature_provider(item.signing_provider)
+            if provider is None or not provider.configured:
+                provider = get_signature_provider_for_organization(db, context.user.organization_id, item.signing_provider)
+            if provider is None or not provider.configured:
+                raise HTTPException(status_code=422, detail="Não foi possível acessar o provider para cancelar o envio existente.")
+            try:
+                provider.cancel_envelope(item.signing_envelope_id)
+            except SignatureProviderError as exc:
+                raise HTTPException(status_code=502, detail=str(exc)) from exc
+            item.signing_status = "provider_canceled"
         item.status = "cancelled"
     else:
         raise HTTPException(status_code=422, detail="Ação de contrato inválida.")
