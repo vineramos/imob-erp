@@ -215,6 +215,48 @@ class ClicksignProvider:
                 f"Falha ao ativar envelope Clicksign (HTTP {response.status_code}): {_safe_response_detail(response)}"
             )
 
+    def create_webhook(self, *, endpoint: str, events: list[str]) -> dict[str, str]:
+        payload = {
+            "data": {
+                "type": "webhooks",
+                "attributes": {
+                    "endpoint": endpoint,
+                    "status": "active",
+                    "events": events,
+                },
+            }
+        }
+        with httpx.Client(timeout=18.0) as client:
+            response = client.post(
+                f"{self.base_url}/webhooks",
+                headers=self._headers(),
+                json=payload,
+            )
+        if response.status_code not in {200, 201}:
+            raise SignatureProviderError(
+                f"Falha ao criar webhook Clicksign (HTTP {response.status_code}): {_safe_response_detail(response)}"
+            )
+        try:
+            body = response.json()
+            data = body.get("data") if isinstance(body, dict) else None
+            attributes = data.get("attributes") if isinstance(data, dict) else None
+            webhook_id = str((data or {}).get("id") or "").strip()
+            secret = str(
+                (attributes or {}).get("secret")
+                or (attributes or {}).get("hmac_secret")
+                or (attributes or {}).get("secret_hmac_sha256")
+                or ""
+            ).strip()
+        except (TypeError, ValueError) as exc:
+            raise SignatureProviderError("A Clicksign criou o webhook, mas respondeu em formato inesperado.") from exc
+        if not webhook_id:
+            raise SignatureProviderError("A Clicksign criou o webhook sem retornar o identificador.")
+        if not secret:
+            raise SignatureProviderError(
+                "A Clicksign criou o webhook, mas não retornou o HMAC Secret. Abra Configurações → API na Clicksign e confira o webhook criado."
+            )
+        return {"id": webhook_id, "secret": secret}
+
     def envelope_status(self, envelope_id: str) -> str:
         with httpx.Client(timeout=18.0) as client:
             response = client.get(
