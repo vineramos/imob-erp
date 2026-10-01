@@ -349,6 +349,22 @@ export function ContractsPage({ permissions }: Props) {
     finally { setSaving(false) }
   }
 
+  async function syncSignature(item: AdministrationContract) {
+    setSaving(true); setError(''); setSuccess('')
+    try {
+      const updated = await apiRequest<AdministrationContract>(`/administration-contracts/${item.id}/signature/sync`, { method: 'POST' })
+      setContracts((current) => current.map((contract) => contract.id === updated.id ? updated : contract))
+      if (updated.signing_status === 'provider_closed_pending_archive') {
+        setSuccess(`${updated.code}: a Clicksign confirmou que todas as assinaturas foram concluídas. Arquivando o PDF final...`)
+        await archiveFinal(updated)
+        return
+      }
+      setSuccess(`${updated.code}: status sincronizado com a Clicksign.`)
+    } catch (cause) {
+      setError(cause instanceof ApiError ? cause.detail : 'Não foi possível sincronizar o status da Clicksign.')
+    } finally { setSaving(false) }
+  }
+
   async function archiveFinal(item: AdministrationContract) {
     setSaving(true); setError(''); setSuccess('')
     try {
@@ -551,7 +567,7 @@ export function ContractsPage({ permissions }: Props) {
                 </article>
               </div>}
               {detailTab==='signature'&&<div className="contract-signature-v2">
-                <article className="contract-surface-v2"><div className="contract-section-heading"><div><span>Assinatura eletrônica</span><h3>{signingLabel(selectedContract)}</h3></div><FileSignature size={17}/></div>
+                <article className="contract-surface-v2"><div className="contract-section-heading"><div><span>Assinatura eletrônica</span><h3>{signingLabel(selectedContract)}</h3></div><div className="contract-section-actions">{selectedContract.signing_envelope_id&&canSign&&<button className="button secondary compact-button" type="button" disabled={saving} onClick={()=>void syncSignature(selectedContract)}><RefreshCw size={14}/> Sincronizar Clicksign</button>}<FileSignature size={17}/></div></div>
                   <div className="contract-document-summary-v2">
                     <div><span>Provedor</span><strong>{selectedContract.signing_provider||'Não definido'}</strong></div>
                     <div><span>Envelope</span><strong title={selectedContract.signing_envelope_id||undefined}>{selectedContract.signing_envelope_id||'Não enviado'}</strong></div>
