@@ -157,6 +157,10 @@ def get_company_settings(
             "creci_pj": organization.creci_pj,
             "contact_email": organization.contact_email,
             "contact_phone": organization.contact_phone,
+            "representative_name": organization.representative_name,
+            "representative_email": organization.representative_email,
+            "representative_document_number": organization.representative_document_number,
+            "representative_phone": organization.representative_phone,
             "address": organization.address,
         }
     )
@@ -177,6 +181,10 @@ def update_company_settings(
         "creci_pj": organization.creci_pj,
         "contact_email": organization.contact_email,
         "contact_phone": organization.contact_phone,
+        "representative_name": organization.representative_name,
+        "representative_email": organization.representative_email,
+        "representative_document_number": organization.representative_document_number,
+        "representative_phone": organization.representative_phone,
         "address": organization.address,
     }
     after = payload.model_dump(mode="json")
@@ -187,6 +195,10 @@ def update_company_settings(
     organization.creci_pj = payload.creci_pj
     organization.contact_email = str(payload.contact_email) if payload.contact_email else None
     organization.contact_phone = payload.contact_phone
+    organization.representative_name = (payload.representative_name or "").strip() or None
+    organization.representative_email = str(payload.representative_email) if payload.representative_email else None
+    organization.representative_document_number = (payload.representative_document_number or "").strip() or None
+    organization.representative_phone = (payload.representative_phone or "").strip() or None
     organization.address = payload.address.model_dump()
 
     ip_address, user_agent = _request_metadata(request)
