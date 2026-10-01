@@ -16,6 +16,7 @@ from app.domains.contracts.models import AdministrationContract, SignatureWebhoo
 from app.domains.foundation.access import UserContext, require_permission
 from app.domains.foundation.audit import write_audit
 from app.domains.foundation.models import Organization, OrganizationIntegrationCredential, OrganizationSettings
+from app.domains.foundation.defaults import INTEGRATIONS_DEFAULTS
 from app.domains.leases.models import LeaseContract
 from app.domains.portfolio.models import Property
 from app.integrations.document_storage import DocumentStorageError, DocumentStorageStatus, get_document_storage
@@ -208,14 +209,14 @@ def _storage_response(value: DocumentStorageStatus) -> DocumentStorageStatusResp
 
 def _selected_signature_provider(db: Session, organization_id) -> str:
     settings = db.scalar(select(OrganizationSettings).where(OrganizationSettings.organization_id == organization_id))
-    integrations = (settings.integrations if settings else {}) or {}
-    return str(integrations.get("signature_provider") or "none")
+    integrations = {**INTEGRATIONS_DEFAULTS, **(((settings.integrations if settings else {}) or {}))}
+    return str(integrations.get("signature_provider") or INTEGRATIONS_DEFAULTS["signature_provider"])
 
 
 def _selected_bank_provider(db: Session, organization_id) -> str:
     settings = db.scalar(select(OrganizationSettings).where(OrganizationSettings.organization_id == organization_id))
-    integrations = (settings.integrations if settings else {}) or {}
-    return str(integrations.get("bank_provider") or "none")
+    integrations = {**INTEGRATIONS_DEFAULTS, **(((settings.integrations if settings else {}) or {}))}
+    return str(integrations.get("bank_provider") or INTEGRATIONS_DEFAULTS["bank_provider"])
 
 
 def _bank_status_response(provider_key: str, *, probe: bool = False) -> BankIntegrationStatusResponse:
