@@ -12,6 +12,7 @@ import {
   Search,
   Home,
   CircleDollarSign,
+  RefreshCw,
   RotateCcw,
   Send,
   ShieldCheck,
@@ -591,6 +592,26 @@ export function LeaseContractsPage({ permissions }: Props) {
     }
   }
 
+  async function syncSignature(item: Lease) {
+    setSaving(true)
+    setError('')
+    setSuccess('')
+    try {
+      const updated = await apiRequest<Lease>(`/lease-contracts/${item.id}/signature/sync`, { method: 'POST' })
+      setItems((current) => current.map((contract) => contract.id === updated.id ? updated : contract))
+      if (updated.signing_status === 'provider_closed_pending_archive') {
+        setSuccess(`${updated.code}: a Clicksign confirmou que todas as assinaturas foram concluídas. Arquivando o PDF final...`)
+        await archiveFinal(updated)
+        return
+      }
+      setSuccess(`${updated.code}: status sincronizado com a Clicksign.`)
+    } catch (cause) {
+      setError(cause instanceof ApiError ? cause.detail : 'Não foi possível sincronizar o status da Clicksign.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
   async function archiveFinal(item: Lease) {
     setSaving(true)
     setError('')
@@ -862,7 +883,7 @@ export function LeaseContractsPage({ permissions }: Props) {
               </div>:<div className="contract-empty-soft">Sem permissão para visualizar o financeiro do contrato.</div>)}
 
               {detailTab==='signature'&&<div className="contract-signature-v2">
-                <section className="contract-surface-v2"><div className="contract-section-heading"><div><span>Assinatura eletrônica</span><h3>{signingLabel(selectedLease)}</h3></div><FileSignature size={17}/></div><div className="contract-document-summary-v2"><div><span>Provider</span><strong>{selectedLease.signing_provider}</strong></div><div><span>Envelope</span><strong>{selectedLease.signing_envelope_id||'—'}</strong></div><div><span>Assinado em</span><strong>{selectedLease.signed_at?new Date(selectedLease.signed_at).toLocaleString('pt-BR'):'—'}</strong></div><div><span>Arquivo final</span><strong>{selectedLease.archive_status==='archived'?'Arquivado':'Pendente'}</strong></div></div><SignatureTimeline contractId={selectedLease.id} contractType="lease"/></section>
+                <section className="contract-surface-v2"><div className="contract-section-heading"><div><span>Assinatura eletrônica</span><h3>{signingLabel(selectedLease)}</h3></div><div className="contract-section-actions">{selectedLease.signing_envelope_id&&canSign&&<button className="button secondary compact-button" type="button" disabled={saving} onClick={()=>void syncSignature(selectedLease)}><RefreshCw size={14}/> Sincronizar Clicksign</button>}<FileSignature size={17}/></div></div><div className="contract-document-summary-v2"><div><span>Provider</span><strong>{selectedLease.signing_provider}</strong></div><div><span>Envelope</span><strong>{selectedLease.signing_envelope_id||'—'}</strong></div><div><span>Assinado em</span><strong>{selectedLease.signed_at?new Date(selectedLease.signed_at).toLocaleString('pt-BR'):'—'}</strong></div><div><span>Arquivo final</span><strong>{selectedLease.archive_status==='archived'?'Arquivado':'Pendente'}</strong></div></div><SignatureTimeline contractId={selectedLease.id} contractType="lease"/></section>
               </div>}
 
               {detailTab==='documents'&&<div className="contract-documents-v2">
