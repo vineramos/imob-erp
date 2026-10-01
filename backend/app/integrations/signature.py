@@ -6,8 +6,12 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 
 import httpx
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
+from app.domains.foundation.models import OrganizationIntegrationCredential
+from app.integrations.credential_crypto import CredentialCryptoError, decrypt_secret
 
 
 @dataclass(frozen=True)
@@ -25,11 +29,17 @@ class SignatureProviderError(RuntimeError):
 
 
 class ClicksignProvider:
-    def __init__(self) -> None:
+    def __init__(self, *, token: str | None = None, environment: str | None = None) -> None:
         self.settings = get_settings()
-        self.base_url = self.settings.clicksign_base_url.rstrip("/")
-        self.token = self.settings.clicksign_access_token.strip()
-        self.environment = self.settings.clicksign_environment.strip().lower() or "sandbox"
+        self.environment = (environment if environment is not None else self.settings.clicksign_environment).strip().lower() or "sandbox"
+        if self.environment not in {"sandbox", "production"}:
+            self.environment = "sandbox"
+        self.base_url = (
+            "https://app.clicksign.com/api/v3"
+            if self.environment == "production"
+            else "https://sandbox.clicksign.com/api/v3"
+        )
+        self.token = (token if token is not None else self.settings.clicksign_access_token).strip()
 
     @property
     def configured(self) -> bool:
@@ -240,10 +250,39 @@ class ClicksignProvider:
             )
 
 
-def get_signature_provider(provider_key: str):
+def get_signature_provider(provider_key: str, *, token: str | None = None, environment: str | None = None):
     if provider_key == "clicksign":
-        return ClicksignProvider()
+        return ClicksignProvider(token=token, environment=environment)
     return None
+
+
+def get_signature_provider_for_organization(
+    db: Session,
+    organization_id,
+    provider_key: str,
+):
+    if provider_key != "clicksign":
+        return get_signature_provider(provider_key)
+
+    row = db.scalar(
+        select(OrganizationIntegrationCredential).where(
+            OrganizationIntegrationCredential.organization_id == organization_id,
+            OrganizationIntegrationCredential.provider == "clicksign",
+        )
+    )
+    if row is None or not row.encrypted_secret:
+        return get_signature_provider(provider_key)
+
+    config = dict(row.non_secret_config or {})
+    environment = str(config.get("environment") or "sandbox").strip().lower() or "sandbox"
+    try:
+        token = decrypt_secret(
+            row.encrypted_secret,
+            scope=f"{organization_id}:clicksign",
+        )
+    except CredentialCryptoError as exc:
+        raise SignatureProviderError(str(exc)) from exc
+    return get_signature_provider(provider_key, token=token, environment=environment)
 
 
 def _extract_resource_id(payload: dict) -> str | None:
