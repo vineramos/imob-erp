@@ -645,6 +645,7 @@ def send_lease_contract_to_signature(
         metadata["prepared_hash"] = digest
         item.signing_metadata = metadata
         provider.activate_envelope(envelope_id)
+        provider.notify_envelope(envelope_id)
     except SignatureProviderError as exc:
         item.signing_status = "provider_setup_failed"
         db.commit()
