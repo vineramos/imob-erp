@@ -19,7 +19,7 @@ from app.domains.foundation.models import Organization, OrganizationIntegrationC
 from app.domains.leases.models import LeaseContract
 from app.domains.portfolio.models import Property
 from app.integrations.document_storage import DocumentStorageError, DocumentStorageStatus, get_document_storage
-from app.integrations.signature import SignatureProviderError, SignatureProviderStatus, get_signature_provider
+from app.integrations.signature import SignatureProviderError, SignatureProviderStatus, get_signature_provider, get_signature_provider_for_organization
 from app.integrations.credential_crypto import CredentialCryptoError, encrypt_secret
 from app.integrations.email import EmailDeliveryError, SmtpConfig, send_email_message, smtp_config_for_organization, test_smtp_connection
 
@@ -70,6 +70,17 @@ class IntegrationReadinessResponse(BaseModel):
     items: list[IntegrationReadinessItem]
 
 
+class SignatureConfigurationResponse(BaseModel):
+    environment: Literal["sandbox", "production"] = "sandbox"
+    token_configured: bool = False
+    source: Literal["erp", "environment", "none"] = "none"
+
+
+class SignatureConfigurationUpdate(BaseModel):
+    environment: Literal["sandbox", "production"] = "sandbox"
+    access_token: str | None = Field(default=None, max_length=1000)
+
+
 class SmtpConfigurationResponse(BaseModel):
     host: str = ""
     port: int = 587
@@ -116,6 +127,32 @@ class SmtpConnectionTestResponse(BaseModel):
     reachable: bool
     message: str
     checked_at: datetime
+
+
+def _signature_row(db: Session, organization_id) -> OrganizationIntegrationCredential | None:
+    return db.scalar(select(OrganizationIntegrationCredential).where(
+        OrganizationIntegrationCredential.organization_id == organization_id,
+        OrganizationIntegrationCredential.provider == "clicksign",
+    ))
+
+
+def _signature_config_response(db: Session, organization_id) -> SignatureConfigurationResponse:
+    row = _signature_row(db, organization_id)
+    if row is not None:
+        value = dict(row.non_secret_config or {})
+        return SignatureConfigurationResponse(
+            environment=str(value.get("environment") or "sandbox"),
+            token_configured=bool(row.encrypted_secret),
+            source="erp",
+        )
+    environment = get_settings()
+    if environment.clicksign_access_token.strip():
+        return SignatureConfigurationResponse(
+            environment="production" if environment.clicksign_environment.strip().lower() == "production" else "sandbox",
+            token_configured=True,
+            source="environment",
+        )
+    return SignatureConfigurationResponse()
 
 
 def _smtp_row(db: Session, organization_id) -> OrganizationIntegrationCredential | None:
@@ -351,7 +388,7 @@ def integrations_readiness(
             )
         )
     else:
-        provider = get_signature_provider(signature_key)
+        provider = get_signature_provider_for_organization(db, context.user.organization_id, signature_key)
         signature_status = provider.status() if provider is not None else None
         signature_configured = bool(
             signature_status
@@ -518,6 +555,67 @@ def test_smtp_configuration(
     )
 
 
+@router.get("/integrations/signature/config", response_model=SignatureConfigurationResponse)
+def get_signature_configuration(
+    context: UserContext = Depends(require_permission("settings.view")),
+    db: Session = Depends(get_db),
+) -> SignatureConfigurationResponse:
+    return _signature_config_response(db, context.user.organization_id)
+
+
+@router.put("/integrations/signature/config", response_model=SignatureConfigurationResponse)
+def update_signature_configuration(
+    payload: SignatureConfigurationUpdate,
+    request: Request,
+    context: UserContext = Depends(require_permission("settings.company.manage")),
+    db: Session = Depends(get_db),
+) -> SignatureConfigurationResponse:
+    row = _signature_row(db, context.user.organization_id)
+    before = _signature_config_response(db, context.user.organization_id).model_dump(mode="json")
+    if row is None:
+        row = OrganizationIntegrationCredential(
+            organization_id=context.user.organization_id,
+            provider="clicksign",
+            non_secret_config={},
+            updated_by_user_id=context.user.id,
+        )
+        db.add(row)
+        db.flush()
+
+    token = (payload.access_token or "").strip()
+    if token:
+        try:
+            row.encrypted_secret = encrypt_secret(
+                token,
+                scope=f"{context.user.organization_id}:clicksign",
+            )
+        except CredentialCryptoError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    row.non_secret_config = {"environment": payload.environment}
+    row.updated_by_user_id = context.user.id
+    after = {
+        "environment": payload.environment,
+        "token_configured": bool(row.encrypted_secret),
+        "source": "erp",
+    }
+    forwarded = request.headers.get("x-forwarded-for", "").split(",", 1)[0].strip()
+    write_audit(
+        db,
+        context=context,
+        action="settings.integrations.clicksign.updated",
+        module="settings",
+        entity_type="organization_integration_credential",
+        entity_id=str(row.id),
+        before_data=before,
+        after_data=after,
+        ip_address=forwarded or (request.client.host if request.client else None),
+        user_agent=request.headers.get("user-agent"),
+    )
+    db.commit()
+    return _signature_config_response(db, context.user.organization_id)
+
+
 @router.get("/integrations/signature/status", response_model=SignatureIntegrationStatusResponse)
 def signature_status(
     context: UserContext = Depends(require_permission("settings.view")),
@@ -533,7 +631,7 @@ def signature_status(
             message="Nenhum provedor de assinatura está selecionado.",
             checked_at=datetime.now().astimezone(),
         )
-    provider = get_signature_provider(provider_key)
+    provider = get_signature_provider_for_organization(db, context.user.organization_id, provider_key)
     if provider is None:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Provider de assinatura não suportado.")
     return _response(provider.status())
@@ -566,7 +664,7 @@ def test_signature_connection(
     provider_key = _selected_signature_provider(db, context.user.organization_id)
     if provider_key == "none":
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Selecione um provedor de assinatura primeiro.")
-    provider = get_signature_provider(provider_key)
+    provider = get_signature_provider_for_organization(db, context.user.organization_id, provider_key)
     if provider is None:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Provider de assinatura não suportado.")
     return _response(provider.test_connection())
@@ -650,7 +748,7 @@ def _try_auto_archive(db: Session, contract: AdministrationContract | LeaseContr
         contract.archive_status = "archive_failed"
         contract.signing_status = "archive_failed"
         return
-    provider = get_signature_provider(contract.signing_provider)
+    provider = get_signature_provider_for_organization(db, contract.organization_id, contract.signing_provider)
     storage = get_document_storage()
     if provider is None or not provider.configured:
         contract.archive_status = "provider_not_configured"
