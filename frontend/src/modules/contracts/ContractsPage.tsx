@@ -405,8 +405,7 @@ export function ContractsPage({ permissions }: Props) {
           const isPersonRole = signer.role === 'owner' || signer.role === 'tenant'
           const eligiblePeople = isPersonRole ? people.filter((person) => person.role_keys.includes(signer.role)) : []
           const selectedParty = people.find((person) => person.id === signer.person_id)
-          const companyDocumentDigits = (company?.document_number ?? '').replace(/\D/g, '')
-          const requiresRepresentative = selectedParty?.person_type === 'company' || (signer.role === 'agency' && companyDocumentDigits.length === 14)
+          const requiresRepresentative = selectedParty?.person_type === 'company' || signer.role === 'agency'
           const representativePeople = people.filter((person) => person.person_type === 'individual')
           const isLegacyRole = !signerRoleOptions.some((option) => option.value === signer.role)
           return <div className={`contract-signer-row${requiresRepresentative ? ' company-party' : ''}`} key={`${index}-${signer.person_id ?? signer.email}`}>
