@@ -225,10 +225,15 @@ export function ContractsPage({ permissions }: Props) {
       updateSigner(index, {
         role,
         person_id: null,
-        name: company?.display_name || company?.legal_name || 'Imobiliária',
+        name: company?.legal_name || company?.display_name || 'Imobiliária',
         email: company?.contact_email || '',
         document_number: company?.document_number || null,
         phone: company?.contact_phone || null,
+        representative_person_id: null,
+        representative_name: null,
+        representative_email: null,
+        representative_document_number: null,
+        representative_phone: null,
       })
       return
     }
@@ -400,7 +405,8 @@ export function ContractsPage({ permissions }: Props) {
           const isPersonRole = signer.role === 'owner' || signer.role === 'tenant'
           const eligiblePeople = isPersonRole ? people.filter((person) => person.role_keys.includes(signer.role)) : []
           const selectedParty = people.find((person) => person.id === signer.person_id)
-          const requiresRepresentative = selectedParty?.person_type === 'company'
+          const companyDocumentDigits = (company?.document_number ?? '').replace(/\D/g, '')
+          const requiresRepresentative = selectedParty?.person_type === 'company' || (signer.role === 'agency' && companyDocumentDigits.length === 14)
           const representativePeople = people.filter((person) => person.person_type === 'individual')
           const isLegacyRole = !signerRoleOptions.some((option) => option.value === signer.role)
           return <div className={`contract-signer-row${requiresRepresentative ? ' company-party' : ''}`} key={`${index}-${signer.person_id ?? signer.email}`}>
