@@ -78,6 +78,10 @@ class OrganizationProfile(BaseModel):
     creci_pj: str | None = None
     contact_email: str | None = None
     contact_phone: str | None = None
+    representative_name: str | None = None
+    representative_email: str | None = None
+    representative_document_number: str | None = None
+    representative_phone: str | None = None
     address: dict = Field(default_factory=dict)
 
 
@@ -90,6 +94,10 @@ class OrganizationProfileUpdate(BaseModel):
     creci_pj: str | None = Field(default=None, max_length=40)
     contact_email: EmailStr | None = None
     contact_phone: str | None = Field(default=None, max_length=30)
+    representative_name: str | None = Field(default=None, max_length=180)
+    representative_email: EmailStr | None = None
+    representative_document_number: str | None = Field(default=None, max_length=24)
+    representative_phone: str | None = Field(default=None, max_length=40)
     address: AddressPayload = Field(default_factory=AddressPayload)
 
 
