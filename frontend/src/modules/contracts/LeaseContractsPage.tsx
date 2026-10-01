@@ -798,6 +798,7 @@ export function LeaseContractsPage({ permissions }: Props) {
                 {selectedLease.status==='pending_signature'&&selectedLease.signing_status==='ready_for_document'&&canSign&&<button className="button primary" disabled={saving} type="button" onClick={()=>void generateDocument(selectedLease)}><FileText size={14}/> Gerar PDF</button>}
                 {selectedLease.status==='pending_signature'&&selectedLease.signing_status==='document_ready'&&canSign&&<button className="button primary" disabled={saving} type="button" onClick={()=>void sendSignature(selectedLease)}><Send size={14}/> Enviar Clicksign</button>}
                 {selectedLease.status==='pending_signature'&&['provider_closed_pending_archive','archive_failed'].includes(selectedLease.signing_status)&&canSign&&<button className="button primary" disabled={saving} type="button" onClick={()=>void archiveFinal(selectedLease)}><FileCheck2 size={14}/> Arquivar final</button>}
+                {(selectedLease.status==='review'||selectedLease.status==='approved'||selectedLease.status==='pending_signature')&&canEdit&&<button className="button secondary" disabled={saving} type="button" onClick={()=>void workflow(selectedLease,'return_draft')}><RotateCcw size={14}/> Revisar contrato</button>}
               </div>
             </header>
 
