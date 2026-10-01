@@ -358,7 +358,7 @@ export function IntegrationsSettingsPage({ canEdit }: Props) {
                   </div>
                   <div className="smtp-test-row">
                     <button className="button primary compact-button" disabled={!canEdit || savingSignature || (!clicksign.token_configured && !clicksignToken.trim())} type="button" onClick={()=>void saveClicksign()}><Save size={14}/>{savingSignature ? 'Salvando...' : 'Salvar Clicksign'}</button>
-                    <button className="button secondary compact-button" disabled={!canEdit || testingSignature || (!clicksign.token_configured && !clicksignToken.trim())} type="button" onClick={() => void testSignatureConnection()}><RefreshCw size={14}/>{testingSignature ? 'Testando...' : 'Testar conexão'}</button>
+                    <button className="button secondary compact-button" disabled={!canEdit || testingSignature || !clicksign.token_configured || Boolean(clicksignToken.trim())} type="button" onClick={() => void testSignatureConnection()} title={clicksignToken.trim() ? 'Salve o token antes de testar' : undefined}><RefreshCw size={14}/>{testingSignature ? 'Testando...' : 'Testar conexão'}</button>
                   </div>
                   <small className="smtp-security-note">O token é criptografado antes de ser armazenado e nunca é exibido novamente. Para seu token de teste, mantenha o ambiente em Sandbox.</small>
                 </div>
