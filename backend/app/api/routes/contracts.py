@@ -23,7 +23,7 @@ from app.domains.foundation.audit import write_audit
 from app.domains.foundation.models import Organization, OrganizationSettings
 from app.domains.portfolio.models import Property, PropertyOwner
 from app.integrations.document_storage import DocumentStorageError, get_document_storage
-from app.integrations.signature import SignatureProviderError, get_signature_provider
+from app.integrations.signature import SignatureProviderError, get_signature_provider_for_organization
 
 router = APIRouter(tags=["contracts"])
 
@@ -443,7 +443,7 @@ def send_contract_to_signature(
         raise HTTPException(status_code=409, detail="Prepare a assinatura antes de enviar o contrato ao provider.")
     if item.generated_document_version != item.current_version or not item.generated_document_hash:
         raise HTTPException(status_code=409, detail="Gere o PDF da versão atual antes de enviar para assinatura.")
-    provider = get_signature_provider(item.signing_provider)
+    provider = get_signature_provider_for_organization(db, context.user.organization_id, item.signing_provider)
     if provider is None or not provider.configured:
         raise HTTPException(status_code=422, detail="Credencial do provider de assinatura ainda não está configurada.")
     pdf, digest = _pdf_for_current_version(db, item)
@@ -492,7 +492,7 @@ def archive_signed_contract(
         raise HTTPException(status_code=409, detail="Contrato ainda não possui documento enviado para assinatura.")
     if item.signing_status not in {"provider_closed_pending_archive", "archive_failed"}:
         raise HTTPException(status_code=409, detail="O provider ainda não confirmou o fechamento do documento.")
-    provider = get_signature_provider(item.signing_provider)
+    provider = get_signature_provider_for_organization(db, context.user.organization_id, item.signing_provider)
     storage = get_document_storage()
     if provider is None or not provider.configured:
         raise HTTPException(status_code=422, detail="Provider de assinatura não está configurado.")
