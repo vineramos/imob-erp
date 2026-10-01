@@ -379,7 +379,7 @@ def administration_contract_workflow(
             if provider is None or not provider.configured:
                 raise HTTPException(status_code=422, detail="Não foi possível acessar o provider para cancelar o envio existente.")
             try:
-                provider.cancel_envelope(item.signing_envelope_id)
+                provider.cancel_envelope(item.signing_envelope_id, item.signing_document_id)
             except SignatureProviderError as exc:
                 raise HTTPException(status_code=502, detail=str(exc)) from exc
         item.status = "draft"
@@ -400,7 +400,7 @@ def administration_contract_workflow(
             if provider is None or not provider.configured:
                 raise HTTPException(status_code=422, detail="Não foi possível acessar o provider para cancelar o envio existente.")
             try:
-                provider.cancel_envelope(item.signing_envelope_id)
+                provider.cancel_envelope(item.signing_envelope_id, item.signing_document_id)
             except SignatureProviderError as exc:
                 raise HTTPException(status_code=502, detail=str(exc)) from exc
             item.signing_status = "provider_canceled"
