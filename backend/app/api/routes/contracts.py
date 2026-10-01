@@ -525,6 +525,47 @@ def send_contract_to_signature(
     return _contract_response(_load_contract(db, context.user.organization_id, item.id))
 
 
+@router.post("/administration-contracts/{contract_id}/signature/sync", response_model=AdministrationContractResponse)
+def sync_contract_signature(
+    contract_id: UUID,
+    request: Request,
+    context: UserContext = Depends(require_permission("contracts.send_signature")),
+    db: Session = Depends(get_db),
+) -> AdministrationContractResponse:
+    item = _load_contract(db, context.user.organization_id, contract_id)
+    if not item.signing_envelope_id:
+        raise HTTPException(status_code=409, detail="Contrato ainda não possui envelope na Clicksign.")
+    provider = get_signature_provider(item.signing_provider)
+    if provider is None or not provider.configured:
+        provider = get_signature_provider_for_organization(db, context.user.organization_id, item.signing_provider)
+    if provider is None or not provider.configured:
+        raise HTTPException(status_code=422, detail="Provider de assinatura não está configurado.")
+    try:
+        provider_status = provider.envelope_status(item.signing_envelope_id)
+    except SignatureProviderError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    mapping = {
+        "draft": "document_ready",
+        "running": "provider_running",
+        "closed": "provider_closed_pending_archive",
+        "canceled": "provider_canceled",
+    }
+    item.signing_status = mapping[provider_status]
+    if provider_status == "closed":
+        item.archive_status = "pending"
+    _audit(
+        db,
+        request,
+        context,
+        item,
+        "contracts.administration.signature_synced",
+        after={"provider_status": provider_status, "signing_status": item.signing_status},
+    )
+    db.commit()
+    return _contract_response(_load_contract(db, context.user.organization_id, item.id))
+
+
 @router.post("/administration-contracts/{contract_id}/signature/archive", response_model=AdministrationContractResponse)
 def archive_signed_contract(
     contract_id: UUID,
