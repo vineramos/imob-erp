@@ -35,7 +35,18 @@ async function errorDetail(response: Response): Promise<{ detail: string; payloa
     const data = (await response.json()) as { detail?: unknown }
     payload = data.detail ?? data
     if (typeof data.detail === 'string') detail = data.detail
-    else if (data.detail && typeof data.detail === 'object') {
+    else if (Array.isArray(data.detail)) {
+      const messages = data.detail
+        .map((item) => {
+          if (!item || typeof item !== 'object') return ''
+          const entry = item as { msg?: unknown; loc?: unknown }
+          const message = typeof entry.msg === 'string' ? entry.msg : ''
+          const location = Array.isArray(entry.loc) ? entry.loc.filter((part) => part !== 'body').join(' → ') : ''
+          return [location, message].filter(Boolean).join(': ')
+        })
+        .filter(Boolean)
+      if (messages.length) detail = messages.join(' · ')
+    } else if (data.detail && typeof data.detail === 'object') {
       const candidate = data.detail as { reason?: unknown; message?: unknown }
       if (typeof candidate.reason === 'string') detail = candidate.reason
       else if (typeof candidate.message === 'string') detail = candidate.message
