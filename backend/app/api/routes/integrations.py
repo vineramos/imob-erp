@@ -3,6 +3,7 @@ import hmac
 import json
 from datetime import datetime, timezone
 from typing import Any, Literal
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, EmailStr, Field, model_validator
