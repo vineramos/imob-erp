@@ -53,7 +53,7 @@ const defaultTerms = (defaults?: OperationalDefaults): AdministrationContractTer
   maintenance_limit_amount: null, emergency_limit_amount: null, start_date: null, end_date: null,
   end_of_term_action: 'renew_indefinite', notes: '', signers: [],
 })
-const blankSigner = (): ContractSigner => ({ role: 'owner', person_id: null, name: '', email: '', document_number: null, phone: null, sign_order: 1, communication: 'email' })
+const blankSigner = (): ContractSigner => ({ role: 'owner', person_id: null, name: '', email: '', document_number: null, phone: null, representative_person_id: null, representative_name: null, representative_email: null, representative_document_number: null, representative_phone: null, sign_order: 1, communication: 'email' })
 
 function addressLine(address: Record<string, string>) {
   return [address.street, address.number, address.neighborhood, address.city].filter(Boolean).join(', ') || 'Endereço não informado'
@@ -232,12 +232,12 @@ export function ContractsPage({ permissions }: Props) {
       })
       return
     }
-    updateSigner(index, { role, person_id: null, name: '', email: '', document_number: null, phone: null })
+    updateSigner(index, { role, person_id: null, name: '', email: '', document_number: null, phone: null, representative_person_id: null, representative_name: null, representative_email: null, representative_document_number: null, representative_phone: null })
   }
   function selectSignerPerson(index: number, personId: string) {
     const person = people.find((item) => item.id === personId)
     if (!person) {
-      updateSigner(index, { person_id: null, name: '', email: '', document_number: null, phone: null })
+      updateSigner(index, { person_id: null, name: '', email: '', document_number: null, phone: null, representative_person_id: null, representative_name: null, representative_email: null, representative_document_number: null, representative_phone: null })
       return
     }
     updateSigner(index, {
@@ -246,6 +246,26 @@ export function ContractsPage({ permissions }: Props) {
       email: person.email || '',
       document_number: person.document_number,
       phone: person.phone,
+      representative_person_id: null,
+      representative_name: null,
+      representative_email: null,
+      representative_document_number: null,
+      representative_phone: null,
+    })
+  }
+
+  function selectSignerRepresentative(index: number, personId: string) {
+    const person = people.find((item) => item.id === personId && item.person_type === 'individual')
+    if (!person) {
+      updateSigner(index, { representative_person_id: null, representative_name: null, representative_email: null, representative_document_number: null, representative_phone: null })
+      return
+    }
+    updateSigner(index, {
+      representative_person_id: person.id,
+      representative_name: person.name,
+      representative_email: person.email || null,
+      representative_document_number: person.document_number,
+      representative_phone: person.phone,
     })
   }
 
@@ -379,15 +399,24 @@ export function ContractsPage({ permissions }: Props) {
         {terms.signers.length === 0 ? <div className="contract-signers-empty">Nenhum signatário selecionado. Se nenhum for informado, os proprietários com e-mail continuam sendo sugeridos automaticamente na criação.</div> : terms.signers.map((signer, index) => {
           const isPersonRole = signer.role === 'owner' || signer.role === 'tenant'
           const eligiblePeople = isPersonRole ? people.filter((person) => person.role_keys.includes(signer.role)) : []
+          const selectedParty = people.find((person) => person.id === signer.person_id)
+          const requiresRepresentative = selectedParty?.person_type === 'company'
+          const representativePeople = people.filter((person) => person.person_type === 'individual')
           const isLegacyRole = !signerRoleOptions.some((option) => option.value === signer.role)
-          return <div className="contract-signer-row" key={`${index}-${signer.person_id ?? signer.email}`}>
+          return <div className={`contract-signer-row${requiresRepresentative ? ' company-party' : ''}`} key={`${index}-${signer.person_id ?? signer.email}`}>
             <label className="field"><span>Papel</span><select value={signer.role} onChange={(e) => updateSignerRole(index, e.target.value as ContractSigner['role'])}>{isLegacyRole && <option value={signer.role}>{signerRoleLabel[signer.role] ?? signer.role} · legado</option>}{signerRoleOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
-            <label className="field"><span>Nome</span>{isPersonRole ? <select required value={signer.person_id ?? ''} onChange={(e) => selectSignerPerson(index, e.target.value)}><option value="">Selecione...</option>{eligiblePeople.map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}</select> : signer.role === 'agency' ? <input required readOnly value={signer.name}/> : <input required value={signer.name} onChange={(e) => updateSigner(index, { name: e.target.value })}/>}</label>
-            <label className="field"><span>E-mail</span><input required type="email" value={signer.email} onChange={(e) => updateSigner(index, { email: e.target.value })}/></label>
-            <label className="field"><span>CPF/CNPJ</span><input data-format="cpf-cnpj" value={signer.document_number ?? ''} onChange={(e) => updateSigner(index, { document_number: e.target.value || null })}/></label>
+            <label className="field"><span>{isPersonRole ? 'Parte' : 'Nome'}</span>{isPersonRole ? <select required value={signer.person_id ?? ''} onChange={(e) => selectSignerPerson(index, e.target.value)}><option value="">Selecione...</option>{eligiblePeople.map((person) => <option key={person.id} value={person.id}>{person.name}{person.person_type === 'company' ? ' · PJ' : ''}</option>)}</select> : signer.role === 'agency' ? <input required readOnly value={signer.name}/> : <input required value={signer.name} onChange={(e) => updateSigner(index, { name: e.target.value })}/>}</label>
+            <label className="field"><span>E-mail da parte</span><input required={!requiresRepresentative} type="email" value={signer.email} onChange={(e) => updateSigner(index, { email: e.target.value })}/></label>
+            <label className="field"><span>{requiresRepresentative ? 'CNPJ da parte' : 'CPF/CNPJ'}</span><input data-format="cpf-cnpj" value={signer.document_number ?? ''} onChange={(e) => updateSigner(index, { document_number: e.target.value || null })}/></label>
+            {requiresRepresentative && <>
+              <label className="field signer-representative-field"><span>Representante que assinará</span><select required value={signer.representative_person_id ?? ''} onChange={(e) => selectSignerRepresentative(index, e.target.value)}><option value="">Selecione uma pessoa física...</option>{representativePeople.map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}</select></label>
+              <label className="field"><span>E-mail do representante</span><input required readOnly type="email" value={signer.representative_email ?? ''}/></label>
+              <label className="field"><span>CPF do representante</span><input required readOnly data-format="cpf-cnpj" value={signer.representative_document_number ?? ''}/></label>
+            </>}
             <label className="field"><span>Comunicação</span><select value={signer.communication} onChange={(e) => updateSigner(index, { communication: e.target.value as ContractSigner['communication'] })}><option value="email">E-mail</option><option value="sms">SMS</option><option value="whatsapp">WhatsApp</option><option value="none">Nenhuma</option></select></label>
             <label className="field signer-order"><span>Ordem</span><input type="number" min="1" max="50" value={signer.sign_order} onChange={(e) => updateSigner(index, { sign_order: Number(e.target.value) })}/></label>
             <button className="signer-remove" type="button" aria-label="Remover" onClick={() => setTerms((current) => ({ ...current, signers: current.signers.filter((_, i) => i !== index) }))}><Trash2 size={15}/></button>
+            {requiresRepresentative && <div className="contract-representative-note"><ShieldCheck size={14}/><span>A empresa continua como parte do contrato. A Clicksign receberá o representante selecionado como signatário, usando o CPF dele.</span></div>}
           </div>
         })}
       </div>
@@ -486,7 +515,7 @@ export function ContractsPage({ permissions }: Props) {
                   </div>
                 </article>
                 <article className="contract-surface-v2"><div className="contract-section-heading"><div><span>Signatários</span><h3>Participantes da assinatura</h3></div><Users size={16}/></div>
-                  <div className="contract-signer-list-v2">{selectedContract.signers.map((signer,index)=><article key={index+'-'+signer.email}><b>{signer.sign_order}</b><div><strong>{signer.name}</strong><small>{signerRoleLabel[signer.role]||signer.role} · {signer.email}</small></div></article>)}
+                  <div className="contract-signer-list-v2">{selectedContract.signers.map((signer,index)=><article key={index+'-'+signer.email}><b>{signer.sign_order}</b><div><strong>{signer.name}</strong><small>{signerRoleLabel[signer.role]||signer.role} · {signer.representative_name ? `Representada por ${signer.representative_name} · ${signer.representative_email ?? ''}` : signer.email}</small></div></article>)}
                     {!selectedContract.signers.length&&<div className="contract-empty-soft">Nenhum signatário definido nesta versão.</div>}
                   </div>
                 </article>
