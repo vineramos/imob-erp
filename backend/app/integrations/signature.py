@@ -145,8 +145,13 @@ class ClicksignProvider:
         communication = str(signer.get("communication") or "email")
         phone = _digits(str(signer.get("phone") or "")) or None
         document = _clicksign_cpf(str(signer.get("document_number") or ""))
+        raw_name = str(signer.get("name") or "").strip()
+        normalized_name = " ".join(part for part in raw_name.split() if part)
+        if len(normalized_name.split()) < 2:
+            normalized_name = f"{normalized_name} Assinante".strip()
+
         attributes: dict = {
-            "name": str(signer.get("name") or "").strip(),
+            "name": normalized_name,
             "email": str(signer.get("email") or "").strip().lower(),
             "phone_number": phone,
             "has_documentation": bool(document),
