@@ -278,12 +278,9 @@ class ClicksignProvider:
             raise SignatureProviderError("A Clicksign retornou um status de envelope desconhecido.")
         return value
 
-    def cancel_envelope(self, envelope_id: str) -> None:
+    def cancel_envelope(self, envelope_id: str, document_id: str | None = None) -> None:
         with httpx.Client(timeout=18.0) as client:
-            current = client.get(
-                f"{self.base_url}/envelopes/{envelope_id}",
-                headers=self._headers(),
-            )
+            current = client.get(f"{self.base_url}/envelopes/{envelope_id}", headers=self._headers())
         if current.status_code == 404:
             return
         if current.status_code != 200:
@@ -304,33 +301,28 @@ class ClicksignProvider:
             raise SignatureProviderError("O envelope da Clicksign já está finalizado e não pode ser cancelado.")
         if status == "draft":
             with httpx.Client(timeout=18.0) as client:
-                response = client.delete(
-                    f"{self.base_url}/envelopes/{envelope_id}",
-                    headers=self._headers(),
-                )
+                response = client.delete(f"{self.base_url}/envelopes/{envelope_id}", headers=self._headers())
             if response.status_code not in {200, 202, 204, 404}:
                 raise SignatureProviderError(
                     f"Falha ao excluir envelope em rascunho na Clicksign (HTTP {response.status_code}): {_safe_response_detail(response)}"
                 )
             return
-
-        payload = {
-            "data": {
-                "id": envelope_id,
-                "type": "envelopes",
-                "attributes": {"status": "canceled"},
-            }
-        }
-        with httpx.Client(timeout=18.0) as client:
-            response = client.patch(
-                f"{self.base_url}/envelopes/{envelope_id}",
-                headers=self._headers(),
-                json=payload,
-            )
-        if response.status_code not in {200, 202, 204}:
-            raise SignatureProviderError(
-                f"Falha ao cancelar envelope Clicksign (HTTP {response.status_code}): {_safe_response_detail(response)}"
-            )
+        if status == "running":
+            if not document_id:
+                raise SignatureProviderError("O documento da Clicksign não foi identificado para cancelamento.")
+            body = {"data":{"id":document_id,"type":"documents","attributes":{"status":"canceled"}}}
+            with httpx.Client(timeout=18.0) as client:
+                response = client.patch(
+                    f"{self.base_url}/envelopes/{envelope_id}/documents/{document_id}",
+                    headers=self._headers(),
+                    json=body,
+                )
+            if response.status_code not in {200, 202, 204}:
+                raise SignatureProviderError(
+                    f"Falha ao cancelar documento Clicksign (HTTP {response.status_code}): {_safe_response_detail(response)}"
+                )
+            return
+        raise SignatureProviderError(f"Status do envelope Clicksign não permite cancelamento: {status or 'desconhecido'}.")
 
     def notify_envelope(self, envelope_id: str) -> None:
         payload = {
