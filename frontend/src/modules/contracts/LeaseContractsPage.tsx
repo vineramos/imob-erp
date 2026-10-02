@@ -330,6 +330,18 @@ export function LeaseContractsPage({ permissions }: Props) {
 
   useEffect(() => { void load() }, [load])
   useEffect(() => {
+    if (loading || !items.length) return
+    const params = new URLSearchParams(window.location.search)
+    const leaseId = params.get('leaseId')
+    if (!leaseId) return
+    const target = items.find(item => item.id === leaseId)
+    if (!target) return
+    setSelectedId(target.id)
+    setContractStatus('all')
+    setContractQuery('')
+    setDetailTab('overview')
+  }, [loading, items])
+  useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     const propertyId = params.get('propertyId')
     if (!propertyId || !canCreate || loading) return
@@ -874,7 +886,7 @@ export function LeaseContractsPage({ permissions }: Props) {
                 <aside className="contract-surface-v2 contract-status-card">
                   <div className="contract-section-heading"><div><span>Fluxo atual</span><h3>{statusLabels[selectedLease.status]}</h3></div></div>
                   <div className="contract-flow-summary"><div><span>Assinatura</span><strong>{signingLabel(selectedLease)}</strong></div><div><span>PDF atual</span><strong>{selectedLease.generated_document_version===selectedLease.current_version?'Gerado':'Pendente'}</strong></div><div><span>Arquivo final</span><strong>{selectedLease.archive_status==='archived'?'Arquivado':'Pendente'}</strong></div></div>
-                  <LeaseLifecyclePanel lease={selectedLease} permissions={permissions} onChanged={()=>void load()}/>
+                  <LeaseLifecyclePanel lease={selectedLease} permissions={permissions} initialAction={new URLSearchParams(window.location.search).get('action') === 'renewal' ? 'renewal' : new URLSearchParams(window.location.search).get('action') === 'termination' ? 'termination' : null} onChanged={()=>void load()}/>
                 </aside>
                 {selectedLease.notes&&<section className="contract-surface-v2 contract-notes-v2"><div className="contract-section-heading"><div><span>Observações</span><h3>Anotações contratuais</h3></div></div><p>{selectedLease.notes}</p></section>}
               </div>}
