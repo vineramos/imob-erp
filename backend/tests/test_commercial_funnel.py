@@ -50,6 +50,8 @@ def test_site_lead_flows_through_visit_proposal_contract_and_closes_competitors(
     with SessionLocal() as db:
         person = db.get(Person, UUID(linked_person_id)); assert person is not None
         tenant_role = db.scalar(select(PersonRole).where(PersonRole.person_id == person.id, PersonRole.role_key == "tenant")); assert tenant_role is not None and tenant_role.is_active is True
+        person.document_number = "39053344705"
+        db.commit()
         agenda = db.get(AgendaTask, UUID(visit["agenda_task_id"])); assert agenda is not None and agenda.source_module == "crm" and agenda.source_type == "commercial_visit" and agenda.source_id == visit["id"] and agenda.status == "pending"
 
     completed = assert_response(client.patch(f"/api/crm/visits/{visit['id']}", json={"status": "completed", "notes": None})).json(); assert completed["status"] == "completed"
