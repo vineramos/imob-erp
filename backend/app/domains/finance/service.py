@@ -5,7 +5,7 @@ from decimal import Decimal, ROUND_HALF_UP
 from uuid import UUID
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.domains.contracts.models import AdministrationContract
 from app.domains.finance.core_models import FinancialTitle
@@ -13,7 +13,7 @@ from app.domains.finance.models import FinancialSettlement, OwnerRepasse, RentCh
 from app.domains.foundation.defaults import OPERATIONAL_DEFAULTS
 from app.domains.foundation.models import OrganizationSettings
 from app.domains.leases.models import LeaseContract
-from app.domains.portfolio.models import Property
+from app.domains.portfolio.models import Property, PropertyOwner
 
 CENT = Decimal("0.01")
 
@@ -139,6 +139,28 @@ def charge_item_third_party_net(item: dict) -> Decimal:
 def operational_defaults(db: Session, organization_id: UUID) -> dict:
     row = db.scalar(select(OrganizationSettings).where(OrganizationSettings.organization_id == organization_id))
     return {**OPERATIONAL_DEFAULTS, **(dict(row.operational_defaults or {}) if row else {})}
+
+
+def current_owner_snapshot(db: Session, organization_id: UUID, property_id: UUID) -> list[dict]:
+    property_item = db.scalar(
+        select(Property)
+        .options(selectinload(Property.owners).selectinload(PropertyOwner.person))
+        .where(Property.organization_id == organization_id, Property.id == property_id)
+    )
+    if property_item is None:
+        return []
+    return [
+        {
+            "person_id": str(owner.person_id),
+            "name": owner.person.name,
+            "document_number": owner.person.document_number,
+            "email": owner.person.email,
+            "phone": owner.person.phone,
+            "ownership_percent": str(owner.ownership_percent),
+        }
+        for owner in property_item.owners
+        if owner.person is not None
+    ]
 
 
 def administration_terms(db: Session, organization_id: UUID, property_id: UUID) -> dict:
@@ -488,7 +510,7 @@ def generate_charges(
             charge_items=components,
             tenant_snapshot=list(lease.tenant_snapshot or []),
             property_snapshot=dict(lease.property_snapshot or {}),
-            owner_snapshot=list(lease.owner_snapshot or []),
+            owner_snapshot=current_owner_snapshot(db, organization_id, lease.property_id) or list(lease.owner_snapshot or []),
             admin_terms_snapshot=terms,
             created_by_user_id=user_id,
         )
@@ -559,7 +581,7 @@ def calculate_settlement(db: Session, charge: RentCharge, paid_at: datetime) -> 
 
     lease = db.get(LeaseContract, charge.lease_contract_id)
     billing_start = first_billing_competence(lease) if lease else charge.competence
-    installment_number = months_since(billing_start, charge.competence) + 1
+    installment_number = max(1, months_since(billing_start, charge.competence) + 1)
     installments = max(1, int(terms.get("intermediation_installments") or 1))
     intermediation_percent = Decimal(str(terms.get("intermediation_percent") or 0))
     intermediation_fee = Decimal("0.00")
