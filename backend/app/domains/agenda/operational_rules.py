@@ -416,16 +416,22 @@ def _sync_administration_contract_reviews(
         source_owner = item.approved_by_user_id or item.created_by_user_id
         assigned = _same_department_assignee(source_owner, profiles, administrative.id)
 
+        end_action = str((item.rules_snapshot or {}).get("end_of_term_action") or "renew_indefinite")
+        end_message = (
+            "A versão prevê renovação por prazo indeterminado. Confirmar continuidade, atualizar condições se necessário e registrar eventual encerramento."
+            if end_action == "renew_indefinite"
+            else "A versão prevê encerramento ao fim do prazo. Confirmar continuidade ou formalizar o encerramento da administração."
+        )
         logic._ensure_source_chain(
             db,
             organization_id=organization_id,
             source_module="contracts",
             source_type="contract_expiry",
             source_id=source_id,
-            title=f"Revisar contrato de administração · ADM-{item.internal_number:06d}",
+            title=f"Revisar continuidade da administração · ADM-{item.internal_number:06d}",
             description=(
-                f"Contrato de administração com término em {item.end_date.strftime('%d/%m/%Y')}. "
-                "Validar continuidade da administração, comunicação ao proprietário e situação do imóvel."
+                f"Marco contratual em {item.end_date.strftime('%d/%m/%Y')}. "
+                + end_message
             ),
             original_at=logic.noon(trigger_day),
             completion_at=None,
