@@ -7,13 +7,13 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
 
 
 AdministrationContractStatus = Literal[
-    "draft", "review", "approved", "pending_signature", "signed", "cancelled"
+    "draft", "review", "approved", "pending_signature", "signed", "closed", "cancelled"
 ]
 AdministrationPlan = Literal["essential", "complete", "custom"]
 FeeType = Literal["percent", "fixed"]
 OperationalPayer = Literal["tenant", "owner", "agency"]
 EndOfTermAction = Literal["end_contract", "renew_indefinite"]
-WorkflowAction = Literal["submit_review", "approve", "prepare_signature", "return_draft", "cancel"]
+WorkflowAction = Literal["submit_review", "approve", "prepare_signature", "return_draft", "close", "cancel"]
 SignerRole = Literal["owner", "tenant", "agency", "witness", "other"]
 SignerCommunication = Literal["email", "sms", "whatsapp", "none"]
 
@@ -84,6 +84,7 @@ class AdministrationContractWorkflow(BaseModel):
 
     action: WorkflowAction
     reason: str | None = Field(default=None, max_length=1000)
+    effective_date: date | None = None
 
 
 class AdministrationContractVersionResponse(BaseModel):
@@ -152,6 +153,8 @@ class AdministrationContractResponse(BaseModel):
     archived_document_reference: str | None = None
     final_document_hash: str | None = None
     archived_at: datetime | None = None
+    closed_at: datetime | None = None
+    closure_reason: str | None = None
     versions: list[AdministrationContractVersionResponse]
     created_at: datetime
     updated_at: datetime
