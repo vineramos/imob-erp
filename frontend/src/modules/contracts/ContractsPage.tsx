@@ -36,7 +36,7 @@ import { SignatureTimeline } from './SignatureTimeline'
 import { EntityDocumentsPanel } from '../documents/EntityDocumentsPanel'
 
 const statusLabel: Record<AdministrationContractStatus, string> = {
-  draft: 'Rascunho', review: 'Em revisão', approved: 'Aprovado', pending_signature: 'Assinatura', signed: 'Assinado', cancelled: 'Cancelado',
+  draft: 'Rascunho', review: 'Em revisão', approved: 'Aprovado', pending_signature: 'Assinatura', signed: 'Assinado', closed: 'Encerrado', cancelled: 'Cancelado',
 }
 const planLabel: Record<string, string> = { essential: 'Essencial', complete: 'Completo', custom: 'Personalizado' }
 const payerLabel: Record<string, string> = { tenant: 'Locatário', owner: 'Proprietário', agency: 'Imobiliária' }
@@ -67,7 +67,7 @@ function adminFee(item: AdministrationContract) {
   return item.admin_fee_type === 'percent' ? `${Number(item.admin_fee_percent ?? 0).toLocaleString('pt-BR')}%` : money(item.admin_fee_amount)
 }
 function statusClass(status: AdministrationContractStatus) {
-  if (status === 'signed' || status === 'approved') return 'success'
+  if (status === 'signed' || status === 'approved' || status === 'closed') return 'success'
   if (status === 'cancelled') return 'danger'
   if (status === 'pending_signature' || status === 'review') return 'warning'
   return 'neutral'
@@ -130,6 +130,9 @@ export function ContractsPage({ permissions }: Props) {
   const [changeSummary, setChangeSummary] = useState('')
   const [cancelTarget, setCancelTarget] = useState<AdministrationContract | null>(null)
   const [cancelReason, setCancelReason] = useState('')
+  const [closeTarget, setCloseTarget] = useState<AdministrationContract | null>(null)
+  const [closeReason, setCloseReason] = useState('')
+  const [closeDate, setCloseDate] = useState(() => new Date().toISOString().slice(0, 10))
 
   const load = useCallback(async () => {
     setLoading(true); setError('')
@@ -302,15 +305,16 @@ export function ContractsPage({ permissions }: Props) {
     finally { setSaving(false) }
   }
 
-  async function workflow(item: AdministrationContract, action: AdministrationContractWorkflowAction, reason: string | null = null): Promise<boolean> {
-    if (action === 'cancel' && !reason?.trim()) return false
+  async function workflow(item: AdministrationContract, action: AdministrationContractWorkflowAction, reason: string | null = null, effectiveDate: string | null = null): Promise<boolean> {
+    if ((action === 'cancel' || action === 'close') && !reason?.trim()) return false
     setSaving(true); setError(''); setSuccess('')
     try {
-      const updated = await apiRequest<AdministrationContract>(`/administration-contracts/${item.id}/workflow`, { method: 'POST', body: JSON.stringify({ action, reason }) })
+      const updated = await apiRequest<AdministrationContract>(`/administration-contracts/${item.id}/workflow`, { method: 'POST', body: JSON.stringify({ action, reason, effective_date: effectiveDate }) })
       setContracts((current) => current.map((contract) => contract.id === updated.id ? updated : contract))
       const message: Record<AdministrationContractWorkflowAction, string> = {
         submit_review: `${updated.code} enviado para revisão.`, approve: `${updated.code} aprovado internamente.`,
         prepare_signature: `${updated.code} entrou no fluxo de assinatura. Agora gere o PDF versionado.`, return_draft: `${updated.code} retornou para rascunho.`,
+        close: `${updated.code} encerrado sem apagar o histórico da administração.`,
         cancel: `${updated.code} cancelado com motivo auditado.`,
       }
       setSuccess(message[action])
@@ -319,6 +323,16 @@ export function ContractsPage({ permissions }: Props) {
       setError(cause instanceof ApiError ? cause.detail : 'Não foi possível executar a ação.')
       return false
     } finally { setSaving(false) }
+  }
+
+  async function confirmClosure() {
+    if (!closeTarget || !closeReason.trim() || !closeDate) return
+    const closed = await workflow(closeTarget, 'close', closeReason.trim(), closeDate)
+    if (closed) {
+      setCloseTarget(null)
+      setCloseReason('')
+      setCloseDate(new Date().toISOString().slice(0, 10))
+    }
   }
 
   async function confirmCancellation() {
@@ -498,7 +512,8 @@ export function ContractsPage({ permissions }: Props) {
                 {selectedContract.status==='pending_signature'&&canSign&&documentCurrent&&!['provider_running','provider_signature_progress','provider_closed_pending_archive','signed_archived'].includes(selectedContract.signing_status)&&<button className="button primary" type="button" disabled={saving} onClick={()=>void sendSignature(selectedContract)}><Send size={14}/> Enviar à Clicksign</button>}
                 {selectedContract.status==='pending_signature'&&canSign&&['provider_closed_pending_archive','archive_failed'].includes(selectedContract.signing_status)&&<button className="button primary" type="button" disabled={saving} onClick={()=>void archiveFinal(selectedContract)}><FileCheck2 size={14}/> Arquivar PDF final</button>}
                 {(selectedContract.status==='review'||selectedContract.status==='approved'||selectedContract.status==='pending_signature')&&canEdit&&<button className="button secondary" type="button" disabled={saving} onClick={()=>void workflow(selectedContract,'return_draft')}><RotateCcw size={14}/> Rascunho</button>}
-                {selectedContract.status!=='cancelled'&&selectedContract.status!=='signed'&&canEdit&&<button className="button ghost-danger" type="button" disabled={saving} onClick={()=>{setCancelTarget(selectedContract);setCancelReason('')}}>Cancelar</button>}
+                {selectedContract.status==='signed'&&canEdit&&<button className="button secondary" type="button" disabled={saving} onClick={()=>{setCloseTarget(selectedContract);setCloseReason('');setCloseDate(new Date().toISOString().slice(0,10))}}>Encerrar administração</button>}
+                {selectedContract.status!=='cancelled'&&selectedContract.status!=='signed'&&selectedContract.status!=='closed'&&canEdit&&<button className="button ghost-danger" type="button" disabled={saving} onClick={()=>{setCancelTarget(selectedContract);setCancelReason('')}}>Cancelar</button>}
                 {selectedContract.archive_status==='archived'&&selectedContract.archived_document_reference
                   ? <a className="button secondary" href={'/api/administration-contracts/'+selectedContract.id+'/signature/final/pdf'} target="_blank" rel="noreferrer"><FileCheck2 size={14}/> Ver PDF assinado</a>
                   : documentCurrent&&<a className="button secondary" href={'/api/administration-contracts/'+selectedContract.id+'/document/pdf'} target="_blank" rel="noreferrer"><Download size={14}/> Ver PDF</a>}
@@ -607,6 +622,20 @@ export function ContractsPage({ permissions }: Props) {
       </div>}
 
     <article className="panel contract-provider-note"><ShieldCheck size={21}/><div><span className="eyebrow">Integridade documental</span><h2>O ERP não confia apenas no status da Clicksign</h2><p>Cada PDF original recebe SHA-256 antes do envio. Mesmo após a Clicksign encerrar a assinatura, o contrato só muda para “Assinado” depois que o PDF final é salvo no storage próprio e recebe um segundo hash.</p></div></article>
+
+    <ConfirmDialog
+      open={Boolean(closeTarget)}
+      title="Encerrar contrato de administração"
+      description={closeTarget ? `Encerre ${closeTarget.code} sem apagar o contrato assinado, documentos ou histórico. Depois disso o imóvel poderá receber um novo contrato de administração.` : 'Informe os dados do encerramento.'}
+      confirmLabel="Encerrar administração"
+      busy={saving}
+      confirmDisabled={!closeReason.trim() || !closeDate}
+      onCancel={() => { if (!saving) { setCloseTarget(null); setCloseReason('') } }}
+      onConfirm={() => void confirmClosure()}
+    >
+      <label className="field"><span>Data efetiva</span><input type="date" max={new Date().toISOString().slice(0,10)} value={closeDate} onChange={event=>setCloseDate(event.target.value)}/></label>
+      <label className="field"><span>Motivo do encerramento</span><textarea rows={3} value={closeReason} onChange={event=>setCloseReason(event.target.value)} placeholder="Ex.: encerramento solicitado pelo proprietário, troca de administradora..."/></label>
+    </ConfirmDialog>
 
     <ConfirmDialog
       open={Boolean(cancelTarget)}
