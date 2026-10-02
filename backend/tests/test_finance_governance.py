@@ -1,4 +1,4 @@
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
 from app.core.database import SessionLocal
@@ -220,3 +220,57 @@ def test_period_close_and_reopen_use_distinct_permissions(client, identity):
     ).json()
     assert reopened["status"] == "open"
     assert reopened["reopen_reason"].startswith("Correção necessária")
+
+
+def test_closed_competence_blocks_new_manual_and_rent_mutations(client, identity):
+    competence = date.today().replace(day=1)
+    assert SessionLocal is not None
+    with SessionLocal() as db:
+        closure = FinanceMonthlyClosure(
+            organization_id=identity["organization_id"],
+            competence=competence,
+            status="closed",
+            readiness_snapshot={"governance_test": True},
+            closing_note="Fechamento para validar bloqueio de mutações.",
+            closed_by_user_id=identity["user_id"],
+            closed_at=datetime.now(timezone.utc),
+        )
+        db.add(closure)
+        db.commit()
+
+    manual = client.post(
+        "/api/finance/core/manual",
+        json={
+            "direction": "payable",
+            "fund_scope": "operating",
+            "category": "Teste de fechamento",
+            "description": "Lançamento não permitido após fechamento",
+            "counterparty_name": "Fornecedor Teste",
+            "competence": competence.isoformat(),
+            "due_date": date.today().isoformat(),
+            "amount": "100.00",
+            "notes": None,
+            "property_id": None,
+            "lease_contract_id": None,
+        },
+    )
+    assert manual.status_code == 409
+    assert "fechada" in manual.json()["detail"].lower()
+
+    generated = client.post(
+        "/api/finance/charges/generate",
+        json={"competence": competence.isoformat(), "lease_contract_id": None},
+    )
+    assert generated.status_code == 409
+    assert "fechada" in generated.json()["detail"].lower()
+
+
+def test_future_competence_cannot_be_closed(client):
+    future = (date.today().replace(day=28) + timedelta(days=10)).replace(day=1)
+    response = client.post(
+        "/api/finance/monthly-cycle/closure/close",
+        params={"competence": future.isoformat()},
+        json={"note": "Tentativa inválida de fechamento futuro."},
+    )
+    assert response.status_code == 422
+    assert "futura" in response.json()["detail"].lower()
