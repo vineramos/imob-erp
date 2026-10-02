@@ -630,6 +630,19 @@ def test_full_rental_lifecycle_from_public_lead_to_key_return(client, identity):
     assert reconciled["status"] == "reconciled"
 
     workspace = assert_response(client.get(f"/api/lease-contracts/{lease_id}/lifecycle/exit-workspace")).json()
+    assert workspace["financial_blocking_count"] == 1
+    final_rent = next(item for item in workspace["financial_clearance"]["items"] if item["source_type"] == "rent")
+    assert_response(
+        client.post(
+            f"/api/finance/charges/{final_rent['id']}/payment",
+            json={
+                "paid_amount": str(final_rent["remaining_amount"]),
+                "payment_method": "pix",
+                "payment_reference": "FULL-E2E-FINAL-RENT",
+            },
+        )
+    )
+    workspace = assert_response(client.get(f"/api/lease-contracts/{lease_id}/lifecycle/exit-workspace")).json()
     assert workspace["financial_blocking_count"] == 0
     assert workspace["can_close"] is True
 
