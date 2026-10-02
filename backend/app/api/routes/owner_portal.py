@@ -416,14 +416,14 @@ def owner_overview(
 
     years = sorted(
         {
-            *(item.due_date.year for item in repasses),
+            *(item.due_date.year for item in repasses if item.status != "cancelled"),
             *(item.paid_at.year for item in repasses if item.paid_at and item.status in {"paid", "settled"}),
         },
         reverse=True,
     )
     annual_reports = []
     for year in years:
-        scheduled = [item for item in repasses if item.due_date.year == year]
+        scheduled = [item for item in repasses if item.status != "cancelled" and item.due_date.year == year]
         received = [
             item for item in repasses
             if item.status in {"paid", "settled"} and item.paid_at and item.paid_at.year == year
