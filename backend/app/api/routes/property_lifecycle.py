@@ -343,7 +343,7 @@ def _property_lifecycle_payload(db: Session, organization_id: UUID, property_ite
         .where(
             AdministrationContract.organization_id == organization_id,
             AdministrationContract.property_id == property_item.id,
-            AdministrationContract.status != "cancelled",
+            AdministrationContract.status.not_in(("cancelled", "closed")),
         )
         .order_by(AdministrationContract.internal_number.desc())
     )
@@ -352,7 +352,7 @@ def _property_lifecycle_payload(db: Session, organization_id: UUID, property_ite
         .where(
             LeaseContract.organization_id == organization_id,
             LeaseContract.property_id == property_item.id,
-            LeaseContract.status != "cancelled",
+            LeaseContract.status == "signed",
         )
         .order_by(LeaseContract.internal_number.desc())
     )
