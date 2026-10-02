@@ -21,7 +21,7 @@ from app.domains.finance.monthly_cycle_schemas import (
     MonthlyCycleStep,
 )
 from app.domains.finance.treasury_models import PaymentBatch
-from app.domains.finance.service import charge_item_agency_retention, money
+from app.domains.finance.service import charge_item_agency_retention, lease_billable_for_competence, money
 from app.domains.leases.models import LeaseContract
 
 
@@ -89,15 +89,7 @@ def build_monthly_cycle(
         .where(LeaseContract.organization_id == organization_id)
         .order_by(LeaseContract.internal_number.asc())
     ).all()
-    eligible = [
-        lease
-        for lease in leases
-        if lease.status == "signed"
-        and lease.archive_status == "archived"
-        and lease.final_document_hash
-        and lease.start_date <= period_end
-        and (lease.operational_end_date or lease.end_date) >= competence
-    ]
+    eligible = [lease for lease in leases if lease_billable_for_competence(lease, competence)]
     eligible_ids = {lease.id for lease in eligible}
 
     charges = db.scalars(
