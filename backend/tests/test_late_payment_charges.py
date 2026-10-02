@@ -11,6 +11,7 @@ from app.core.database import SessionLocal
 from app.domains.finance.late_charges import LatePaymentTerms, calculate_late_charges
 from app.domains.finance.models import RentCharge
 from app.domains.leases.models import LeaseContract
+from app.domains.reports.service import annual_income_report
 from tests.helpers import (
     add_months,
     assert_response,
@@ -228,6 +229,17 @@ def test_overdue_payment_recalculates_and_surcharge_belongs_to_owner(client):
         memo = dict(stored.admin_terms_snapshot.get("late_payment_settlement") or {})
         assert memo["days_overdue"] == 10
         assert memo["updated_amount"] == "2046.67"
+
+        annual = annual_income_report(
+            db,
+            organization_id=stored.organization_id,
+            year=paid_at.year,
+            party_type="tenant",
+            person_id=UUID(tenant["id"]),
+        )
+        assert decimal(annual.total_paid) == decimal("2046.67")
+        assert decimal(annual.total_additional_charges) == decimal("46.67")
+        assert decimal(annual.lines[0].total_amount) == decimal("2046.67")
 
 
 def test_inter_payload_uses_simple_mora_and_rejects_compound(client):
