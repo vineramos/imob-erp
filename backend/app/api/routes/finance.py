@@ -331,6 +331,8 @@ def receive_charge(
     db: Session = Depends(get_db),
 ) -> ChargeResponse:
     item = _load_charge(db, context.user.organization_id, charge_id)
+    if payload.paid_at is not None and payload.paid_at > datetime.now(timezone.utc):
+        raise HTTPException(status_code=422, detail="A data do recebimento não pode estar no futuro.")
     try:
         settlement = record_payment_with_late_charges(
             db,
@@ -376,6 +378,8 @@ def cancel_charge(
     item = _load_charge(db, context.user.organization_id, charge_id)
     if item.status == "paid":
         raise HTTPException(status_code=409, detail="Uma cobrança já recebida não pode ser cancelada.")
+    if item.status == "cancelled":
+        raise HTTPException(status_code=409, detail="Esta cobrança já foi cancelada.")
     item.status = "cancelled"
     item.cancelled_at = datetime.now(timezone.utc)
     item.cancellation_reason = payload.reason.strip()
