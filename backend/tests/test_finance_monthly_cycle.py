@@ -256,3 +256,21 @@ def test_first_and_final_service_period_can_be_prorated_in_same_month():
     assert active_days == 5  # 16 a 20/10; o dia da assinatura continua excluído.
     assert total_days == 31
     assert factor == Decimal(5) / Decimal(31)
+
+
+def test_contractual_start_midmonth_includes_first_day_when_signed_before_start():
+    lease = SimpleNamespace(
+        status="signed",
+        archive_status="archived",
+        final_document_hash="hash",
+        start_date=date(2026, 10, 15),
+        end_date=date(2029, 3, 5),
+        operational_end_date=None,
+        signed_at=datetime(2026, 10, 1, 15, 0, tzinfo=timezone.utc),
+    )
+
+    assert first_billing_competence(lease) == date(2026, 11, 1)
+    factor, active_days, total_days = billing_period_proration(lease, date(2026, 11, 1))
+    assert active_days == 17
+    assert total_days == 31
+    assert factor == Decimal(17) / Decimal(31)
