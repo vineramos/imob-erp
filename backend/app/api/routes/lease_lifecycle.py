@@ -292,6 +292,7 @@ def return_keys(
     db: Session = Depends(get_db),
 ) -> LeaseLifecycleResponse:
     item = require_case(db, organization_id=context.user.organization_id, lease_contract_id=lease_contract_id)
+    lease = load_lease(db, organization_id=context.user.organization_id, lease_contract_id=lease_contract_id)
     if item.process_type != "termination" or item.exit_inspection_id is None:
         raise HTTPException(status_code=409, detail="Crie e conclua a vistoria de saída antes da devolução das chaves.")
     if item.keys_returned_at is not None:
