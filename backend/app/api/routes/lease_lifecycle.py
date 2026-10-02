@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.domains.finance.core_models import FinancialTitle
+from app.domains.finance.service import billing_competence_for_service_date, generate_charges
 from app.domains.foundation.access import UserContext, require_permission
 from app.domains.foundation.audit import write_audit
 from app.domains.inspections.models import Inspection
@@ -312,6 +313,19 @@ def return_keys(
     item.meter_readings = dict(payload.meter_readings or {})
     item.key_return_notes = (payload.notes or "").strip() or None
     item.status = "financial_clearance_pending"
+
+    # A desocupação não pode encerrar a locação sem que o último período de uso
+    # tenha ao menos uma cobrança. Se já existir, a geração é idempotente.
+    if item.effective_date is not None:
+        final_competence = billing_competence_for_service_date(lease, item.effective_date)
+        generate_charges(
+            db,
+            organization_id=context.user.organization_id,
+            user_id=context.user.id,
+            competence=final_competence,
+            lease_contract_id=lease.id,
+        )
+
     _audit(
         db, request, context, item, "contracts.lease.keys_returned",
         after={"returned_at": payload.returned_at.isoformat(), "received_by": item.keys_received_by, "inspection_status": inspection.status},
