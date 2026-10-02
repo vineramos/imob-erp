@@ -207,7 +207,7 @@ def test_exit_settlement_requires_human_adjustment_and_blocks_close_until_resolv
     ).json()
     assert keys["exit_inspection_status"] == "finalized"
     assert keys["can_close"] is False
-    assert keys["financial_clearance"]["blocking_count"] == 2
+    assert keys["financial_clearance"]["blocking_count"] == 3
 
     blocked_close = client.post(
         f"/api/lease-contracts/{lease['id']}/lifecycle/close",
@@ -229,10 +229,27 @@ def test_exit_settlement_requires_human_adjustment_and_blocks_close_until_resolv
             f"/api/lease-contracts/{lease['id']}/lifecycle/exit-adjustments/{agency_row['id']}/cancel"
         )
     ).json()
-    assert after_all_cancel["financial_blocking_count"] == 0
+    assert after_all_cancel["financial_blocking_count"] == 1
     assert float(after_all_cancel["adjustment_open_amount"]) == 0.0
-    assert after_all_cancel["can_close"] is True
+    assert after_all_cancel["can_close"] is False
     assert after_all_cancel["meter_readings"] == {"energia": "12345", "agua": "6789"}
+
+    final_rent = next(item for item in after_all_cancel["financial_clearance"]["items"] if item["source_type"] == "rent")
+    assert_response(
+        client.post(
+            f"/api/finance/charges/{final_rent['id']}/payment",
+            json={
+                "paid_amount": str(final_rent["remaining_amount"]),
+                "payment_method": "pix",
+                "payment_reference": "EXIT-SETTLEMENT-FINAL-RENT",
+            },
+        )
+    )
+    ready_to_close = assert_response(
+        client.get(f"/api/lease-contracts/{lease['id']}/lifecycle/exit-workspace")
+    ).json()
+    assert ready_to_close["financial_blocking_count"] == 0
+    assert ready_to_close["can_close"] is True
 
     with SessionLocal() as db:
         owner_item = db.get(LeaseExitAdjustment, UUID(owner_row["id"]))
