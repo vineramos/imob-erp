@@ -67,11 +67,20 @@ def lease_effective_start(lease: LeaseContract) -> date:
 
 
 def first_billing_competence(lease: LeaseContract) -> date:
-    return add_months(month_start(lease_effective_start(lease)), 1)
+    signed_date = None
+    if lease.signed_at is not None:
+        signed_date = lease.signed_at.astimezone(ZoneInfo("America/Sao_Paulo")).date()
+    if signed_date is None:
+        return month_start(lease.start_date)
+    first_after_signature = add_months(month_start(signed_date), 1)
+    return max(month_start(lease.start_date), first_after_signature)
 
 
-def service_competence_for_billing(competence: date) -> date:
-    return add_months(month_start(competence), -1)
+def service_competence_for_billing(lease: LeaseContract, competence: date) -> date:
+    competence = month_start(competence)
+    if competence == first_billing_competence(lease):
+        return month_start(lease_effective_start(lease))
+    return add_months(competence, -1)
 
 
 def lease_billable_for_competence(lease: LeaseContract, competence: date) -> bool:
@@ -80,7 +89,7 @@ def lease_billable_for_competence(lease: LeaseContract, competence: date) -> boo
         return False
     if competence < first_billing_competence(lease):
         return False
-    service_competence = service_competence_for_billing(competence)
+    service_competence = service_competence_for_billing(lease, competence)
     service_end = month_end(service_competence)
     effective_start = lease_effective_start(lease)
     operational_end = lease.operational_end_date or lease.end_date
@@ -313,7 +322,7 @@ def charge_items(
     proration_days: int = 0,
     proration_total_days: int = 0,
 ) -> list[dict]:
-    service_competence = service_competence_for_billing(competence)
+    service_competence = service_competence_for_billing(lease, competence)
     prorated_rent = money(money(lease.rent_amount) * proration_factor)
     items: list[dict] = [
         {
