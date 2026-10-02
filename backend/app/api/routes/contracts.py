@@ -241,6 +241,9 @@ def _signature_readiness(db: Session, item: AdministrationContract) -> None:
 
     property_item = _property_for_contract(db, item.organization_id, item.property_id)
     owner_ids = {str(owner.person_id) for owner in property_item.owners}
+    snapshot_owner_ids = {str(owner.get("person_id") or "") for owner in list(item.owner_snapshot or []) if owner.get("person_id")}
+    if snapshot_owner_ids != owner_ids:
+        errors.append("os proprietários do imóvel mudaram após esta versão; gere uma nova versão antes de assinar")
     owner_documents = {_digits(owner.person.document_number) for owner in property_item.owners if owner.person.document_number}
     for owner in property_item.owners:
         if len(_digits(owner.person.document_number)) not in {11, 14}:
