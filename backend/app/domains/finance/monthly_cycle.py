@@ -101,10 +101,11 @@ def build_monthly_cycle(
         .order_by(RentCharge.internal_number.asc())
     ).all()
     charge_ids = {charge.id for charge in charges}
-    charge_lease_ids = {charge.lease_contract_id for charge in charges if charge.status != "cancelled"}
-    missing_charges = len(eligible_ids - charge_lease_ids)
+    covered_lease_ids = {charge.lease_contract_id for charge in charges}
+    missing_charges = len(eligible_ids - covered_lease_ids)
 
     active_charges = [charge for charge in charges if charge.status != "cancelled"]
+    cancelled_charges = [charge for charge in charges if charge.status == "cancelled"]
     open_charges = [
         charge
         for charge in active_charges
@@ -284,7 +285,7 @@ def build_monthly_cycle(
             key="charges",
             title="Cobranças da competência",
             state=charge_state,
-            summary=f"{len(active_charges)} cobrança(s) ativa(s); {missing_charges} contrato(s) ainda sem cobrança.",
+            summary=f"{len(active_charges)} cobrança(s) ativa(s), {len(cancelled_charges)} cancelada(s); {missing_charges} contrato(s) ainda sem decisão de cobrança.",
             detail="A cobrança preserva o valor bruto do locatário e a composição de proprietário, imobiliária e terceiros.",
             count=len(active_charges),
             pending_count=missing_charges,
@@ -529,13 +530,28 @@ def build_monthly_closing_readiness(
             )
         ).all()
 
-    charges = db.scalars(
+    leases = db.scalars(
+        select(LeaseContract).where(LeaseContract.organization_id == organization_id)
+    ).all()
+    eligible_lease_ids = {
+        lease.id for lease in leases
+        if lease_billable_for_competence(lease, competence)
+    }
+    all_charge_rows = db.scalars(
         select(RentCharge).where(
             RentCharge.organization_id == organization_id,
             RentCharge.competence == competence,
-            RentCharge.status != "cancelled",
         )
     ).all()
+    covered_lease_ids = {item.lease_contract_id for item in all_charge_rows}
+    missing_charge_count = len(eligible_lease_ids - covered_lease_ids)
+
+    charges = [item for item in all_charge_rows if item.status != "cancelled"]
+    open_charge_rows = [
+        item for item in charges
+        if item.status in OPEN_CHARGE_STATUSES and item.paid_at is None
+    ]
+    open_charge_count = len(open_charge_rows)
     charge_ids = [item.id for item in charges]
     paid_charge_ids = {item.id for item in charges if item.status == "paid" and item.paid_at is not None}
 
@@ -609,6 +625,10 @@ def build_monthly_closing_readiness(
     ignored_bank_exceptions = sum(1 for item in open_exceptions if item.status == "ignored")
 
     blockers: list[str] = []
+    if missing_charge_count:
+        blockers.append(f"{missing_charge_count} contrato(s) elegível(is) ainda não possuem cobrança nem cancelamento documentado na competência.")
+    if open_charge_count:
+        blockers.append(f"{open_charge_count} cobrança(s) da competência permanecem em aberto; finalize ou cancele antes do fechamento para evitar um recebimento preso em período fechado.")
     if unclosed_accounts:
         blockers.append(f"{unclosed_accounts} conta(s) bancária(s) sem fechamento confirmado no último dia da competência.")
     if unreconciled:
@@ -631,7 +651,9 @@ def build_monthly_closing_readiness(
         blockers.append(f"{len(failed_payment_batches)} lote(s) possuem falha de provider e exigem revisão.")
 
     blocker_count = (
-        unclosed_accounts
+        missing_charge_count
+        + open_charge_count
+        + unclosed_accounts
         + len(unreconciled)
         + open_bank_exceptions
         + ignored_bank_exceptions
@@ -646,6 +668,8 @@ def build_monthly_closing_readiness(
         competence=competence,
         period_end=period_end,
         can_close=blocker_count == 0,
+        missing_charges_count=missing_charge_count,
+        open_charges_count=open_charge_count,
         bank_accounts_count=len(accounts),
         accounts_closed_count=len(closed_account_ids),
         unclosed_accounts_count=unclosed_accounts,
