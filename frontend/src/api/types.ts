@@ -347,7 +347,7 @@ export type CaptureCreate = {
 export type EconomicIndexValue = { index_code: AdjustmentIndex; sgs_code: number; competence: string; monthly_rate: number; source: string; fetched_at: string }
 export type EconomicIndexSync = { index_code: AdjustmentIndex; status: 'never' | 'synced' | 'awaiting_publication' | 'error'; imported: number; latest_competence: string | null; next_retry_at: string | null; message: string }
 
-export type AdministrationContractStatus = 'draft' | 'review' | 'approved' | 'pending_signature' | 'signed' | 'cancelled'
+export type AdministrationContractStatus = 'draft' | 'review' | 'approved' | 'pending_signature' | 'signed' | 'closed' | 'cancelled'
 export type AdministrationPlan = 'essential' | 'complete' | 'custom'
 export type ContractFeeType = 'percent' | 'fixed'
 export type OperationalPayer = 'tenant' | 'owner' | 'agency'
@@ -428,11 +428,13 @@ export type AdministrationContract = AdministrationContractTerms & {
   archived_document_reference: string | null
   final_document_hash: string | null
   archived_at: string | null
+  closed_at: string | null
+  closure_reason: string | null
   versions: AdministrationContractVersion[]
   created_at: string
   updated_at: string
 }
 
-export type AdministrationContractWorkflowAction = 'submit_review' | 'approve' | 'prepare_signature' | 'return_draft' | 'cancel'
+export type AdministrationContractWorkflowAction = 'submit_review' | 'approve' | 'prepare_signature' | 'return_draft' | 'close' | 'cancel'
 
 export type { ThemeConfig }
