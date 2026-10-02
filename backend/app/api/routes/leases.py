@@ -382,6 +382,7 @@ def update_lease_contract(
     if item.status not in {"draft", "review"}:
         raise HTTPException(status_code=409, detail="Somente locações em rascunho ou revisão podem gerar nova versão.")
     tenant_items = _tenants(db, context.user.organization_id, payload.tenant_ids)
+    property_item = _property(db, context.user.organization_id, item.property_id)
     before = {
         "version": item.current_version,
         "status": item.status,
@@ -389,6 +390,8 @@ def update_lease_contract(
         "tenants": item.tenant_snapshot,
         "signers": item.signers_snapshot,
     }
+    item.property_snapshot = _property_snapshot(property_item)
+    item.owner_snapshot = _owner_snapshot(property_item)
     _apply(item, payload, tenant_items)
     item.current_version += 1
     item.status = "draft"
