@@ -8,10 +8,13 @@ from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.database import get_db
+from app.domains.finance.advanced_models import BillingBatch, BillingItem
+from app.domains.finance.advanced_service import refresh_billing_batch_counters
 from app.domains.finance.late_charges import amount_due, charge_late_breakdown, record_payment_with_late_charges
 from app.domains.finance.models import FinancialSettlement, OwnerRepasse, RentCharge
 from app.domains.finance.monthly_cycle import is_competence_closed
 from app.domains.finance.pdf import build_owner_statement_pdf
+from app.domains.finance.providers import BankProviderError, InterBankProvider
 from app.domains.finance.schemas import (
     ChargeCancellationRequest,
     ChargeItem,
@@ -75,6 +78,46 @@ def _load_charge(db: Session, organization_id: UUID, charge_id: UUID) -> RentCha
 
 def _charge_code(item: RentCharge) -> str:
     return f"COB-{item.internal_number:06d}"
+
+
+def _cancel_external_billing(db: Session, charge: RentCharge) -> list[BillingItem]:
+    billing_items = db.scalars(
+        select(BillingItem).where(BillingItem.charge_id == charge.id).with_for_update()
+    ).all()
+    terminal_provider_statuses = {"RECEBIDO", "MARCADO_RECEBIDO", "CANCELADO", "CANCELLED"}
+    for billing_item in billing_items:
+        provider_status = str(billing_item.provider_status or "").upper()
+        if provider_status in {"RECEBIDO", "MARCADO_RECEBIDO"}:
+            raise ValueError("A cobrança possui recebimento confirmado no provider e não pode ser cancelada.")
+        if billing_item.provider == "inter" and billing_item.provider_charge_id and provider_status not in terminal_provider_statuses:
+            provider = InterBankProvider()
+            if not provider.status().configured:
+                raise ValueError(
+                    "A cobrança já foi emitida no Banco Inter, mas a integração não está disponível para baixá-la. "
+                    "Reconfigure o provider antes de cancelar no ERP."
+                )
+            try:
+                provider.cancel_charge(billing_item.provider_charge_id)
+            except BankProviderError as exc:
+                raise ValueError(
+                    "O Banco Inter não confirmou a baixa da cobrança. O cancelamento local foi interrompido para evitar um boleto/Pix ativo fora do ERP."
+                ) from exc
+
+    now = datetime.now(timezone.utc)
+    touched_batches: set[UUID] = set()
+    for billing_item in billing_items:
+        billing_item.provider_status = "CANCELADO"
+        billing_item.last_error = None
+        billing_item.response_snapshot = {
+            **dict(billing_item.response_snapshot or {}),
+            "erp_cancellation": {"at": now.isoformat(), "charge_id": str(charge.id)},
+        }
+        touched_batches.add(billing_item.billing_batch_id)
+    for batch_id in touched_batches:
+        batch = db.get(BillingBatch, batch_id)
+        if batch is not None:
+            refresh_billing_batch_counters(db, batch)
+    return billing_items
 
 
 def _lease_code(db: Session, lease_id: UUID, *, lease_codes: dict[UUID, str] | None = None) -> str:
@@ -395,10 +438,28 @@ def cancel_charge(
         raise HTTPException(status_code=409, detail="Uma cobrança já recebida não pode ser cancelada.")
     if item.status == "cancelled":
         raise HTTPException(status_code=409, detail="Esta cobrança já foi cancelada.")
+    try:
+        billing_items = _cancel_external_billing(db, item)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     item.status = "cancelled"
     item.cancelled_at = datetime.now(timezone.utc)
     item.cancellation_reason = payload.reason.strip()
-    _audit(db, request, context, action="finance.charge.cancelled", entity_type="rent_charge", entity_id=str(item.id), reason=payload.reason.strip())
+    _audit(
+        db, request, context,
+        action="finance.charge.cancelled",
+        entity_type="rent_charge",
+        entity_id=str(item.id),
+        after={
+            "code": _charge_code(item),
+            "billing_items_cancelled": len(billing_items),
+            "external_provider_cancelled": any(
+                billing_item.provider == "inter" and bool(billing_item.provider_charge_id)
+                for billing_item in billing_items
+            ),
+        },
+        reason=payload.reason.strip(),
+    )
     db.commit()
     return _charge_response(db, _load_charge(db, context.user.organization_id, item.id))
 
