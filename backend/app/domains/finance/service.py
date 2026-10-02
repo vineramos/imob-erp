@@ -169,11 +169,11 @@ def administration_terms(db: Session, organization_id: UUID, property_id: UUID) 
         .where(
             AdministrationContract.organization_id == organization_id,
             AdministrationContract.property_id == property_id,
-            AdministrationContract.status != "cancelled",
+            AdministrationContract.status == "signed",
         )
         .order_by(AdministrationContract.created_at.desc())
     ).all()
-    selected = next((item for item in contracts if item.status == "signed"), contracts[0] if contracts else None)
+    selected = contracts[0] if contracts else None
     defaults = operational_defaults(db, organization_id)
     if selected is None:
         return {
