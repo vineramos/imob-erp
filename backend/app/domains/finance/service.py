@@ -83,6 +83,13 @@ def service_competence_for_billing(lease: LeaseContract, competence: date) -> da
     return add_months(month_start(lease_effective_start(lease)), offset)
 
 
+def billing_competence_for_service_date(lease: LeaseContract, service_date: date) -> date:
+    first_service = month_start(lease_effective_start(lease))
+    service_month = month_start(service_date)
+    offset = max(0, months_since(first_service, service_month))
+    return add_months(first_billing_competence(lease), offset)
+
+
 def lease_billable_for_competence(lease: LeaseContract, competence: date) -> bool:
     competence = month_start(competence)
     if lease.status != "signed" or lease.archive_status != "archived" or not lease.final_document_hash:
