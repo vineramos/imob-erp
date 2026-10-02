@@ -237,7 +237,13 @@ def finance_dashboard(
         critical_overdue_amount=sum((amount_due(db, item) for item in critical), Decimal("0.00")),
         received_amount=sum((money(item.paid_amount) for item in paid_competence), Decimal("0.00")),
         agency_revenue_amount=sum(
-            (money(item.settlement.agency_fee_withheld) + _charge_agency_retention(item) for item in paid_competence if item.settlement),
+            (
+                money(item.settlement.agency_fee_withheld)
+                + money(item.settlement.agency_reimbursement_amount)
+                + _charge_agency_retention(item)
+                for item in paid_competence
+                if item.settlement
+            ),
             Decimal("0.00"),
         ),
         pending_repasse_amount=money(pending_amount),
@@ -456,6 +462,8 @@ def pay_repasse(
         raise HTTPException(status_code=409, detail="Este repasse já foi pago.")
     if item.status == "settled_zero":
         raise HTTPException(status_code=409, detail="Este repasse possui valor zero.")
+    if item.status != "pending":
+        raise HTTPException(status_code=409, detail="Este repasse não está disponível para pagamento.")
     item.status = "paid"
     item.paid_at = paid_at
     item.payment_reference = (payload.payment_reference or "").strip() or None
