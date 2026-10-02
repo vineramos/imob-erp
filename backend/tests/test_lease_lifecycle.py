@@ -74,8 +74,24 @@ def test_termination_runs_exit_inspection_keys_and_releases_property(client):
     ).json()
     assert keys["keys_returned_at"]
     assert keys["exit_inspection_status"] == "finalized"
-    assert keys["financial_clearance"]["blocking_count"] == 0
-    assert keys["can_close"] is True
+    assert keys["financial_clearance"]["blocking_count"] == 1
+    assert keys["can_close"] is False
+    final_rent = next(item for item in keys["financial_clearance"]["items"] if item["source_type"] == "rent")
+    assert_response(
+        client.post(
+            f"/api/finance/charges/{final_rent['id']}/payment",
+            json={
+                "paid_amount": str(final_rent["remaining_amount"]),
+                "payment_method": "pix",
+                "payment_reference": "FINAL-RENT-LIFECYCLE",
+            },
+        )
+    )
+    ready_to_close = assert_response(
+        client.get(f"/api/lease-contracts/{lease['id']}/lifecycle")
+    ).json()
+    assert ready_to_close["financial_clearance"]["blocking_count"] == 0
+    assert ready_to_close["can_close"] is True
 
     closed = assert_response(
         client.post(
