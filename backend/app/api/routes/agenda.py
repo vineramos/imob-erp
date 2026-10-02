@@ -1114,21 +1114,12 @@ def dashboard_overview(
 ) -> DashboardOverviewResponse:
     org = context.user.organization_id
     today = datetime.now(timezone.utc).date(); limit = today + timedelta(days=120)
-    managed_property_ids = (
-        select(AdministrationContract.property_id.label("property_id"))
-        .where(
+    administered_properties = db.scalar(
+        select(func.count(func.distinct(AdministrationContract.property_id))).where(
             AdministrationContract.organization_id == org,
             AdministrationContract.status == "signed",
         )
-        .union(
-            select(LeaseContract.property_id.label("property_id")).where(
-                LeaseContract.organization_id == org,
-                LeaseContract.status == "signed",
-            )
-        )
-        .subquery()
-    )
-    administered_properties = db.scalar(select(func.count()).select_from(managed_property_ids)) or 0
+    ) or 0
     available_properties = db.scalar(select(func.count(Property.id)).where(Property.organization_id == org, Property.status == "available")) or 0
     active_leases = db.scalar(select(func.count(LeaseContract.id)).where(LeaseContract.organization_id == org, LeaseContract.status == "signed")) or 0
     expiring_leases = db.scalar(select(func.count(LeaseContract.id)).where(LeaseContract.organization_id == org, LeaseContract.status == "signed", LeaseContract.end_date.between(today, limit))) or 0
