@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session, selectinload
 from app.core.database import get_db
 from app.domains.finance.late_charges import amount_due, charge_late_breakdown, record_payment_with_late_charges
 from app.domains.finance.models import FinancialSettlement, OwnerRepasse, RentCharge
+from app.domains.finance.monthly_cycle import is_competence_closed
 from app.domains.finance.pdf import build_owner_statement_pdf
 from app.domains.finance.schemas import (
     ChargeCancellationRequest,
@@ -279,6 +280,8 @@ def generate_monthly_charges(
     context: UserContext = Depends(require_permission("finance.charge.create")),
     db: Session = Depends(get_db),
 ) -> GenerateChargesResponse:
+    if is_competence_closed(db, organization_id=context.user.organization_id, value=payload.competence):
+        raise HTTPException(status_code=409, detail="Esta competência está fechada. Reabra o período antes de gerar cobranças.")
     created, skipped_existing, skipped_ineligible = generate_charges(
         db,
         organization_id=context.user.organization_id,
@@ -331,6 +334,8 @@ def receive_charge(
     db: Session = Depends(get_db),
 ) -> ChargeResponse:
     item = _load_charge(db, context.user.organization_id, charge_id)
+    if is_competence_closed(db, organization_id=context.user.organization_id, value=item.competence):
+        raise HTTPException(status_code=409, detail="Esta competência está fechada. Reabra o período antes de registrar o recebimento.")
     if payload.paid_at is not None and payload.paid_at > datetime.now(timezone.utc):
         raise HTTPException(status_code=422, detail="A data do recebimento não pode estar no futuro.")
     try:
@@ -376,6 +381,8 @@ def cancel_charge(
     db: Session = Depends(get_db),
 ) -> ChargeResponse:
     item = _load_charge(db, context.user.organization_id, charge_id)
+    if is_competence_closed(db, organization_id=context.user.organization_id, value=item.competence):
+        raise HTTPException(status_code=409, detail="Esta competência está fechada. Reabra o período antes de cancelar a cobrança.")
     if item.status == "paid":
         raise HTTPException(status_code=409, detail="Uma cobrança já recebida não pode ser cancelada.")
     if item.status == "cancelled":
@@ -437,6 +444,9 @@ def pay_repasse(
     )
     if item is None:
         raise HTTPException(status_code=404, detail="Repasse não encontrado.")
+    charge = db.get(RentCharge, item.charge_id)
+    if charge is not None and is_competence_closed(db, organization_id=context.user.organization_id, value=charge.competence):
+        raise HTTPException(status_code=409, detail="Esta competência está fechada. Reabra o período antes de executar o repasse.")
     paid_at = payload.paid_at or datetime.now(timezone.utc)
     if paid_at > datetime.now(timezone.utc):
         raise HTTPException(status_code=422, detail="A data do pagamento não pode estar no futuro.")
