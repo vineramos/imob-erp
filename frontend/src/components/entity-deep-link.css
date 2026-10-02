@@ -1,0 +1,109 @@
+.entity-deep-link-layer{position:fixed;inset:66px 0 0 0;z-index:120;background:rgba(15,23,42,.18);display:flex;justify-content:flex-end;backdrop-filter:blur(1.5px)}
+.entity-deep-link{width:min(500px,calc(100vw - 32px));height:100%;border-radius:0;border-top:0;border-bottom:0;border-right:0;box-shadow:-18px 0 46px rgba(15,23,42,.14);display:flex;flex-direction:column;overflow:hidden;background:var(--surface,#fff)}
+.entity-deep-link-header{display:flex;align-items:flex-start;justify-content:space-between;gap:22px;padding:25px 26px 21px;border-bottom:1px solid var(--border,#e5e7eb)}
+.entity-deep-link-header h2{margin:5px 0 5px;font-size:22px;line-height:1.2;color:var(--text-strong,#111827)}
+.entity-deep-link-header p{margin:0;color:var(--text-muted,#64748b);font-size:13px;line-height:1.5}
+.entity-deep-link-close{width:34px;height:34px;flex:0 0 34px;border:1px solid var(--border,#e5e7eb);border-radius:10px;background:var(--surface,#fff);display:grid;place-items:center;color:var(--text-muted,#64748b);cursor:pointer}
+.entity-deep-link-close:hover{background:var(--surface-soft,#f8fafc);color:var(--text-strong,#111827)}
+.entity-deep-link-state{margin:auto;padding:34px;display:flex;flex-direction:column;align-items:center;text-align:center;gap:8px;color:var(--text-muted,#64748b)}
+.entity-deep-link-state strong{color:var(--text-strong,#111827)}
+.entity-deep-link-state.error span{max-width:330px;line-height:1.5}
+.entity-deep-link-state.error .button{margin-top:8px}
+.entity-deep-link-spinner{animation:entityDeepLinkSpin .85s linear infinite}
+@keyframes entityDeepLinkSpin{to{transform:rotate(360deg)}}
+.entity-deep-link-summary{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:18px 26px;background:var(--surface-soft,#f8fafc);border-bottom:1px solid var(--border,#e5e7eb)}
+.entity-deep-link-summary>div{display:flex;flex-direction:column;gap:3px}.entity-deep-link-summary span{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted,#64748b)}
+.entity-deep-link-summary strong{font-size:16px;color:var(--text-strong,#111827)}
+.entity-deep-link-details{padding:8px 26px 22px;overflow:auto;flex:1}
+.entity-deep-link-detail{padding:14px 0;border-bottom:1px solid var(--border-soft,#eef2f7);display:grid;grid-template-columns:135px minmax(0,1fr);gap:18px;align-items:start}
+.entity-deep-link-detail:last-child{border-bottom:0}.entity-deep-link-detail span{font-size:12px;color:var(--text-muted,#64748b)}
+.entity-deep-link-detail strong{font-size:13px;line-height:1.5;font-weight:600;color:var(--text-strong,#111827);overflow-wrap:anywhere;white-space:pre-wrap}
+.entity-deep-link-actions{padding:17px 26px;border-top:1px solid var(--border,#e5e7eb);display:flex;justify-content:flex-end;gap:10px;background:var(--surface,#fff)}
+@media(max-width:720px){.entity-deep-link-layer{inset:0}.entity-deep-link{width:100%;border:0}.entity-deep-link-header{padding:20px}.entity-deep-link-details{padding-left:20px;padding-right:20px}.entity-deep-link-summary{padding-left:20px;padding-right:20px}.entity-deep-link-actions{padding:15px 20px;flex-direction:column-reverse}.entity-deep-link-actions .button{justify-content:center}.entity-deep-link-detail{grid-template-columns:1fr;gap:4px}}
+
+
+/* Person deep-link refinement */
+.entity-deep-link-person .entity-deep-link-header{
+  padding:24px 26px 20px;
+  background:linear-gradient(180deg,color-mix(in srgb,var(--surface-soft,#f8fafc) 72%,#fff),#fff);
+}
+.entity-deep-link-identity{display:flex;align-items:flex-start;gap:12px;min-width:0}
+.entity-deep-link-avatar{
+  width:40px;height:40px;flex:0 0 40px;
+  display:grid;place-items:center;
+  border:1px solid color-mix(in srgb,#b88a35 28%,var(--border,#e5e7eb));
+  border-radius:12px;
+  background:color-mix(in srgb,#b88a35 8%,#fff);
+  color:#9a6f28;
+}
+.entity-deep-link-person .entity-deep-link-header h2{font-size:20px;letter-spacing:-.02em}
+.entity-deep-link-person .entity-deep-link-header p{font-size:12px;max-width:360px}
+.entity-deep-link-person .entity-deep-link-summary{
+  margin:14px 18px 0;
+  padding:14px 16px;
+  border:1px solid var(--border,#e5e7eb);
+  border-radius:12px;
+  background:var(--surface-soft,#f8fafc);
+}
+.entity-deep-link-person .entity-deep-link-details{
+  padding:10px 20px 22px;
+}
+.entity-deep-link-person .entity-deep-link-detail{
+  grid-template-columns:118px minmax(0,1fr);
+  gap:16px;
+  padding:13px 2px;
+}
+.entity-deep-link-person .entity-deep-link-detail span{
+  font-size:11px;
+  color:var(--text-muted,#64748b);
+}
+.entity-deep-link-person .entity-deep-link-detail strong{
+  font-size:12.5px;
+  font-weight:650;
+  color:var(--text-strong,#111827);
+}
+.entity-deep-link-tags{
+  display:flex;
+  flex-wrap:wrap;
+  gap:6px;
+}
+.entity-deep-link-tags i{
+  padding:4px 7px;
+  border:1px solid color-mix(in srgb,#b88a35 24%,var(--border,#e5e7eb));
+  border-radius:999px;
+  background:color-mix(in srgb,#b88a35 7%,#fff);
+  color:#7b5a22;
+  font-size:9px;
+  font-style:normal;
+  font-weight:750;
+}
+.entity-deep-link-person .entity-deep-link-actions{
+  background:color-mix(in srgb,var(--surface-soft,#f8fafc) 55%,#fff);
+}
+@media(max-width:720px){
+  .entity-deep-link-person .entity-deep-link-summary{margin-inline:14px}
+  .entity-deep-link-person .entity-deep-link-detail{grid-template-columns:1fr;gap:4px}
+}
+
+/* Person quick-copy controls */
+.entity-deep-link-detail-value{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;min-width:0}
+.entity-deep-link-detail-value>strong{min-width:0;flex:1}
+.entity-deep-link-copy-detail{flex:0 0 auto;min-height:26px;border:1px solid var(--border,#e5e7eb);border-radius:7px;background:var(--surface,#fff);color:var(--text-muted,#64748b);padding:0 7px;display:inline-flex;align-items:center;gap:4px;font-size:9px;font-weight:650;cursor:pointer}
+.entity-deep-link-copy-detail:hover{background:var(--surface-soft,#f8fafc);color:var(--text-strong,#111827)}
+.entity-deep-link-copy-detail span{font-size:9px!important;color:inherit!important}
+@media(max-width:720px){.entity-deep-link-detail-value{align-items:center}.entity-deep-link-copy-detail span{display:none}}
+
+/* Ensure quick-copy affordances are always visible in person detail rows. */
+.entity-deep-link-person .entity-deep-link-detail-value{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto;
+  align-items:center;
+  gap:8px;
+}
+.entity-deep-link-person .entity-deep-link-copy-detail{
+  opacity:1;
+  visibility:visible;
+  min-width:66px;
+  justify-content:center;
+}
+.entity-deep-link-person .entity-deep-link-copy-detail svg{flex:0 0 auto}

@@ -1,0 +1,152 @@
+import { CheckCircle2, ChevronLeft, ChevronRight, Download, Eye, FileCheck2, Percent, Plus, RefreshCw, Search, Settings2, UserRoundPlus, X, XCircle } from 'lucide-react'
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { ApiError, apiBlobRequest, apiRequest } from '../../api/client'
+import type { Person } from '../../api/types'
+import { BrokerCreateModal } from '../properties/BrokerCreateModal'
+import { CommissionFlowDemo } from './CommissionFlowDemo'
+import { shiftMonth } from './finance-period'
+import './finance-advanced.css'
+
+type Rule={id:string;code:string;name:string;event_type:string;basis:string;calculation_type:string;value:number;beneficiary_type:string;beneficiary_person_id:string;beneficiary_name:string;due_days:number;priority:number;is_active:boolean;notes:string|null}
+type Entry={id:string;code:string;rule_id:string;source_code:string;beneficiary_name:string;beneficiary_type:string;competence:string;basis_amount:number;amount:number;due_date:string;status:string;financial_title_id:string|null;paid_at:string|null}
+type BatchItem={id:string;commission_entry_id:string;amount:number;snapshot:Record<string,unknown>}
+type Batch={id:string;code:string;beneficiary_person_id:string;beneficiary_name:string;competence:string;status:string;total_amount:number;broker_legal_name:string|null;broker_document_number:string|null;organization_legal_name:string;organization_document_number:string|null;service_description:string;report_issued_at:string|null;invoice_filename:string|null;invoice_uploaded_at:string|null;finance_review_notes:string|null;approved_at:string|null;payment_due_date:string|null;paid_at:string|null;payment_reference:string|null;items:BatchItem[]}
+const money=(v:number)=>Number(v||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'})
+const eventLabel:Record<string,string>={first_rent:'Primeiro aluguel',recurring:'Recorrente',intermediation:'Intermediação'}
+const basisLabel:Record<string,string>={rent:'Aluguel',administration_fee:'Taxa de administração',intermediation_fee:'Intermediação',agency_revenue:'Receita da imobiliária'}
+
+export function FinanceCommissionsPanel({permissions,month,setMonth}:{permissions:string[];month:string;setMonth:(next:string|((month:string)=>string))=>void}){
+ const canPrepare=permissions.includes('finance.payment.prepare'),canApprove=permissions.includes('finance.payment.approve'),canCreateBroker=permissions.includes('properties.create')
+ const [rules,setRules]=useState<Rule[]>([]),[entries,setEntries]=useState<Entry[]>([]),[batches,setBatches]=useState<Batch[]>([]),[people,setPeople]=useState<Person[]>([]),[open,setOpen]=useState(false),[brokerOpen,setBrokerOpen]=useState(false),[demoOpen,setDemoOpen]=useState(false),[saving,setSaving]=useState(false),[error,setError]=useState(''),[modalError,setModalError]=useState(''),[success,setSuccess]=useState('')
+ const [name,setName]=useState('Comissão de locação'),[eventType,setEventType]=useState('first_rent'),[basis,setBasis]=useState('agency_revenue'),[calc,setCalc]=useState('percent'),[value,setValue]=useState('20'),[beneficiaryType,setBeneficiaryType]=useState('broker'),[personId,setPersonId]=useState(''),[dueDays,setDueDays]=useState('0')
+ const [view,setView]=useState<'entries'|'batches'|'rules'>('entries')
+ const [query,setQuery]=useState('')
+ const [statusFilter,setStatusFilter]=useState('all')
+ const [selectedId,setSelectedId]=useState<string|null>(null)
+ const [loading,setLoading]=useState(true)
+ const competence=`${month}-01`
+ // One initial month-close synchronization; never re-run a write on filter changes or manual refresh.
+ const ensured=useRef(false)
+ const requestId=useRef(0)
+ const peopleRequestId=useRef(0)
+ const rulesCache=useRef<Rule[]|null>(null)
+ const [peopleLoading,setPeopleLoading]=useState(false)
+ useEffect(()=>{
+   if(!canPrepare||ensured.current)return
+   ensured.current=true
+   const now=new Date(),previous=new Date(now.getFullYear(),now.getMonth()-1,1)
+   const previousCompetence=`${previous.getFullYear()}-${String(previous.getMonth()+1).padStart(2,'0')}-01`
+   void apiRequest(`/finance/advanced/commissions/batches/ensure?competence=${previousCompetence}`,{method:'POST'}).catch(()=>undefined)
+ },[canPrepare])
+ const load=useCallback(async()=>{
+   const id=++requestId.current
+   setLoading(true);setError('')
+   try{
+     const [r,e,b]=await Promise.all([
+       rulesCache.current?Promise.resolve(rulesCache.current):apiRequest<Rule[]>('/finance/advanced/commissions/rules'),
+       apiRequest<Entry[]>(`/finance/advanced/commissions?competence=${competence}`),
+       apiRequest<Batch[]>(`/finance/advanced/commissions/batches?competence=${competence}`),
+     ])
+     if(id!==requestId.current)return
+     rulesCache.current=r;setRules(r);setEntries(e);setBatches(b)
+   }catch(cause){
+     if(id===requestId.current)setError(cause instanceof ApiError?cause.detail:'Não foi possível carregar as comissões.')
+   }finally{
+     if(id===requestId.current)setLoading(false)
+   }
+ },[competence])
+ useEffect(()=>{void load();return()=>{requestId.current+=1}},[load])
+ async function loadPeople(){
+   const id=++peopleRequestId.current
+   setPeopleLoading(true);setModalError('')
+   try{
+     const [brokers,referrers]=await Promise.all([
+       apiRequest<Person[]>('/people?role=broker'),
+       apiRequest<Person[]>('/people?role=referrer'),
+     ])
+     if(id!==peopleRequestId.current)return
+     const persons=[...new Map([...brokers,...referrers].map(person=>[person.id,person])).values()]
+     setPeople(persons)
+     setPersonId(current=>persons.some(person=>person.id===current)?current:persons[0]?.id||'')
+   }catch(cause){
+     if(id===peopleRequestId.current)setModalError(cause instanceof ApiError?cause.detail:'Não foi possível carregar os beneficiários.')
+   }finally{
+     if(id===peopleRequestId.current)setPeopleLoading(false)
+   }
+ }
+ function openRuleModal(){setModalError('');setOpen(true);void loadPeople()}
+
+ useEffect(()=>{if(!open)return;const close=(event:KeyboardEvent)=>{if(event.key==='Escape'&&!saving)setOpen(false)};window.addEventListener('keydown',close);return()=>window.removeEventListener('keydown',close)},[open,saving])
+ async function createRule(ev:FormEvent){ev.preventDefault();if(!personId)return;setSaving(true);setModalError('');try{await apiRequest('/finance/advanced/commissions/rules',{method:'POST',body:JSON.stringify({name,event_type:eventType,basis,calculation_type:calc,value:Number(value.replace(',','.')),beneficiary_type:beneficiaryType,beneficiary_person_id:personId,property_id:null,lease_contract_id:null,due_days:Number(dueDays)||0,priority:100,notes:null})});setOpen(false);setSuccess('Regra de comissão criada.');rulesCache.current=null;await load()}catch(cause){setModalError(cause instanceof ApiError?cause.detail:'Não foi possível criar a regra.')}finally{setSaving(false)}}
+ async function generate(){const [y,m]=month.split('-').map(Number);const end=new Date(y,m,0).toISOString().slice(0,10);setSaving(true);setError('');try{const created=await apiRequest<Entry[]>(`/finance/advanced/commissions/generate?start_date=${month}-01&end_date=${end}`,{method:'POST'});setSuccess(`${created.length} comissão(ões) gerada(s).`);await load()}catch(cause){setError(cause instanceof ApiError?cause.detail:'Não foi possível gerar comissões.')}finally{setSaving(false)}}
+ async function action(entry:Entry,type:'approve'|'cancel'){setSaving(true);setError('');try{await apiRequest(`/finance/advanced/commissions/${entry.id}/${type}`,{method:'POST'});await load()}catch(cause){setError(cause instanceof ApiError?cause.detail:'Não foi possível atualizar a comissão.')}finally{setSaving(false)}}
+ async function batchAction(batch:Batch,type:'approve'|'return'){setSaving(true);setError('');try{if(type==='return'){const reason=window.prompt('Motivo da devolução para correção:')?.trim();if(!reason)return;await apiRequest(`/finance/advanced/commissions/batches/${batch.id}/return?reason=${encodeURIComponent(reason)}`,{method:'POST'})}else await apiRequest(`/finance/advanced/commissions/batches/${batch.id}/approve`,{method:'POST'});await load()}catch(cause){setError(cause instanceof ApiError?cause.detail:'Não foi possível atualizar o lote.')}finally{setSaving(false)}}
+ async function downloadInvoice(batch:Batch){try{const blob=await apiBlobRequest(`/finance/advanced/commissions/batches/${batch.id}/invoice`);const url=URL.createObjectURL(blob);window.open(url,'_blank','noopener,noreferrer');setTimeout(()=>URL.revokeObjectURL(url),30000)}catch(cause){setError(cause instanceof ApiError?cause.detail:'Não foi possível abrir a Nota Fiscal.')}}
+ const entryStatusLabel:Record<string,string>={pending:'Pendente',approved:'Aprovada',paid:'Paga',cancelled:'Cancelada'}
+ const batchStatusLabel:Record<string,string>={report_released:'Relatório liberado',report_issued:'Relatório emitido',awaiting_finance_approval:'Aguardando aprovação financeira',returned:'Devolvido para correção',scheduled:'Programado para pagamento',paid:'Pago',cancelled:'Cancelado'}
+ const batchStatusClass=(status:string)=>status==='paid'?'success':status==='scheduled'?'warning':status==='awaiting_finance_approval'?'warning':status==='returned'?'danger':'neutral'
+ function brokerCreated(person:Person){setPersonId(person.id);setSuccess(`${person.name} cadastrado como corretor.`);if(open)void loadPeople()}
+ const pending=entries.filter(e=>!['paid','cancelled'].includes(e.status)),total=pending.reduce((s,e)=>s+Number(e.amount||0),0),paid=entries.filter(e=>e.status==='paid').reduce((s,e)=>s+Number(e.amount||0),0)
+ const awaitingFinance=batches.filter(b=>b.status==='awaiting_finance_approval'),scheduled=batches.filter(b=>b.status==='scheduled')
+ const awaitingAmount=awaitingFinance.reduce((sum,b)=>sum+Number(b.total_amount||0),0),scheduledAmount=scheduled.reduce((sum,b)=>sum+Number(b.total_amount||0),0)
+ const normalized=query.trim().toLocaleLowerCase('pt-BR')
+ const currentBatches=batches
+ const visibleEntries=useMemo(()=>entries.filter(e=>(statusFilter==='all'||e.status===statusFilter)&&(!normalized||[e.code,e.source_code,e.beneficiary_name].join(' ').toLocaleLowerCase('pt-BR').includes(normalized))),[entries,normalized,statusFilter])
+ const visibleBatches=useMemo(()=>currentBatches.filter(b=>(statusFilter==='all'||b.status===statusFilter)&&(!normalized||[b.code,b.beneficiary_name,b.broker_legal_name||''].join(' ').toLocaleLowerCase('pt-BR').includes(normalized))),[currentBatches,normalized,statusFilter])
+ const visibleRules=useMemo(()=>rules.filter(r=>(statusFilter==='all'||(statusFilter==='active'&&r.is_active)||(statusFilter==='inactive'&&!r.is_active))&&(!normalized||[r.code,r.name,r.beneficiary_name].join(' ').toLocaleLowerCase('pt-BR').includes(normalized))),[rules,normalized,statusFilter])
+ const activeEntry=visibleEntries.find(e=>e.id===selectedId)||visibleEntries[0]||null
+ const activeBatch=visibleBatches.find(b=>b.id===selectedId)||visibleBatches[0]||null
+ const activeRule=visibleRules.find(r=>r.id===selectedId)||visibleRules[0]||null
+ const activeEntryRule=activeEntry?rules.find(rule=>rule.id===activeEntry.rule_id)||null:null
+ const activeBatchStep=activeBatch?Math.max(0,['report_released','report_issued','awaiting_finance_approval','scheduled','paid'].indexOf(activeBatch.status)):0
+ return <section className="workspace finance-advanced-workspace commissions-workspace"><div className="page-heading finance-heading"><div><span className="eyebrow">Financeiro · Comissões</span><h1>Comissões</h1><p>Da origem do negócio ao pagamento: cálculo, lote mensal, nota fiscal, aprovação financeira e baixa.</p></div><div className="heading-actions"><button className="icon-button" type="button" onClick={()=>setMonth(current=>shiftMonth(current,-1))} aria-label="Competência anterior" title="Competência anterior"><ChevronLeft size={16}/></button><input className="finance-compact-input" type="month" value={month} onChange={e=>setMonth(e.target.value)}/><button className="icon-button" type="button" onClick={()=>setMonth(current=>shiftMonth(current,1))} aria-label="Próxima competência" title="Próxima competência"><ChevronRight size={16}/></button><button className="button secondary" onClick={()=>void load()}><RefreshCw size={14}/> Atualizar</button><button className="button secondary" type="button" onClick={()=>setDemoOpen(true)}><Eye size={14}/> Entender fluxo</button>{canCreateBroker&&<button className="button secondary" onClick={()=>setBrokerOpen(true)}><UserRoundPlus size={14}/> Novo corretor</button>}{canPrepare&&<button className="button secondary" onClick={()=>void generate()} disabled={saving}><Percent size={14}/> Gerar período</button>}{canPrepare&&<button className="button primary" onClick={openRuleModal}><Plus size={14}/> Nova regra</button>}</div></div>{error&&<div className="form-alert danger-alert">{error}</div>}{success&&<div className="form-alert success-alert">{success}</div>}
+ <div className="finance-advanced-metrics commission-metrics"><article className="panel"><span>A pagar</span><strong>{money(total)}</strong><small>{pending.length} comissão(ões) abertas</small></article><article className="panel"><span>Aguardando Financeiro</span><strong>{money(awaitingAmount)}</strong><small>{awaitingFinance.length} lote(s) para análise</small></article><article className="panel"><span>Programado</span><strong>{money(scheduledAmount)}</strong><small>{scheduled.length} lote(s) aprovado(s)</small></article><article className="panel metric-positive"><span>Pago no mês</span><strong>{money(paid)}</strong><small>Baixa financeira confirmada</small></article><article className="panel"><span>Regras ativas</span><strong>{rules.filter(r=>r.is_active).length}</strong><small>{rules.length} cadastrada(s)</small></article></div>
+
+ <div className="commission-view-tabs" role="group" aria-label="Fluxo de comissões">
+  <button type="button" className={view==='entries'?'active':''} onClick={()=>{setView('entries');setSelectedId(null);setQuery('');setStatusFilter('all')}}>Comissões geradas <span>{entries.length}</span></button>
+  <button type="button" className={view==='batches'?'active':''} onClick={()=>{setView('batches');setSelectedId(null);setQuery('');setStatusFilter('all')}}>Lotes e notas fiscais <span>{currentBatches.length}</span></button>
+  <button type="button" className={view==='rules'?'active':''} onClick={()=>{setView('rules');setSelectedId(null);setQuery('');setStatusFilter('all')}}>Regras <span>{rules.length}</span></button>
+ </div>
+ <div className="commission-master-detail">
+  <aside className="panel commission-directory">
+   <div className="commission-directory-tools"><label className="commission-search"><Search size={15}/><input aria-label="Pesquisar comissões" value={query} onChange={e=>setQuery(e.target.value)} placeholder="Buscar beneficiário, código ou origem..."/></label><select aria-label="Filtrar status" value={statusFilter} onChange={e=>{setStatusFilter(e.target.value);setSelectedId(null)}}>{view==='entries'?<><option value="all">Todos os status</option><option value="pending">Pendentes</option><option value="approved">Aprovadas</option><option value="paid">Pagas</option><option value="cancelled">Canceladas</option></>:view==='batches'?<><option value="all">Todos os status</option><option value="report_released">Relatório liberado</option><option value="report_issued">Relatório emitido</option><option value="awaiting_finance_approval">Aguardando Financeiro</option><option value="returned">Devolvidos</option><option value="scheduled">Programados</option><option value="paid">Pagos</option></>:<><option value="all">Todas as regras</option><option value="active">Ativas</option><option value="inactive">Inativas</option></>}</select></div>
+   <small>{view==='entries'?visibleEntries.length:view==='batches'?visibleBatches.length:visibleRules.length} registro(s)</small>
+   <div className="commission-directory-list">
+    {view==='entries'&&visibleEntries.map(e=><button key={e.id} type="button" aria-pressed={activeEntry?.id===e.id} className={'commission-directory-item '+(activeEntry?.id===e.id?'active':'')} onClick={()=>setSelectedId(e.id)}>
+      <span className="commission-item-row"><strong>{e.beneficiary_name}</strong><i className={'status-badge '+(e.status==='paid'?'success':e.status==='cancelled'?'neutral':'warning')}>{entryStatusLabel[e.status]||e.status}</i></span>
+      <small>{e.code} · {e.source_code}</small><span className="commission-item-row"><b>{money(e.amount)}</b><small>{e.due_date.slice(0,10).split('-').reverse().join('/')}</small></span>
+    </button>)}
+    {view==='batches'&&visibleBatches.map(b=><button key={b.id} type="button" aria-pressed={activeBatch?.id===b.id} className={'commission-directory-item '+(activeBatch?.id===b.id?'active':'')} onClick={()=>setSelectedId(b.id)}>
+      <span className="commission-item-row"><strong>{b.beneficiary_name}</strong><i className={'status-badge '+batchStatusClass(b.status)}>{batchStatusLabel[b.status]||b.status}</i></span>
+      <small>{b.code} · NF {b.invoice_filename?'anexada':'pendente'}</small><span className="commission-item-row"><b>{money(b.total_amount)}</b><small>{b.payment_due_date?b.payment_due_date.split('-').reverse().join('/'):'Sem previsão'}</small></span>
+    </button>)}
+    {view==='rules'&&visibleRules.map(r=><button key={r.id} type="button" aria-pressed={activeRule?.id===r.id} className={'commission-directory-item '+(activeRule?.id===r.id?'active':'')} onClick={()=>setSelectedId(r.id)}>
+      <span className="commission-item-row"><strong>{r.name}</strong><i className={'status-badge '+(r.is_active?'success':'neutral')}>{r.is_active?'Ativa':'Inativa'}</i></span>
+      <small>{r.code} · {r.beneficiary_name}</small><span className="commission-item-row"><b>{r.calculation_type==='percent'?r.value+'%':money(r.value)}</b><small>{eventLabel[r.event_type]||r.event_type}</small></span>
+    </button>)}
+    {!loading&&!(view==='entries'?visibleEntries.length:view==='batches'?visibleBatches.length:visibleRules.length)&&<p className="commission-empty">Nenhum registro encontrado.</p>}
+   </div>
+  </aside>
+  <section className="panel commission-detail" aria-label="Ficha da comissão">
+   {loading?<div className="commission-empty">Carregando...</div>:view==='entries'&&activeEntry?<>
+    <header className="commission-detail-header"><div><span className="eyebrow">COMISSÃO · {activeEntry.code}</span><h2>{activeEntry.beneficiary_name}</h2><p>Origem: {activeEntry.source_code}</p></div><i className={'status-badge '+(activeEntry.status==='paid'?'success':'warning')}>{entryStatusLabel[activeEntry.status]||activeEntry.status}</i></header>
+    <div className="commission-detail-strip commission-detail-strip-four"><div><span>Comissão</span><strong>{money(activeEntry.amount)}</strong></div><div><span>Base de cálculo</span><strong>{money(activeEntry.basis_amount)}</strong></div><div><span>Regra aplicada</span><strong>{activeEntryRule?(activeEntryRule.calculation_type==='percent'?activeEntryRule.value+'%':money(activeEntryRule.value)):'—'}</strong></div><div><span>Vencimento</span><strong>{activeEntry.due_date.split('-').reverse().join('/')}</strong></div></div>
+    <div className="commission-detail-body"><article className="commission-detail-card"><h3>Origem e liquidação</h3><div className="commission-detail-facts"><div><span>Beneficiário</span><strong>{activeEntry.beneficiary_name}</strong></div><div><span>Origem</span><strong>{activeEntry.source_code}</strong></div><div><span>Situação</span><strong>{entryStatusLabel[activeEntry.status]||activeEntry.status}</strong></div><div><span>Evento</span><strong>{activeEntryRule?eventLabel[activeEntryRule.event_type]||activeEntryRule.event_type:'—'}</strong></div><div><span>Base</span><strong>{activeEntryRule?basisLabel[activeEntryRule.basis]||activeEntryRule.basis:'—'}</strong></div><div><span>Baixa financeira</span><strong>{activeEntry.paid_at?new Date(activeEntry.paid_at).toLocaleString('pt-BR'):'Pendente'}</strong></div><div><span>Título financeiro</span><strong>{activeEntry.financial_title_id?'Vinculado':'Não vinculado'}</strong></div></div></article>
+    <article className="commission-detail-card"><h3>Ações financeiras</h3><p>As ações respeitam as permissões atuais do ERP.</p><div className="commission-actions">{canApprove&&activeEntry.status==='pending'&&<button type="button" className="button primary" disabled={saving} onClick={()=>void action(activeEntry,'approve')}><CheckCircle2 size={14}/> Aprovar</button>}{canApprove&&!['paid','cancelled'].includes(activeEntry.status)&&<button type="button" className="button secondary" disabled={saving} onClick={()=>void action(activeEntry,'cancel')}><XCircle size={14}/> Cancelar</button>}</div></article></div>
+   </>:view==='batches'&&activeBatch?<>
+    <header className="commission-detail-header"><div><span className="eyebrow">LOTE · {activeBatch.code}</span><h2>{activeBatch.beneficiary_name}</h2><p>{activeBatch.broker_legal_name||'Razão social não informada'} · {activeBatch.broker_document_number||'Documento não informado'}</p></div><i className={'status-badge '+batchStatusClass(activeBatch.status)}>{batchStatusLabel[activeBatch.status]||activeBatch.status}</i></header>
+    <div className="commission-detail-strip"><div><span>Total</span><strong>{money(activeBatch.total_amount)}</strong></div><div><span>Competência</span><strong>{activeBatch.competence.slice(0,7).split('-').reverse().join('/')}</strong></div><div><span>Pagamento previsto</span><strong>{activeBatch.payment_due_date?activeBatch.payment_due_date.split('-').reverse().join('/'):'A definir'}</strong></div></div>
+    <div className="commission-flow-progress" aria-label="Fluxo do lote">{['Relatório','NF','Financeiro','Pagamento','Pago'].map((label,index)=><div key={label} className={index<=activeBatchStep?'done':''}><span>{index<activeBatchStep?<CheckCircle2 size={12}/>:index+1}</span><strong>{label}</strong></div>)}</div>
+    <div className="commission-batch-items"><div className="commission-batch-items-head"><strong>Origem das comissões</strong><span>{activeBatch.items.length} lançamento(s)</span></div>{activeBatch.items.map(item=>{const snapshot=item.snapshot||{};const propertyCode=String(snapshot.property_code||'—'),tenant=String(snapshot.tenant_name||'Cliente não informado'),lease=String(snapshot.lease_code||snapshot.source_code||'—'),basisAmount=Number(snapshot.basis_amount||0);return <div className="commission-batch-item-row" key={item.id}><div><span>{lease}</span><strong>Imóvel #{propertyCode}</strong><small>{tenant}</small></div><div><span>Base</span><strong>{money(basisAmount)}</strong></div><div><span>Comissão</span><strong>{money(item.amount)}</strong></div></div>})}</div>
+    <div className="commission-detail-body"><article className="commission-detail-card"><h3>Documentos e aprovação</h3><div className="commission-detail-facts"><div><span>Relatório</span><strong>{activeBatch.report_issued_at?'Emitido':'Pendente'}</strong></div><div><span>Nota fiscal</span><strong>{activeBatch.invoice_filename||'Não anexada'}</strong></div><div><span>Aprovação</span><strong>{activeBatch.approved_at?new Date(activeBatch.approved_at).toLocaleString('pt-BR'):'Pendente'}</strong></div><div><span>Pagamento</span><strong>{activeBatch.paid_at?new Date(activeBatch.paid_at).toLocaleString('pt-BR'):'Pendente'}</strong></div><div><span>Referência</span><strong>{activeBatch.payment_reference||'Não informada'}</strong></div><div><span>Itens</span><strong>{activeBatch.items.length}</strong></div></div>{activeBatch.finance_review_notes&&<p className="danger-text">{activeBatch.finance_review_notes}</p>}</article>
+    <article className="commission-detail-card"><h3>Conferência financeira</h3><p>Nota fiscal, devolução e aprovação do lote original.</p><div className="commission-actions">{activeBatch.invoice_filename&&<button type="button" className="button secondary" onClick={()=>void downloadInvoice(activeBatch)}><Download size={14}/> Ver NF</button>}{canApprove&&activeBatch.status==='awaiting_finance_approval'&&<><button type="button" className="button secondary" disabled={saving} onClick={()=>void batchAction(activeBatch,'return')}><XCircle size={14}/> Devolver</button><button type="button" className="button primary" disabled={saving} onClick={()=>void batchAction(activeBatch,'approve')}><CheckCircle2 size={14}/> Aprovar lote</button></>}</div></article></div>
+   </>:view==='rules'&&activeRule?<>
+    <header className="commission-detail-header"><div><span className="eyebrow">REGRA · {activeRule.code}</span><h2>{activeRule.name}</h2><p>{activeRule.beneficiary_name}</p></div><i className={'status-badge '+(activeRule.is_active?'success':'neutral')}>{activeRule.is_active?'Ativa':'Inativa'}</i></header>
+    <div className="commission-detail-body"><article className="commission-detail-card"><h3>Parâmetros</h3><div className="commission-detail-facts"><div><span>Evento</span><strong>{eventLabel[activeRule.event_type]||activeRule.event_type}</strong></div><div><span>Base</span><strong>{basisLabel[activeRule.basis]||activeRule.basis}</strong></div><div><span>Valor</span><strong>{activeRule.calculation_type==='percent'?activeRule.value+'%':money(activeRule.value)}</strong></div><div><span>Prazo</span><strong>D+{activeRule.due_days}</strong></div><div><span>Beneficiário</span><strong>{activeRule.beneficiary_name}</strong></div><div><span>Prioridade</span><strong>{activeRule.priority}</strong></div></div></article></div>
+   </>:<div className="commission-empty">Selecione um registro para visualizar a ficha.</div>}
+  </section>
+ </div>
+ {open&&<div className="portfolio-modal-backdrop" onMouseDown={e=>{if(e.currentTarget===e.target&&!saving)setOpen(false)}}><form className="panel portfolio-modal commission-rule-modal" onSubmit={createRule} role="dialog" aria-modal="true"><div className="portfolio-modal-header"><div><span className="eyebrow">Regra de comissão</span><h2>Nova regra</h2><p>A regra pode ser alterada depois sem perder a rastreabilidade das entradas já geradas.</p></div><button className="portfolio-modal-close" type="button" aria-label="Fechar" disabled={saving} onClick={()=>setOpen(false)}><X size={17}/></button></div><div className="commission-rule-body">{modalError&&<div className="form-alert danger-alert" role="alert">{modalError}</div>}<label className="field"><span>Nome</span><input value={name} onChange={e=>setName(e.target.value)} required/></label><div className="form-grid two-columns"><label className="field"><span>Evento</span><select value={eventType} onChange={e=>setEventType(e.target.value)}><option value="first_rent">Primeiro aluguel</option><option value="recurring">Recorrente</option><option value="intermediation">Intermediação</option></select></label><label className="field"><span>Base</span><select value={basis} onChange={e=>setBasis(e.target.value)}><option value="agency_revenue">Receita da imobiliária</option><option value="rent">Aluguel</option><option value="administration_fee">Taxa de administração</option><option value="intermediation_fee">Intermediação</option></select></label><label className="field"><span>Cálculo</span><select value={calc} onChange={e=>setCalc(e.target.value)}><option value="percent">Percentual</option><option value="fixed">Valor fixo</option></select></label><label className="field"><span>{calc==='percent'?'Percentual (%)':'Valor (R$)'}</span><input inputMode="decimal" value={value} onChange={e=>setValue(e.target.value)} required/></label><label className="field"><span>Tipo</span><select value={beneficiaryType} onChange={e=>setBeneficiaryType(e.target.value)}><option value="broker">Corretor</option><option value="referrer">Angariador</option><option value="other">Outro</option></select></label><label className="field"><span>Beneficiário</span><select value={personId} onChange={e=>setPersonId(e.target.value)} required><option value="">{peopleLoading?'Carregando beneficiários...':'Selecione...'}</option>{people.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></label><label className="field"><span>Vencimento após recebimento</span><input type="number" min="0" max="180" value={dueDays} onChange={e=>setDueDays(e.target.value)}/></label></div></div><div className="canonical-modal-actions"><button className="button secondary" type="button" onClick={()=>setOpen(false)}>Cancelar</button><button className="button primary" disabled={saving||peopleLoading||!personId}>{saving?'Salvando...':'Salvar regra'}</button></div></form></div>}
+ <BrokerCreateModal open={brokerOpen} onClose={()=>setBrokerOpen(false)} onCreated={brokerCreated}/><CommissionFlowDemo open={demoOpen} onClose={()=>setDemoOpen(false)}/>
+ </section>
+}

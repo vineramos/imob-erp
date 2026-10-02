@@ -1,0 +1,141 @@
+/*
+ * Opções controladas do hero público.
+ * Este arquivo é carregado após o tema premium para que a preferência salva em
+ * site_theme seja a única responsável pela altura final do banner.
+ */
+@media (min-width: 861px) {
+  .public-site-premium .public-hero-premium.public-hero-size-compact {
+    height: 300px !important;
+    min-height: 300px !important;
+    max-height: 300px !important;
+  }
+
+  .public-site-premium .public-hero-premium.public-hero-size-compact .public-hero-copy {
+    padding-top: 28px !important;
+    padding-bottom: 56px !important;
+  }
+
+  .public-site-premium .public-hero-premium.public-hero-size-compact .public-hero-copy h1 {
+    font-size: clamp(32px, 2.65vw, 44px) !important;
+    line-height: .98 !important;
+    margin-top: 7px !important;
+    margin-bottom: 8px !important;
+  }
+
+  .public-site-premium .public-hero-premium.public-hero-size-compact .public-hero-copy > p {
+    font-size: 12px !important;
+    line-height: 1.45 !important;
+  }
+
+  .public-site-premium .public-hero-premium.public-hero-size-compact .public-hero-trust {
+    margin-top: 10px !important;
+  }
+
+  .public-site-premium .public-hero-premium.public-hero-size-standard {
+    height: auto !important;
+    min-height: 520px !important;
+  }
+
+  .public-site-premium .public-hero-premium.public-hero-size-expanded {
+    height: auto !important;
+    min-height: 650px !important;
+  }
+
+  .public-site-premium .public-hero-premium.public-hero-size-expanded .public-hero-copy {
+    padding-top: 104px !important;
+    padding-bottom: 165px !important;
+  }
+
+  .public-site-premium .public-hero-premium.public-hero-size-expanded .public-hero-copy h1 {
+    font-size: clamp(54px, 4.7vw, 80px) !important;
+  }
+}
+
+@media (max-width: 860px) {
+  .public-site-premium .public-hero-premium.public-hero-size-compact {
+    min-height: 560px !important;
+  }
+
+  .public-site-premium .public-hero-premium.public-hero-size-standard {
+    min-height: 640px !important;
+  }
+
+  .public-site-premium .public-hero-premium.public-hero-size-expanded {
+    min-height: 720px !important;
+  }
+}
+
+@media (max-width: 560px) {
+  .public-site-premium .public-hero-premium.public-hero-size-compact {
+    min-height: 610px !important;
+  }
+
+  .public-site-premium .public-hero-premium.public-hero-size-standard {
+    min-height: 680px !important;
+  }
+
+  .public-site-premium .public-hero-premium.public-hero-size-expanded {
+    min-height: 760px !important;
+  }
+}
+
+/*
+ * Badge de destaque: tamanho sempre determinado pelo conteúdo. As regras
+ * explícitas evitam que estilos genéricos de spans/flex transformem o chip em
+ * uma faixa vertical sobre a foto.
+ */
+.public-site-premium .public-property-card-media > span {
+  position: absolute !important;
+  top: 12px !important;
+  left: 12px !important;
+  right: auto !important;
+  bottom: auto !important;
+  z-index: 3 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: auto !important;
+  min-width: 0 !important;
+  max-width: max-content !important;
+  height: 23px !important;
+  min-height: 23px !important;
+  max-height: 23px !important;
+  padding: 0 9px !important;
+  margin: 0 !important;
+  border-radius: 999px !important;
+  background: var(--site-primary) !important;
+  color: #fff !important;
+  font-size: 9px !important;
+  font-weight: 750 !important;
+  line-height: 1 !important;
+  letter-spacing: 0 !important;
+  white-space: nowrap !important;
+  writing-mode: horizontal-tb !important;
+  box-shadow: 0 4px 12px rgba(15, 34, 55, .12) !important;
+}
+
+/* A prévia de Configurações acompanha a opção selecionada antes de salvar. */
+.site-preview-hero.site-preview-hero-compact {
+  min-height: 220px;
+}
+
+.site-preview-hero.site-preview-hero-compact .site-preview-copy {
+  padding-top: 27px;
+  padding-bottom: 65px;
+}
+
+.site-preview-hero.site-preview-hero-compact .site-preview-copy h3 {
+  font-size: 25px;
+}
+
+.site-preview-hero.site-preview-hero-standard {
+  min-height: 284px;
+}
+
+.site-preview-hero.site-preview-hero-expanded {
+  min-height: 350px;
+}
+
+.site-preview-hero.site-preview-hero-expanded .site-preview-copy {
+  padding-top: 58px;
+}

@@ -1,0 +1,463 @@
+from __future__ import annotations
+
+import base64
+import re
+from dataclasses import dataclass
+from datetime import datetime, timezone
+
+import httpx
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from app.core.config import get_settings
+from app.domains.foundation.models import OrganizationIntegrationCredential
+from app.integrations.credential_crypto import CredentialCryptoError, decrypt_secret
+
+
+@dataclass(frozen=True)
+class SignatureProviderStatus:
+    provider: str
+    environment: str
+    configured: bool
+    reachable: bool | None
+    message: str
+    checked_at: datetime
+
+
+class SignatureProviderError(RuntimeError):
+    pass
+
+
+class ClicksignProvider:
+    def __init__(self, *, token: str | None = None, environment: str | None = None) -> None:
+        self.settings = get_settings()
+        self.environment = (environment if environment is not None else self.settings.clicksign_environment).strip().lower() or "sandbox"
+        if self.environment not in {"sandbox", "production"}:
+            self.environment = "sandbox"
+        self.base_url = (
+            "https://app.clicksign.com/api/v3"
+            if self.environment == "production"
+            else "https://sandbox.clicksign.com/api/v3"
+        )
+        self.token = (token if token is not None else self.settings.clicksign_access_token).strip()
+
+    @property
+    def configured(self) -> bool:
+        return bool(self.token)
+
+    def _headers(self) -> dict[str, str]:
+        if not self.token:
+            raise SignatureProviderError("Access Token da Clicksign ainda não foi configurado no Secret Manager.")
+        return {
+            "Authorization": self.token,
+            "Accept": "application/vnd.api+json",
+            "Content-Type": "application/vnd.api+json",
+        }
+
+    def status(self) -> SignatureProviderStatus:
+        if not self.configured:
+            return SignatureProviderStatus(
+                provider="clicksign",
+                environment=self.environment,
+                configured=False,
+                reachable=None,
+                message="Clicksign selecionada, mas o Access Token ainda não está configurado.",
+                checked_at=datetime.now(timezone.utc),
+            )
+        return SignatureProviderStatus(
+            provider="clicksign",
+            environment=self.environment,
+            configured=True,
+            reachable=None,
+            message="Credencial presente. Execute o teste de conexão para validar o ambiente.",
+            checked_at=datetime.now(timezone.utc),
+        )
+
+    def test_connection(self) -> SignatureProviderStatus:
+        if not self.configured:
+            return self.status()
+        try:
+            with httpx.Client(timeout=12.0) as client:
+                response = client.get(f"{self.base_url}/envelopes", params={"page[size]": 1}, headers=self._headers())
+            if response.status_code == 200:
+                return SignatureProviderStatus(
+                    provider="clicksign",
+                    environment=self.environment,
+                    configured=True,
+                    reachable=True,
+                    message="Conexão autenticada com a Clicksign com sucesso.",
+                    checked_at=datetime.now(timezone.utc),
+                )
+            detail = _safe_response_detail(response)
+            return SignatureProviderStatus(
+                provider="clicksign",
+                environment=self.environment,
+                configured=True,
+                reachable=False,
+                message=f"Clicksign respondeu HTTP {response.status_code}: {detail}",
+                checked_at=datetime.now(timezone.utc),
+            )
+        except httpx.HTTPError as exc:
+            return SignatureProviderStatus(
+                provider="clicksign",
+                environment=self.environment,
+                configured=True,
+                reachable=False,
+                message=f"Não foi possível alcançar a Clicksign: {exc.__class__.__name__}.",
+                checked_at=datetime.now(timezone.utc),
+            )
+
+    def create_empty_envelope(self, name: str) -> str:
+        payload = {
+            "data": {
+                "type": "envelopes",
+                "attributes": {
+                    "name": name,
+                    "locale": "pt-BR",
+                    "auto_close": True,
+                    "remind_interval": 3,
+                    "block_after_refusal": True,
+                },
+            }
+        }
+        return self._post_resource("/envelopes", payload, expected={200, 201}, resource_name="envelope")
+
+    def upload_pdf(self, envelope_id: str, *, filename: str, content: bytes, metadata: dict | None = None) -> str:
+        encoded = base64.b64encode(content).decode("ascii")
+        payload = {
+            "data": {
+                "type": "documents",
+                "attributes": {
+                    "filename": filename,
+                    "content_base64": f"data:application/pdf;base64,{encoded}",
+                    "metadata": metadata or {},
+                },
+            }
+        }
+        return self._post_resource(
+            f"/envelopes/{envelope_id}/documents",
+            payload,
+            expected={200, 201},
+            resource_name="documento",
+        )
+
+    def create_signer(self, envelope_id: str, signer: dict) -> str:
+        communication = str(signer.get("communication") or "email")
+        phone = _digits(str(signer.get("phone") or "")) or None
+        document = _clicksign_cpf(str(signer.get("document_number") or ""))
+        raw_name = str(signer.get("name") or "").strip()
+        normalized_name = " ".join(part for part in raw_name.split() if part)
+        if len(normalized_name.split()) < 2:
+            normalized_name = f"{normalized_name} Assinante".strip()
+
+        attributes: dict = {
+            "name": normalized_name,
+            "email": str(signer.get("email") or "").strip().lower(),
+            "phone_number": phone,
+            "has_documentation": bool(document),
+            "refusable": False,
+            "group": int(signer.get("sign_order") or 1),
+            "communicate_events": {
+                "document_signed": "email",
+                "signature_request": communication,
+                "signature_reminder": "email" if communication != "none" else "none",
+            },
+        }
+        if document:
+            attributes["documentation"] = document
+        payload = {"data": {"type": "signers", "attributes": attributes}}
+        return self._post_resource(
+            f"/envelopes/{envelope_id}/signers",
+            payload,
+            expected={200, 201},
+            resource_name="signatário",
+        )
+
+    def create_signature_requirements(self, envelope_id: str, *, document_id: str, signer_id: str, role: str) -> None:
+        qualification_role = "witness" if role == "witness" else "sign"
+        relationships = {
+            "document": {"data": {"type": "documents", "id": document_id}},
+            "signer": {"data": {"type": "signers", "id": signer_id}},
+        }
+        qualification = {
+            "data": {
+                "type": "requirements",
+                "attributes": {"action": "agree", "role": qualification_role},
+                "relationships": relationships,
+            }
+        }
+        authentication = {
+            "data": {
+                "type": "requirements",
+                "attributes": {"action": "provide_evidence", "auth": "email"},
+                "relationships": relationships,
+            }
+        }
+        self._post_no_id(f"/envelopes/{envelope_id}/requirements", qualification, expected={200, 201})
+        self._post_no_id(f"/envelopes/{envelope_id}/requirements", authentication, expected={200, 201})
+
+    def activate_envelope(self, envelope_id: str) -> None:
+        payload = {
+            "data": {
+                "id": envelope_id,
+                "type": "envelopes",
+                "attributes": {"status": "running"},
+            }
+        }
+        with httpx.Client(timeout=18.0) as client:
+            response = client.patch(
+                f"{self.base_url}/envelopes/{envelope_id}",
+                headers=self._headers(),
+                json=payload,
+            )
+        if response.status_code not in {200, 202, 204}:
+            raise SignatureProviderError(
+                f"Falha ao ativar envelope Clicksign (HTTP {response.status_code}): {_safe_response_detail(response)}"
+            )
+
+    def create_webhook(self, *, endpoint: str, events: list[str]) -> dict[str, str]:
+        payload = {
+            "data": {
+                "type": "webhooks",
+                "attributes": {
+                    "endpoint": endpoint,
+                    "status": "active",
+                    "events": events,
+                },
+            }
+        }
+        with httpx.Client(timeout=18.0) as client:
+            response = client.post(
+                f"{self.base_url}/webhooks",
+                headers=self._headers(),
+                json=payload,
+            )
+        if response.status_code not in {200, 201}:
+            raise SignatureProviderError(
+                f"Falha ao criar webhook Clicksign (HTTP {response.status_code}): {_safe_response_detail(response)}"
+            )
+        try:
+            body = response.json()
+            data = body.get("data") if isinstance(body, dict) else None
+            attributes = data.get("attributes") if isinstance(data, dict) else None
+            webhook_id = str((data or {}).get("id") or "").strip()
+            secret = str(
+                (attributes or {}).get("secret")
+                or (attributes or {}).get("hmac_secret")
+                or (attributes or {}).get("secret_hmac_sha256")
+                or ""
+            ).strip()
+        except (TypeError, ValueError) as exc:
+            raise SignatureProviderError("A Clicksign criou o webhook, mas respondeu em formato inesperado.") from exc
+        if not webhook_id:
+            raise SignatureProviderError("A Clicksign criou o webhook sem retornar o identificador.")
+        if not secret:
+            raise SignatureProviderError(
+                "A Clicksign criou o webhook, mas não retornou o HMAC Secret. Abra Configurações → API na Clicksign e confira o webhook criado."
+            )
+        return {"id": webhook_id, "secret": secret}
+
+    def envelope_status(self, envelope_id: str) -> str:
+        with httpx.Client(timeout=18.0) as client:
+            response = client.get(
+                f"{self.base_url}/envelopes/{envelope_id}",
+                headers=self._headers(),
+            )
+        if response.status_code != 200:
+            raise SignatureProviderError(
+                f"Falha ao consultar envelope Clicksign (HTTP {response.status_code}): {_safe_response_detail(response)}"
+            )
+        try:
+            payload = response.json()
+            data = payload.get("data") if isinstance(payload, dict) else None
+            attributes = data.get("attributes") if isinstance(data, dict) else None
+            value = str((attributes or {}).get("status") or "").strip().lower()
+        except (TypeError, ValueError):
+            value = ""
+        if value not in {"draft", "running", "closed", "canceled"}:
+            raise SignatureProviderError("A Clicksign retornou um status de envelope desconhecido.")
+        return value
+
+    def cancel_envelope(self, envelope_id: str, document_id: str | None = None) -> None:
+        with httpx.Client(timeout=18.0) as client:
+            current = client.get(f"{self.base_url}/envelopes/{envelope_id}", headers=self._headers())
+        if current.status_code == 404:
+            return
+        if current.status_code != 200:
+            raise SignatureProviderError(
+                f"Falha ao consultar envelope Clicksign antes do cancelamento (HTTP {current.status_code}): {_safe_response_detail(current)}"
+            )
+        try:
+            payload = current.json()
+            data = payload.get("data") if isinstance(payload, dict) else None
+            attributes = data.get("attributes") if isinstance(data, dict) else None
+            status = str((attributes or {}).get("status") or "").strip().lower()
+        except (TypeError, ValueError):
+            status = ""
+
+        if status == "canceled":
+            return
+        if status == "closed":
+            raise SignatureProviderError("O envelope da Clicksign já está finalizado e não pode ser cancelado.")
+        if status == "draft":
+            with httpx.Client(timeout=18.0) as client:
+                response = client.delete(f"{self.base_url}/envelopes/{envelope_id}", headers=self._headers())
+            if response.status_code not in {200, 202, 204, 404}:
+                raise SignatureProviderError(
+                    f"Falha ao excluir envelope em rascunho na Clicksign (HTTP {response.status_code}): {_safe_response_detail(response)}"
+                )
+            return
+        if status == "running":
+            if not document_id:
+                raise SignatureProviderError("O documento da Clicksign não foi identificado para cancelamento.")
+            body = {"data":{"id":document_id,"type":"documents","attributes":{"status":"canceled"}}}
+            with httpx.Client(timeout=18.0) as client:
+                response = client.patch(
+                    f"{self.base_url}/envelopes/{envelope_id}/documents/{document_id}",
+                    headers=self._headers(),
+                    json=body,
+                )
+            if response.status_code not in {200, 202, 204}:
+                raise SignatureProviderError(
+                    f"Falha ao cancelar documento Clicksign (HTTP {response.status_code}): {_safe_response_detail(response)}"
+                )
+            return
+        raise SignatureProviderError(f"Status do envelope Clicksign não permite cancelamento: {status or 'desconhecido'}.")
+
+    def notify_envelope(self, envelope_id: str) -> None:
+        payload = {
+            "data": {
+                "type": "notifications",
+                "attributes": {"message": None},
+            }
+        }
+        with httpx.Client(timeout=18.0) as client:
+            response = client.post(
+                f"{self.base_url}/envelopes/{envelope_id}/notifications",
+                headers=self._headers(),
+                json=payload,
+            )
+        if response.status_code not in {200, 201, 202, 204}:
+            raise SignatureProviderError(
+                f"Falha ao notificar signatários Clicksign (HTTP {response.status_code}): {_safe_response_detail(response)}"
+            )
+
+    def signed_document_bytes(self, envelope_id: str, document_id: str) -> bytes:
+        with httpx.Client(timeout=18.0) as client:
+            response = client.get(
+                f"{self.base_url}/envelopes/{envelope_id}/documents/{document_id}",
+                headers=self._headers(),
+            )
+        if response.status_code != 200:
+            raise SignatureProviderError(
+                f"Falha ao consultar documento final Clicksign (HTTP {response.status_code}): {_safe_response_detail(response)}"
+            )
+        try:
+            payload = response.json()
+            data = payload.get("data") if isinstance(payload, dict) else None
+            links = data.get("links") if isinstance(data, dict) else None
+            files = links.get("files") if isinstance(links, dict) else None
+            signed_url = files.get("signed") if isinstance(files, dict) else None
+        except (TypeError, ValueError):
+            signed_url = None
+        if not signed_url:
+            raise SignatureProviderError("Documento final assinado ainda não está disponível para download na Clicksign.")
+        try:
+            with httpx.Client(timeout=30.0, follow_redirects=True) as client:
+                file_response = client.get(str(signed_url))
+            file_response.raise_for_status()
+        except httpx.HTTPError as exc:
+            raise SignatureProviderError(f"Falha ao baixar PDF final assinado: {exc.__class__.__name__}.") from exc
+        if not file_response.content.startswith(b"%PDF"):
+            raise SignatureProviderError("A Clicksign não retornou um PDF válido para arquivamento.")
+        return file_response.content
+
+    def _post_resource(self, path: str, payload: dict, *, expected: set[int], resource_name: str) -> str:
+        with httpx.Client(timeout=20.0) as client:
+            response = client.post(f"{self.base_url}{path}", headers=self._headers(), json=payload)
+        if response.status_code not in expected:
+            raise SignatureProviderError(
+                f"Falha ao criar {resource_name} Clicksign (HTTP {response.status_code}): {_safe_response_detail(response)}"
+            )
+        resource_id = _extract_resource_id(response.json())
+        if not resource_id:
+            raise SignatureProviderError(f"A Clicksign criou {resource_name}, mas não retornou um identificador reconhecível.")
+        return resource_id
+
+    def _post_no_id(self, path: str, payload: dict, *, expected: set[int]) -> None:
+        with httpx.Client(timeout=20.0) as client:
+            response = client.post(f"{self.base_url}{path}", headers=self._headers(), json=payload)
+        if response.status_code not in expected:
+            raise SignatureProviderError(
+                f"Falha ao configurar requisito Clicksign (HTTP {response.status_code}): {_safe_response_detail(response)}"
+            )
+
+
+def get_signature_provider(provider_key: str, *, token: str | None = None, environment: str | None = None):
+    if provider_key == "clicksign":
+        return ClicksignProvider(token=token, environment=environment)
+    return None
+
+
+def get_signature_provider_for_organization(
+    db: Session,
+    organization_id,
+    provider_key: str,
+):
+    if provider_key != "clicksign":
+        return get_signature_provider(provider_key)
+
+    row = db.scalar(
+        select(OrganizationIntegrationCredential).where(
+            OrganizationIntegrationCredential.organization_id == organization_id,
+            OrganizationIntegrationCredential.provider == "clicksign",
+        )
+    )
+    if row is None or not row.encrypted_secret:
+        return get_signature_provider(provider_key)
+
+    config = dict(row.non_secret_config or {})
+    environment = str(config.get("environment") or "sandbox").strip().lower() or "sandbox"
+    try:
+        token = decrypt_secret(
+            row.encrypted_secret,
+            scope=f"{organization_id}:clicksign",
+        )
+    except CredentialCryptoError as exc:
+        raise SignatureProviderError(str(exc)) from exc
+    return get_signature_provider(provider_key, token=token, environment=environment)
+
+
+def _extract_resource_id(payload: dict) -> str | None:
+    data = payload.get("data")
+    if isinstance(data, dict) and data.get("id"):
+        return str(data["id"])
+    envelope = payload.get("envelope")
+    if isinstance(envelope, dict) and envelope.get("id"):
+        return str(envelope["id"])
+    return None
+
+
+def _safe_response_detail(response: httpx.Response) -> str:
+    try:
+        payload = response.json()
+        if isinstance(payload, dict):
+            if payload.get("message"):
+                return str(payload["message"])[:300]
+            errors = payload.get("errors")
+            if isinstance(errors, list) and errors:
+                return str(errors[0])[:300]
+        return str(payload)[:300]
+    except ValueError:
+        return (response.text or "resposta sem detalhes").strip()[:300]
+
+
+def _clicksign_cpf(value: str) -> str | None:
+    digits = "".join(ch for ch in value if ch.isdigit())
+    if len(digits) != 11:
+        return None
+    return f"{digits[:3]}.{digits[3:6]}.{digits[6:9]}-{digits[9:]}"
+
+
+def _digits(value: str) -> str:
+    return re.sub(r"\D", "", value)

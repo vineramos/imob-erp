@@ -1,0 +1,103 @@
+.property-workspace-row > .portfolio-edit-button {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-muted);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  opacity: .55;
+  z-index: 2;
+  transition: opacity .16s ease, color .16s ease, background .16s ease, border-color .16s ease;
+}
+
+.property-workspace-row:hover > .portfolio-edit-button,
+.property-workspace-row:focus-within > .portfolio-edit-button {
+  opacity: .9;
+}
+
+.property-workspace-row > .portfolio-edit-button:hover,
+.property-workspace-row > .portfolio-edit-button:focus-visible {
+  opacity: 1;
+  color: var(--brand-primary);
+  background: var(--brand-primary-soft);
+  border-color: color-mix(in srgb, var(--brand-primary) 22%, var(--border));
+  outline: none;
+}
+
+/* Características do imóvel: não deixar o estilo global de campos transformar
+   checkboxes em inputs grandes. Mantém controles compactos e alinhados. */
+.portfolio-property-modal .portfolio-checkbox-row {
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 20px;
+  padding-top: 2px;
+}
+
+.portfolio-property-modal .portfolio-checkbox-row label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: max-content;
+  margin: 0;
+  color: var(--text);
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.portfolio-property-modal .portfolio-checkbox-row input[type='checkbox'] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 17px !important;
+  min-width: 17px !important;
+  max-width: 17px !important;
+  height: 17px !important;
+  min-height: 17px !important;
+  max-height: 17px !important;
+  flex: 0 0 17px;
+  margin: 0;
+  padding: 0 !important;
+  border: 1px solid #b8c3d1;
+  border-radius: 4px;
+  background-color: var(--surface);
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: 11px 11px;
+  box-shadow: none;
+  cursor: pointer;
+  transition: border-color .14s ease, background-color .14s ease, box-shadow .14s ease;
+}
+
+.portfolio-property-modal .portfolio-checkbox-row input[type='checkbox']:hover {
+  border-color: color-mix(in srgb, var(--brand-primary) 55%, #b8c3d1);
+}
+
+.portfolio-property-modal .portfolio-checkbox-row input[type='checkbox']:checked {
+  border-color: var(--brand-primary);
+  background-color: var(--brand-primary);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3.2 8.2 6.5 11.3 12.8 4.8' fill='none' stroke='white' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+
+.portfolio-property-modal .portfolio-checkbox-row input[type='checkbox']:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--brand-primary-soft);
+  border-color: var(--brand-primary);
+}
+
+@media (max-width: 560px) {
+  .portfolio-property-modal .portfolio-checkbox-row {
+    flex-wrap: wrap;
+    gap: 12px 18px;
+  }
+}

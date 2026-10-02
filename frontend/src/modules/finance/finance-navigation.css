@@ -1,0 +1,21 @@
+/* Financeiro: navegação compacta em uma linha; áreas auxiliares no menu Mais. */
+.finance-nav-workspace{width:100%;max-width:none;min-width:0;margin:0;padding-top:10px;padding-bottom:0;overflow:visible}
+.finance-nav-shell{display:flex;align-items:center;gap:8px;width:100%;min-width:0;max-width:100%;padding:5px 7px;min-height:46px;border-radius:10px;overflow:visible;box-shadow:none;position:relative;z-index:6}
+.finance-primary-tabs{display:flex;flex:1 1 auto;align-items:center;gap:3px;min-width:0;max-width:100%;overflow-x:auto;overflow-y:hidden;scrollbar-width:thin;white-space:nowrap;overscroll-behavior-x:contain}
+.finance-primary-tabs button{display:inline-flex;align-items:center;justify-content:center;gap:6px;flex:0 0 auto;min-width:0;min-height:34px;padding:7px 10px;border:1px solid transparent;border-radius:7px;background:transparent;color:var(--text-muted);font:inherit;font-size:10px;font-weight:650;line-height:1.2;cursor:pointer;white-space:nowrap}
+.finance-primary-tabs button svg{flex:0 0 auto}
+.finance-primary-tabs button:hover{background:var(--app-bg);color:var(--text)}
+.finance-primary-tabs button.active{background:var(--primary-soft);border-color:var(--border);color:var(--primary-strong)}
+.finance-more{position:relative;flex:0 0 auto;min-width:0;max-width:190px}
+.finance-more summary{display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:8px 12px;min-height:34px;border:1px solid var(--border);border-radius:7px;cursor:pointer;list-style:none;font-size:10px;font-weight:700;color:var(--text);white-space:nowrap;user-select:none}
+.finance-more summary::-webkit-details-marker{display:none}
+.finance-more.active summary,.finance-more[open] summary{background:var(--primary-soft);color:var(--primary-strong)}
+.finance-more summary svg{flex:0 0 auto;transition:transform .15s}
+.finance-more[open] summary svg{transform:rotate(180deg)}
+.finance-more-menu{position:absolute;top:calc(100% + 7px);right:0;z-index:20;display:grid;gap:2px;width:235px;max-width:calc(100vw - 40px);max-height:min(70vh,560px);overflow-y:auto;padding:7px;background:var(--surface);border:1px solid var(--border);border-radius:10px;box-shadow:0 16px 40px rgba(20,35,60,.15)}
+.finance-more-heading{padding:10px 9px 5px;color:var(--text-muted);font-size:9px;font-weight:800;letter-spacing:.045em;text-transform:uppercase}
+.finance-more-menu button{display:flex;align-items:center;gap:10px;width:100%;min-height:34px;padding:8px 10px;border:0;border-radius:7px;background:transparent;font:inherit;font-size:10px;font-weight:600;text-align:left;color:var(--text);cursor:pointer}
+.finance-more-menu button:hover,.finance-more-menu button.active{background:var(--primary-soft);color:var(--primary-strong)}
+.finance-more-menu button svg{flex:0 0 auto}
+@media(max-width:1180px){.finance-primary-tabs button{padding:7px 9px;font-size:9.5px}}
+@media(max-width:700px){.finance-nav-workspace{padding-left:10px;padding-right:10px}.finance-nav-shell{gap:5px;padding:5px}.finance-primary-tabs button{min-height:34px}.finance-more summary{padding:8px 9px}}

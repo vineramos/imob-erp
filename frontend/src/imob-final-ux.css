@@ -1,0 +1,706 @@
+/*
+ * Imob ERP · acabamento final de UX da Sprint 1
+ *
+ * Esta camada e importada por ultimo de forma deliberada. Ela nao redesenha os
+ * modulos: apenas unifica comportamento de viewport, dialogs, toolbars,
+ * formularios, estados vazios e responsividade entre as telas que nasceram em
+ * sprints diferentes.
+ */
+
+/* Base de contenção: nenhum filho de grid/flex deve forçar overflow horizontal. */
+.workspace,
+.workspace > *,
+.panel,
+.page-heading,
+.metric-grid,
+.dashboard-metrics,
+.portfolio-toolbar,
+.form-grid,
+.field,
+.field > *,
+.canonical-modal-section,
+.commercial-card-grid,
+.portfolio-card-list {
+  min-width: 0;
+}
+
+.workspace img,
+.workspace svg,
+.workspace video,
+.workspace canvas {
+  max-width: 100%;
+}
+
+.workspace p,
+.workspace small,
+.workspace span,
+.workspace strong,
+.workspace td,
+.workspace th {
+  overflow-wrap: anywhere;
+}
+
+/* Foco previsivel em todo o ERP sem alterar a linguagem visual. */
+.workspace button:focus-visible,
+.workspace a:focus-visible,
+.workspace input:focus-visible,
+.workspace select:focus-visible,
+.workspace textarea:focus-visible,
+.portfolio-modal button:focus-visible,
+.finance-modal button:focus-visible,
+.broker-modal button:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--brand-primary) 72%, white);
+  outline-offset: 2px;
+}
+
+.button,
+.portfolio-modal-close,
+.icon-button,
+.topbar-icon,
+.sidebar-toggle {
+  touch-action: manipulation;
+}
+
+.button:disabled,
+.portfolio-modal-close:disabled,
+.icon-button:disabled {
+  cursor: not-allowed !important;
+  opacity: .58;
+}
+
+/* Cabeçalhos: ação não deve comprimir título nem quebrar em telas médias. */
+.page-heading > div:first-child {
+  min-width: 0;
+  max-width: 920px;
+}
+
+.page-heading > .button,
+.page-heading > div:last-child:not(:first-child) {
+  flex: 0 0 auto;
+}
+
+.page-heading h1 {
+  text-wrap: balance;
+}
+
+.page-heading p {
+  max-width: 820px;
+}
+
+/* Toolbars e abas: mantêm a aparência desktop e deixam de estourar no tablet. */
+.portfolio-toolbar,
+.commercial-toolbar-wide,
+[class*="-toolbar"] {
+  max-width: 100%;
+}
+
+.portfolio-toolbar {
+  flex-wrap: wrap;
+}
+
+.portfolio-tabs {
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+  overscroll-behavior-inline: contain;
+}
+
+.portfolio-tabs > button {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.portfolio-search {
+  min-width: min(280px, 100%);
+  flex: 1 1 320px;
+}
+
+.portfolio-search input {
+  min-width: 0;
+}
+
+/* Métricas: altura coerente e sem textos soltos em tamanhos intermediários. */
+.metric-grid,
+.dashboard-metrics {
+  align-items: stretch;
+}
+
+.metric-card {
+  min-width: 0;
+  height: 100%;
+}
+
+.metric-card > strong,
+.metric-card .metric-copy > strong {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Estados vazios e loading passam a ter a mesma densidade visual. */
+.portfolio-empty,
+.activity-empty,
+.settings-loading,
+[class*="-empty"]:not(input):not(textarea) {
+  box-sizing: border-box;
+}
+
+.portfolio-empty,
+.activity-empty {
+  min-height: 150px;
+  align-content: center;
+  justify-items: center;
+  text-align: center;
+}
+
+.portfolio-empty > svg,
+.activity-empty > svg {
+  color: var(--text-muted);
+}
+
+.portfolio-empty > strong,
+.activity-empty > strong {
+  margin-top: 2px;
+}
+
+/* Alerts nunca ultrapassam o dialog/página e permanecem legíveis. */
+.form-alert {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+/* ─────────────────────────────────────────────
+   DIALOGS CANÔNICOS
+   ───────────────────────────────────────────── */
+
+/* O browser moderno já consegue impedir scroll do fundo enquanto há dialog. */
+body:has(.portfolio-modal-backdrop),
+body:has(.finance-modal-backdrop),
+body:has(.contract-form),
+body:has(.inspection-form) {
+  overflow: hidden;
+}
+
+.portfolio-modal-backdrop,
+.finance-modal-backdrop {
+  box-sizing: border-box !important;
+  overflow: hidden !important;
+  overscroll-behavior: contain;
+}
+
+.portfolio-modal,
+.finance-modal,
+.finance-advanced-modal,
+.broker-modal,
+.capture-workflow-modal {
+  width: min(980px, calc(100vw - 48px));
+  max-width: calc(100vw - 48px) !important;
+  max-height: calc(100dvh - var(--imob-topbar-height, 66px) - 38px) !important;
+  min-height: 0;
+  overflow: hidden !important;
+  display: flex !important;
+  flex-direction: column !important;
+  box-sizing: border-box !important;
+}
+
+.capture-workflow-modal {
+  width: min(820px, calc(100vw - 48px)) !important;
+}
+
+.portfolio-modal-header,
+.finance-modal-header,
+.broker-modal-header {
+  position: relative;
+  z-index: 5;
+  flex: 0 0 auto;
+  min-width: 0;
+}
+
+.portfolio-modal-header > div,
+.finance-modal-header > div,
+.broker-modal-header > div {
+  min-width: 0;
+}
+
+.portfolio-modal-header h2,
+.finance-modal-header h2,
+.broker-modal-header h2,
+.portfolio-modal-header p,
+.finance-modal-header p,
+.broker-modal-header p {
+  overflow-wrap: anywhere;
+}
+
+.capture-modal-body,
+.commercial-modal-body,
+.classification-modal-body,
+.commission-rule-body,
+.portal-access-modal-body,
+.economic-history-body,
+.broker-modal-body,
+.finance-modal-body,
+[class$="-modal-body"] {
+  min-width: 0;
+  min-height: 0;
+  max-width: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.canonical-modal-actions,
+.finance-modal-actions,
+.broker-modal-actions,
+[class$="-modal-actions"] {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.canonical-modal-actions {
+  position: relative;
+  z-index: 4;
+  flex-wrap: wrap;
+}
+
+.canonical-modal-actions > * {
+  min-width: 0;
+}
+
+.canonical-modal-section {
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.canonical-modal-section .form-grid,
+.capture-form-modal .form-grid,
+.commercial-profile-modal .form-grid,
+.finance-modal .form-grid,
+.broker-modal .form-grid {
+  width: 100%;
+  max-width: 100%;
+}
+
+.portfolio-modal input,
+.portfolio-modal select,
+.portfolio-modal textarea,
+.finance-modal input,
+.finance-modal select,
+.finance-modal textarea,
+.broker-modal input,
+.broker-modal select,
+.broker-modal textarea,
+.contract-form input,
+.contract-form select,
+.contract-form textarea,
+.inspection-form input,
+.inspection-form select,
+.inspection-form textarea {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.portfolio-modal textarea,
+.finance-modal textarea,
+.broker-modal textarea,
+.contract-form textarea,
+.inspection-form textarea {
+  resize: vertical;
+}
+
+/* Contratos e vistorias legados continuam dialogs, mas sem esconder ações. */
+.contract-form,
+.inspection-form {
+  width: min(1100px, calc(100vw - 48px)) !important;
+  max-width: calc(100vw - 48px) !important;
+  max-height: calc(100dvh - var(--imob-topbar-height, 66px) - 36px) !important;
+  scrollbar-gutter: stable;
+  overscroll-behavior: contain;
+}
+
+.contract-form > .panel-heading,
+.inspection-form > .panel-heading,
+.contract-form > .form-actions,
+.inspection-form > .form-actions {
+  backdrop-filter: blur(10px);
+}
+
+.contract-signers-editor,
+.inspection-environments,
+.inspection-environment,
+.inspection-item-editor,
+.contract-signer-row {
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* ─────────────────────────────────────────────
+   CAPTAÇÕES
+   ───────────────────────────────────────────── */
+.capture-workspace .portfolio-card-list {
+  display: grid;
+  gap: 9px;
+}
+
+.capture-row {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.capture-row .capture-main,
+.capture-row .capture-value,
+.capture-row .capture-stage {
+  min-width: 0;
+}
+
+.capture-main > div,
+.capture-main > span,
+.capture-main > small {
+  min-width: 0;
+}
+
+.capture-main strong,
+.capture-main small,
+.capture-main span {
+  overflow-wrap: anywhere;
+}
+
+.capture-workflow-summary,
+.capture-workflow-actions,
+.capture-workflow-loss {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.capture-workflow-actions .button {
+  min-height: 34px;
+}
+
+/* ─────────────────────────────────────────────
+   COMERCIAL / CRM
+   ───────────────────────────────────────────── */
+.commercial-card-grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(330px, 100%), 1fr)) !important;
+}
+
+.commercial-property-card {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.commercial-property-card-top,
+.commercial-property-card-value,
+.commercial-profile-actions,
+.commercial-modal-section-heading,
+.publication-checklist-heading {
+  min-width: 0;
+}
+
+.commercial-property-card-top > div,
+.commercial-profile-actions > *,
+.commercial-modal-section-heading > * {
+  min-width: 0;
+}
+
+.commercial-profile-form {
+  border-bottom: 0;
+}
+
+.commercial-profile-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.commercial-checklist-grid > div {
+  min-width: 0;
+}
+
+.commercial-api-note {
+  align-items: flex-start;
+}
+
+/* ─────────────────────────────────────────────
+   TABELAS, LISTAS E MATRIZES GERENCIAIS
+   ───────────────────────────────────────────── */
+.cashflow-daily-scroll,
+[class*="table-scroll"],
+[class*="table-wrapper"],
+[class*="table-wrap"] {
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  scrollbar-gutter: stable;
+}
+
+.workspace table {
+  border-collapse: collapse;
+}
+
+.workspace table th,
+.workspace table td {
+  vertical-align: middle;
+}
+
+/* Painéis de detalhes não podem forçar a largura da workspace. */
+.contract-expanded-detail,
+.property-summary-grid,
+.company-settings-grid,
+.operations-settings-grid,
+.finance-classifications-grid,
+.economic-index-grid,
+.dashboard-grid,
+.dashboard-secondary-grid,
+.principle-grid {
+  min-width: 0;
+}
+
+/* ─────────────────────────────────────────────
+   RESPONSIVIDADE
+   ───────────────────────────────────────────── */
+@media (max-width: 1180px) {
+  .workspace {
+    padding-inline: 22px;
+  }
+
+  .metric-grid,
+  .dashboard-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  .commercial-toolbar-wide {
+    align-items: stretch !important;
+    flex-wrap: wrap;
+  }
+
+  .commercial-toolbar-wide .portfolio-search {
+    max-width: none !important;
+    min-width: min(300px, 100%) !important;
+  }
+
+  .capture-workflow-summary {
+    grid-template-columns: 1fr !important;
+  }
+
+  .company-settings-grid,
+  .operations-settings-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+@media (max-width: 820px) {
+  .workspace {
+    padding: 20px 16px 28px;
+  }
+
+  .page-heading {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+
+  .page-heading > .button,
+  .page-heading > div:last-child:not(:first-child) {
+    align-self: flex-start;
+  }
+
+  .portfolio-toolbar,
+  .commercial-toolbar-wide {
+    align-items: stretch !important;
+  }
+
+  .portfolio-tabs {
+    width: 100%;
+    padding-bottom: 2px;
+  }
+
+  .portfolio-search,
+  .commercial-toolbar-wide .portfolio-search {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: none !important;
+    flex-basis: 100%;
+  }
+
+  .commercial-profile-grid,
+  .commercial-checklist-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .commercial-profile-actions,
+  .commercial-modal-section-heading,
+  .publication-checklist-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .capture-row {
+    grid-template-columns: 8px minmax(0, 1fr) !important;
+    gap: 10px !important;
+  }
+
+  .capture-row .capture-value,
+  .capture-row .capture-stage {
+    grid-column: 2;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding-top: 9px;
+    border-top: 1px solid var(--border);
+  }
+
+  .capture-row .capture-stage {
+    flex-wrap: wrap;
+  }
+
+  .capture-manage-button {
+    margin-top: 0 !important;
+  }
+
+  .portfolio-modal,
+  .finance-modal,
+  .finance-advanced-modal,
+  .broker-modal,
+  .capture-workflow-modal,
+  .contract-form,
+  .inspection-form {
+    width: calc(100vw - 20px) !important;
+    max-width: calc(100vw - 20px) !important;
+    max-height: calc(100dvh - var(--imob-topbar-height, 66px) - 20px) !important;
+    border-radius: 14px !important;
+  }
+
+  .portfolio-modal-backdrop,
+  .finance-modal-backdrop {
+    padding: 10px !important;
+  }
+
+  .portfolio-modal-header,
+  .finance-modal-header,
+  .broker-modal-header {
+    padding: 16px 16px 13px !important;
+    gap: 12px !important;
+  }
+
+  .capture-modal-body,
+  .commercial-modal-body,
+  .classification-modal-body,
+  .commission-rule-body,
+  .portal-access-modal-body,
+  .economic-history-body,
+  .broker-modal-body,
+  .finance-modal-body,
+  [class$="-modal-body"] {
+    padding: 14px 16px !important;
+  }
+
+  .canonical-modal-actions,
+  .finance-modal-actions,
+  .broker-modal-actions,
+  [class$="-modal-actions"] {
+    padding: 12px 16px 14px !important;
+  }
+
+  .canonical-modal-actions .button,
+  .capture-workflow-actions .button {
+    min-height: 38px;
+  }
+
+  .canonical-modal-section {
+    padding: 14px !important;
+  }
+
+  .form-grid.three-columns,
+  .form-grid.two-columns,
+  .canonical-modal-section .form-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .field-span-2,
+  .field-span-3 {
+    grid-column: auto !important;
+  }
+
+  .contract-signer-row,
+  .inspection-item-editor {
+    grid-template-columns: 1fr !important;
+  }
+
+  .contract-expanded-detail,
+  .property-summary-grid,
+  .economic-index-grid,
+  .principle-grid,
+  .dashboard-grid,
+  .dashboard-secondary-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+@media (max-width: 560px) {
+  .workspace {
+    padding-inline: 12px;
+  }
+
+  .metric-grid,
+  .dashboard-metrics {
+    grid-template-columns: 1fr !important;
+  }
+
+  .metric-card {
+    min-height: 88px;
+  }
+
+  .page-heading h1 {
+    font-size: 25px;
+  }
+
+  .page-heading > .button,
+  .page-heading > div:last-child:not(:first-child),
+  .page-heading > div:last-child:not(:first-child) .button {
+    width: 100%;
+  }
+
+  .canonical-modal-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .canonical-modal-actions > div {
+    width: 100%;
+  }
+
+  .canonical-modal-actions > div:last-child {
+    display: grid !important;
+    grid-template-columns: 1fr;
+  }
+
+  .canonical-modal-actions .button {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .commercial-card-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .capture-row .capture-value,
+  .capture-row .capture-stage {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+  }
+}

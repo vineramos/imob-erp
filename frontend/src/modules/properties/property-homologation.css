@@ -1,0 +1,309 @@
+/* Homologação visual/UX de Imóveis · 08/09/2026 */
+
+/* A ficha do imóvel deve usar o scroll normal da página. Também evita que um
+   overflow inline antigo do modal deixe o body travado depois do fechamento. */
+body:not(:has(.portfolio-modal-backdrop)):not(:has(.finance-modal-backdrop)):not(:has(.confirm-dialog-backdrop)):not(:has(.contract-form)):not(:has(.inspection-form)) {
+  overflow-y: scroll !important;
+}
+
+.property-detail-workspace {
+  min-height: 0;
+  align-content: start;
+  overflow: visible !important;
+}
+
+.property-detail-tabs {
+  overflow-x: auto !important;
+  overflow-y: hidden !important;
+  scrollbar-width: thin;
+  overscroll-behavior-inline: contain;
+}
+
+/* Cadastro do imóvel: menos “formulário cru”, mais cadastro canônico. */
+.property-edit-modal {
+  width: min(980px, calc(100vw - 36px));
+}
+
+.property-edit-body {
+  padding: 14px 16px 16px;
+  gap: 10px;
+  scrollbar-width: thin;
+  scrollbar-gutter: stable;
+}
+
+.property-edit-section {
+  border-radius: 12px;
+  padding: 13px 14px;
+  gap: 11px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, .02);
+}
+
+.property-edit-section-heading {
+  padding-bottom: 9px;
+}
+
+.property-edit-section-heading > svg {
+  width: 30px;
+  height: 30px;
+  padding: 7px;
+  border-radius: 9px;
+  background: var(--brand-primary-soft);
+}
+
+.property-edit-grid {
+  gap: 10px 11px;
+}
+
+.property-edit-grid input:not([type='checkbox']),
+.property-edit-grid select,
+.property-commercial-form input,
+.property-commercial-form select,
+.property-commercial-form textarea {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  outline: 0;
+  transition: border-color .14s ease, box-shadow .14s ease, background .14s ease;
+}
+
+.property-edit-grid input:not([type='checkbox']),
+.property-edit-grid select,
+.property-commercial-form input,
+.property-commercial-form select {
+  height: 38px;
+  padding: 0 10px;
+}
+
+.property-commercial-form textarea {
+  min-height: 96px;
+  padding: 10px 11px;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.property-edit-grid input:focus,
+.property-edit-grid select:focus,
+.property-commercial-form input:focus,
+.property-commercial-form select:focus,
+.property-commercial-form textarea:focus {
+  border-color: color-mix(in srgb, var(--brand-primary) 46%, var(--border));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand-primary) 8%, transparent);
+}
+
+/* Mobiliado / Pets viram toggles compactos em vez de checkbox solto. */
+.property-edit-grid .check {
+  grid-column: span 2;
+  min-height: 42px;
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface-soft);
+  cursor: pointer;
+  transition: border-color .14s ease, background .14s ease, box-shadow .14s ease;
+}
+
+.property-edit-grid .check:hover {
+  border-color: color-mix(in srgb, var(--brand-primary) 28%, var(--border));
+  background: var(--surface);
+}
+
+.property-edit-grid .check:has(input:checked) {
+  border-color: color-mix(in srgb, var(--brand-primary) 42%, var(--border));
+  background: var(--brand-primary-soft);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--brand-primary) 8%, transparent);
+}
+
+.property-edit-grid .check input[type='checkbox'] {
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  display: grid;
+  place-items: center;
+  margin: 0;
+  border: 1.5px solid #9aa6b5;
+  border-radius: 5px;
+  background: #fff;
+  cursor: pointer;
+}
+
+.property-edit-grid .check input[type='checkbox']::after {
+  content: '';
+  width: 8px;
+  height: 4px;
+  border-left: 2px solid #fff;
+  border-bottom: 2px solid #fff;
+  transform: rotate(-45deg) scale(0);
+  transition: transform .12s ease;
+}
+
+.property-edit-grid .check input[type='checkbox']:checked {
+  border-color: var(--brand-primary);
+  background: var(--brand-primary);
+}
+
+.property-edit-grid .check input[type='checkbox']:checked::after {
+  transform: rotate(-45deg) scale(1);
+}
+
+.property-edit-grid .check > span {
+  color: var(--text);
+  font-size: 10.5px;
+  font-weight: 750;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+/* Proprietário pesquisável. */
+.property-owner-edit-row {
+  grid-template-columns: minmax(0, 1fr) 105px auto 36px;
+  align-items: start;
+}
+
+.property-owner-combobox {
+  position: relative;
+  min-width: 0;
+}
+
+.property-owner-searchbox {
+  height: 38px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text-muted);
+}
+
+.property-owner-searchbox:focus-within {
+  border-color: color-mix(in srgb, var(--brand-primary) 46%, var(--border));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand-primary) 8%, transparent);
+}
+
+.property-owner-searchbox input {
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: 0 !important;
+  outline: 0;
+  background: transparent;
+  box-shadow: none !important;
+}
+
+.property-owner-results {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 5px);
+  left: 0;
+  right: 0;
+  max-height: 220px;
+  overflow-y: auto;
+  padding: 5px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: 0 14px 34px rgba(15, 23, 42, .14);
+  scrollbar-width: thin;
+}
+
+.property-owner-results button {
+  width: 100%;
+  min-height: 40px;
+  display: grid;
+  gap: 2px;
+  padding: 7px 9px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.property-owner-results button:hover,
+.property-owner-results button:focus-visible {
+  background: var(--brand-primary-soft);
+  outline: 0;
+}
+
+.property-owner-results strong {
+  font-size: 10.5px;
+}
+
+.property-owner-results span {
+  color: var(--text-muted);
+  font-size: 9px;
+}
+
+.property-owner-no-results {
+  padding: 10px;
+  color: var(--text-muted);
+  font-size: 9.5px;
+  text-align: center;
+}
+
+.property-owner-editor > strong {
+  justify-self: end;
+  padding-top: 2px;
+  font-size: 10px;
+}
+
+/* Perfil comercial: 2 + 4 colunas em cima, 3 valores lado a lado embaixo. */
+.property-commercial-editor,
+.property-checklist-panel {
+  padding: 16px;
+}
+
+.property-commercial-form {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 11px 12px;
+  margin-top: 10px;
+}
+
+.property-commercial-form > label:nth-child(1) { grid-column: span 2; }
+.property-commercial-form > label:nth-child(2) { grid-column: span 4; }
+.property-commercial-form > label:nth-child(4),
+.property-commercial-form > label:nth-child(5),
+.property-commercial-form > label:nth-child(6) { grid-column: span 2; }
+.property-commercial-form .full { grid-column: 1 / -1; }
+
+.property-commercial-form label {
+  gap: 5px;
+}
+
+.property-commercial-form label > span {
+  font-size: 9px;
+  letter-spacing: .06em;
+}
+
+.property-commercial-form small {
+  font-size: 9px;
+  line-height: 1.4;
+}
+
+.property-commercial-actions {
+  padding-top: 2px;
+  border-top: 1px solid color-mix(in srgb, var(--border) 65%, transparent);
+  padding-top: 11px;
+}
+
+@media (max-width: 760px) {
+  .property-edit-grid .check { grid-column: span 1; }
+  .property-commercial-form { grid-template-columns: 1fr; }
+  .property-commercial-form > label:nth-child(1),
+  .property-commercial-form > label:nth-child(2),
+  .property-commercial-form > label:nth-child(4),
+  .property-commercial-form > label:nth-child(5),
+  .property-commercial-form > label:nth-child(6),
+  .property-commercial-form .full { grid-column: auto; }
+  .property-owner-edit-row { grid-template-columns: minmax(0, 1fr) 90px auto 34px; }
+}
