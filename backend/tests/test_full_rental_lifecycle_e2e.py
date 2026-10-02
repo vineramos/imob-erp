@@ -11,7 +11,7 @@ from app.domains.finance.late_charges import amount_due
 from app.domains.finance.models import RentCharge
 from app.domains.foundation.access import UserContext, get_current_user_context
 from app.domains.lease_lifecycle.models import LeaseExitAdjustment
-from app.domains.portfolio.models import Property
+from app.domains.portfolio.models import Person, Property
 from app.main import app
 from tests.helpers import (
     _run_signature_flow,
@@ -163,6 +163,12 @@ def test_full_rental_lifecycle_from_public_lead_to_key_return(client, identity):
     tenant = funnel["person"]
     assert tenant is not None
     assert tenant["name"] == "Locatário Jornada Completa"
+    assert SessionLocal is not None
+    with SessionLocal() as db:
+        tenant_person = db.get(Person, UUID(tenant["id"]))
+        assert tenant_person is not None
+        tenant_person.document_number = "52998224725"
+        db.commit()
 
     proposal = assert_response(
         client.post(
