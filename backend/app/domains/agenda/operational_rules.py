@@ -11,6 +11,7 @@ from app.domains.agenda.models import AgendaTask
 from app.domains.contracts.models import AdministrationContract
 from app.domains.inspections.models import Inspection
 from app.domains.leases.models import LeaseContract
+from app.domains.lease_lifecycle.models import LeaseLifecycleCase
 from app.domains.maintenance.models import MaintenanceRequest
 
 
@@ -300,7 +301,25 @@ def _sync_lease_reviews(
                 mandatory_action=False,
             )
 
-        if earliest <= item.end_date <= horizon:
+        lifecycle = db.scalar(
+            select(LeaseLifecycleCase)
+            .where(
+                LeaseLifecycleCase.organization_id == organization_id,
+                LeaseLifecycleCase.lease_contract_id == item.id,
+                LeaseLifecycleCase.status != "cancelled",
+            )
+            .order_by(LeaseLifecycleCase.requested_at.desc())
+        )
+        if lifecycle is not None:
+            _complete_stale_contract_tasks(
+                db,
+                organization_id=organization_id,
+                source_type="contract_expiry",
+                source_prefix=f"{item.id}:expiry:",
+                keep_source_id=None,
+                completion_at=lifecycle.requested_at or item.updated_at or now,
+            )
+        elif earliest <= item.end_date <= horizon:
             expiry_source_id = f"{item.id}:expiry:{item.end_date.isoformat()}"
             _complete_stale_contract_tasks(
                 db,
