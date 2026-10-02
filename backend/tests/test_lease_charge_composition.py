@@ -54,6 +54,7 @@ def test_lease_charge_composition_generates_only_scheduled_items_and_third_party
             {"key":"iptu","kind":"iptu","label":"IPTU","amount":"120.00","active":True,"payer":"tenant","beneficiary":"owner","beneficiary_name":"Proprietário","frequency":"monthly","include_in_invoice":True,"agency_retention_type":"none","agency_retention_value":"0.00","start_date":start.isoformat(),"end_date":end.isoformat()},
             {"key":"guarantee_insurance","kind":"guarantee_insurance","label":"Seguro fiança","amount":"500.00","active":True,"payer":"tenant","beneficiary":"third_party","beneficiary_name":"Seguradora Fiança","frequency":"monthly","include_in_invoice":True,"agency_retention_type":"percent","agency_retention_value":"30.00","start_date":start.isoformat(),"end_date":end.isoformat()},
             {"key":"fire_insurance","kind":"fire_insurance","label":"Seguro incêndio","amount":"360.00","active":True,"payer":"tenant","beneficiary":"third_party","beneficiary_name":"Seguradora Incêndio","frequency":"annual","include_in_invoice":True,"agency_retention_type":"fixed","agency_retention_value":"60.00","start_date":start.isoformat(),"end_date":end.isoformat()},
+            {"key":"agency_service","kind":"other","label":"Serviço da imobiliária","amount":"75.00","active":True,"payer":"tenant","beneficiary":"agency","beneficiary_name":"Imobiliária","frequency":"monthly","include_in_invoice":True,"agency_retention_type":"none","agency_retention_value":"0.00","start_date":start.isoformat(),"end_date":end.isoformat()},
             {"key":"outside","kind":"other","label":"Cobrança fora do boleto","amount":"99.00","active":True,"payer":"tenant","beneficiary":"third_party","beneficiary_name":"Terceiro externo","frequency":"monthly","include_in_invoice":False,"agency_retention_type":"none","agency_retention_value":"0.00","start_date":start.isoformat(),"end_date":end.isoformat()},
         ],
         "notes": "Composição financeira completa.",
@@ -66,9 +67,9 @@ def test_lease_charge_composition_generates_only_scheduled_items_and_third_party
     first = assert_response(client.post("/api/finance/charges/generate", json={"competence":start.isoformat(),"lease_contract_id":created["id"]})).json()
     assert first["generated"] == 1
     charge = first["charges"][0]
-    assert decimal(charge["gross_amount"]) == Decimal("3530.00")
+    assert decimal(charge["gross_amount"]) == Decimal("3605.00")
     items = {item["key"]: item for item in charge["charge_items"]}
-    assert set(items) == {"rent", "condo", "iptu", "guarantee_insurance", "fire_insurance"}
+    assert set(items) == {"rent", "condo", "iptu", "guarantee_insurance", "fire_insurance", "agency_service"}
     assert items["fire_insurance"]["frequency"] == "annual"
     assert items["condo"]["beneficiary_name"] == "Condomínio Teste"
     assert "outside" not in items
@@ -85,16 +86,17 @@ def test_lease_charge_composition_generates_only_scheduled_items_and_third_party
 
     next_competence = add_months(start, 1)
     second = assert_response(client.post("/api/finance/charges/generate", json={"competence":next_competence.isoformat(),"lease_contract_id":created["id"]})).json()
-    assert decimal(second["charges"][0]["gross_amount"]) == Decimal("3170.00")
+    assert decimal(second["charges"][0]["gross_amount"]) == Decimal("3245.00")
     assert "fire_insurance" not in {item["key"] for item in second["charges"][0]["charge_items"]}
 
     annual_competence = add_months(start, 12)
     annual = assert_response(client.post("/api/finance/charges/generate", json={"competence":annual_competence.isoformat(),"lease_contract_id":created["id"]})).json()
-    assert decimal(annual["charges"][0]["gross_amount"]) == Decimal("3530.00")
+    assert decimal(annual["charges"][0]["gross_amount"]) == Decimal("3605.00")
 
-    paid = assert_response(client.post(f"/api/finance/charges/{charge['id']}/payment", json={"paid_amount":"3530.00","paid_at":midday(start).isoformat(),"payment_method":"pix","payment_reference":"TEST-ENCARGOS","notes":None})).json()
+    paid = assert_response(client.post(f"/api/finance/charges/{charge['id']}/payment", json={"paid_amount":"3605.00","paid_at":midday(start).isoformat(),"payment_method":"pix","payment_reference":"TEST-ENCARGOS","notes":None})).json()
     settlement = paid["settlement"]
     assert decimal(settlement["third_party_amount"]) == Decimal("1200.00")
+    assert decimal(settlement["agency_reimbursement_amount"]) == Decimal("75.00")
     assert decimal(settlement["agency_retention_amount"]) == Decimal("210.00")
     assert decimal(settlement["owner_entitlement_amount"]) == Decimal("120.00")
     assert decimal(settlement["agency_fee_withheld"]) == Decimal("2000.00")
@@ -102,7 +104,7 @@ def test_lease_charge_composition_generates_only_scheduled_items_and_third_party
     assert decimal(settlement["repasses"][0]["amount"]) == Decimal("120.00")
 
     dashboard = assert_response(client.get(f"/api/finance/dashboard?competence={start.isoformat()}")).json()
-    assert decimal(dashboard["agency_revenue_amount"]) == Decimal("2210.00")
+    assert decimal(dashboard["agency_revenue_amount"]) == Decimal("2285.00")
 
     repasses = assert_response(client.get(f"/api/finance/repasses?competence={start.isoformat()}")).json()
     assert any(row["charge_id"] == charge["id"] and row["lease_code"] == created["code"] for row in repasses)
