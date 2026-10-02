@@ -193,6 +193,8 @@ def record_payment_with_late_charges(
     if charge.status in {"paid", "cancelled"}:
         raise ValueError("Esta cobrança não está disponível para recebimento.")
     paid_at = paid_at or datetime.now(timezone.utc)
+    if paid_at > datetime.now(timezone.utc):
+        raise ValueError("A data do recebimento não pode estar no futuro.")
     breakdown = charge_late_breakdown(db, charge, as_of=paid_at.date())
     received = money(paid_amount)
     if received != breakdown.updated_amount:
