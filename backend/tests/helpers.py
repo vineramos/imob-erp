@@ -160,6 +160,16 @@ def _run_signature_flow(client: TestClient, *, kind: str, contract_id: str) -> d
     # todos assinaram. A partir daqui o arquivamento e os efeitos são do Imob.
     _simulate_provider_closed(model, contract_id)
     archived = assert_response(client.post(f"{base}/signature/archive")).json()
+    # Os cenários financeiros representam contratos assinados no início da vigência.
+    # Isso evita que a data real de execução da suíte altere competências históricas.
+    assert SessionLocal is not None
+    with SessionLocal() as db:
+        item = db.get(model, UUID(contract_id))
+        assert item is not None
+        if getattr(item, "start_date", None):
+            item.signed_at = midday(item.start_date)
+            item.archived_at = midday(item.start_date)
+            db.commit()
     assert archived["status"] == "signed"
     assert archived["archive_status"] == "archived"
     assert archived["signing_status"] == "signed_archived"
