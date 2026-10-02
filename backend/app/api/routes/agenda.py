@@ -1096,7 +1096,21 @@ def dashboard_overview(
 ) -> DashboardOverviewResponse:
     org = context.user.organization_id
     today = datetime.now(timezone.utc).date(); limit = today + timedelta(days=120)
-    administered_properties = db.scalar(select(func.count(func.distinct(AdministrationContract.property_id))).where(AdministrationContract.organization_id == org, AdministrationContract.status == "signed")) or 0
+    managed_property_ids = (
+        select(AdministrationContract.property_id.label("property_id"))
+        .where(
+            AdministrationContract.organization_id == org,
+            AdministrationContract.status != "cancelled",
+        )
+        .union(
+            select(LeaseContract.property_id.label("property_id")).where(
+                LeaseContract.organization_id == org,
+                LeaseContract.status == "signed",
+            )
+        )
+        .subquery()
+    )
+    administered_properties = db.scalar(select(func.count()).select_from(managed_property_ids)) or 0
     available_properties = db.scalar(select(func.count(Property.id)).where(Property.organization_id == org, Property.status == "available")) or 0
     active_leases = db.scalar(select(func.count(LeaseContract.id)).where(LeaseContract.organization_id == org, LeaseContract.status == "signed")) or 0
     expiring_leases = db.scalar(select(func.count(LeaseContract.id)).where(LeaseContract.organization_id == org, LeaseContract.status == "signed", LeaseContract.end_date.between(today, limit))) or 0
@@ -1107,9 +1121,9 @@ def dashboard_overview(
     pending_repasses_amount = db.scalar(select(func.coalesce(func.sum(OwnerRepasse.amount), Decimal("0"))).where(OwnerRepasse.organization_id == org, OwnerRepasse.status == "pending")) or Decimal("0")
     open_captures = db.scalar(select(func.count(Capture.id)).where(Capture.organization_id == org, Capture.status.not_in(("lost", "available")))) or 0
     approved_captures = db.scalar(select(func.count(Capture.id)).where(Capture.organization_id == org, Capture.status == "approved")) or 0
-    properties_with_administration = db.scalar(select(func.count(func.distinct(AdministrationContract.property_id))).where(AdministrationContract.organization_id == org, AdministrationContract.status != "cancelled")) or 0
+    properties_with_administration = administered_properties
     total_properties = db.scalar(select(func.count(Property.id)).where(Property.organization_id == org)) or 0
-    managed_properties = db.scalar(select(func.count(func.distinct(AdministrationContract.property_id))).where(AdministrationContract.organization_id == org, AdministrationContract.status == "signed")) or 0
+    managed_properties = administered_properties
     contracts_awaiting_signature = db.scalar(select(func.count(AdministrationContract.id)).where(AdministrationContract.organization_id == org, AdministrationContract.status == "pending_signature")) or 0
     contracts_in_review = db.scalar(select(func.count(AdministrationContract.id)).where(AdministrationContract.organization_id == org, AdministrationContract.status == "review")) or 0
     recent_capture_rows = db.execute(
