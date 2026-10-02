@@ -313,6 +313,13 @@ def test_repasse_uses_current_property_owner_when_payment_happens(client):
 def test_future_receipt_and_duplicate_cancellation_are_rejected(client):
     scenario = build_signed_rental(client, publish=False)
     charge = _charge(client, scenario["start"], scenario["lease"]["id"])
+    billing = assert_response(
+        client.post(
+            "/api/finance/advanced/billing/run",
+            json={"competence": scenario["start"].isoformat()},
+        )
+    ).json()
+    billing_item = next(item for item in billing["batch"]["items"] if item["charge_id"] == charge["id"])
 
     future = midday(add_months(scenario["start"], 24).replace(day=10))
     rejected = client.post(
@@ -333,6 +340,17 @@ def test_future_receipt_and_duplicate_cancellation_are_rejected(client):
         )
     ).json()
     assert cancelled["status"] == "cancelled"
+
+    batches = assert_response(
+        client.get(
+            "/api/finance/advanced/billing/batches",
+            params={"competence": scenario["start"].isoformat()},
+        )
+    ).json()
+    updated_batch = next(item for item in batches if item["id"] == billing["batch"]["id"])
+    updated_item = next(item for item in updated_batch["items"] if item["id"] == billing_item["id"])
+    assert updated_item["provider_status"] == "CANCELADO"
+    assert updated_batch["status"] == "completed"
 
     duplicate = client.post(
         f"/api/finance/charges/{charge['id']}/cancel",
