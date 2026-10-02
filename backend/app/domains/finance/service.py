@@ -93,21 +93,41 @@ def lease_billable_for_competence(lease: LeaseContract, competence: date) -> boo
     service_end = month_end(service_competence)
     effective_start = lease_effective_start(lease)
     operational_end = lease.operational_end_date or lease.end_date
-    return effective_start <= service_end and operational_end >= competence
+    return effective_start <= service_end and operational_end >= service_competence
+
+
+def billing_period_proration(lease: LeaseContract, competence: date) -> tuple[Decimal, int, int]:
+    """Prorrateia o mês efetivamente prestado, não o mês em que a cobrança vence.
+
+    A assinatura no meio do mês começa a gerar aluguel no dia seguinte, conforme
+    a regra já adotada pelo ERP. No mês final, a data de saída/encerramento é
+    incluída no período cobrado.
+    """
+    service_competence = service_competence_for_billing(lease, competence)
+    period_start = month_start(service_competence)
+    period_end = month_end(service_competence)
+    total_days = period_end.day
+    effective_start = lease_effective_start(lease)
+    operational_end = lease.operational_end_date or lease.end_date
+
+    active_start = period_start
+    if effective_start > period_start:
+        active_start = effective_start + timedelta(days=1)
+    active_end = min(period_end, operational_end)
+
+    if active_end < active_start:
+        return Decimal("0"), 0, total_days
+    active_days = (active_end - active_start).days + 1
+    if active_days >= total_days:
+        return Decimal("1"), total_days, total_days
+    return Decimal(active_days) / Decimal(total_days), active_days, total_days
 
 
 def first_period_proration(lease: LeaseContract, competence: date) -> tuple[Decimal, int, int]:
     competence = month_start(competence)
     if competence != first_billing_competence(lease):
         return Decimal("1"), 0, 0
-    effective_start = lease_effective_start(lease)
-    total_days = month_end(effective_start).day
-    if effective_start.day == 1:
-        return Decimal("1"), total_days, total_days
-    active_days = max(0, total_days - effective_start.day)
-    if active_days == 0:
-        return Decimal("0"), 0, total_days
-    return Decimal(active_days) / Decimal(total_days), active_days, total_days
+    return billing_period_proration(lease, competence)
 
 
 def charge_item_agency_retention(item: dict) -> Decimal:
@@ -483,7 +503,7 @@ def generate_charges(
             skipped_ineligible += 1
             continue
         terms = administration_terms(db, organization_id, property_item.id)
-        proration_factor, proration_days, proration_total_days = first_period_proration(lease, competence)
+        proration_factor, proration_days, proration_total_days = billing_period_proration(lease, competence)
         if proration_factor <= 0:
             skipped_ineligible += 1
             continue
@@ -627,7 +647,13 @@ def calculate_settlement(db: Session, charge: RentCharge, paid_at: datetime) -> 
 
     _create_third_party_titles(db, charge, paid_at)
 
-    owners = [owner for owner in list(charge.owner_snapshot or []) if isinstance(owner, dict) and owner.get("person_id")]
+    # O documento/cobrança preserva o snapshot histórico, mas o repasse financeiro
+    # deve seguir a titularidade atual do imóvel no momento do recebimento.
+    current_owners = current_owner_snapshot(db, charge.organization_id, charge.property_id)
+    owners = [
+        owner for owner in list(current_owners or charge.owner_snapshot or [])
+        if isinstance(owner, dict) and owner.get("person_id")
+    ]
     if owner_entitlement > 0 and not owners:
         raise ValueError("Não é possível liquidar a cobrança: o contrato não possui proprietários válidos para gerar o repasse.")
     total_ownership = Decimal("0.00")
