@@ -1100,7 +1100,7 @@ def dashboard_overview(
         select(AdministrationContract.property_id.label("property_id"))
         .where(
             AdministrationContract.organization_id == org,
-            AdministrationContract.status != "cancelled",
+            AdministrationContract.status == "signed",
         )
         .union(
             select(LeaseContract.property_id.label("property_id")).where(
