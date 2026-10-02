@@ -16,6 +16,7 @@ from app.domains.finance.core_schemas import (
     ManualFinancialTitleCreate,
 )
 from app.domains.finance.models import MaintenanceFinancialEntry, OwnerRepasse, RentCharge
+from app.domains.finance.monthly_cycle import is_competence_closed
 from app.domains.foundation.access import UserContext, require_permission
 from app.domains.foundation.audit import write_audit
 
@@ -330,6 +331,8 @@ def create_manual_title(
     required = "finance.charge.create" if payload.direction == "receivable" else "finance.payment.prepare"
     if not context.has(required):
         raise HTTPException(status_code=403, detail=f"Permissão necessária: {required}")
+    if is_competence_closed(db, organization_id=context.user.organization_id, value=payload.competence):
+        raise HTTPException(status_code=409, detail="Esta competência está fechada. Reabra o período antes de criar lançamentos.")
     item = FinancialTitle(
         organization_id=context.user.organization_id,
         direction=payload.direction,
@@ -382,6 +385,8 @@ def settle_manual_title(
     required = "finance.reconcile" if item.direction == "receivable" else "finance.payment.approve"
     if not context.has(required):
         raise HTTPException(status_code=403, detail=f"Permissão necessária: {required}")
+    if is_competence_closed(db, organization_id=context.user.organization_id, value=item.competence):
+        raise HTTPException(status_code=409, detail="Esta competência está fechada. Reabra o período antes de liquidar o título.")
     if item.status == "cancelled":
         raise HTTPException(status_code=409, detail="Título cancelado não pode ser liquidado.")
     remaining = money(item.amount - item.settled_amount)
@@ -393,6 +398,8 @@ def settle_manual_title(
     item.settled_amount = money(item.settled_amount + amount)
     item.status = "settled" if item.settled_amount >= item.amount else "partial"
     item.settled_at = payload.settled_at or datetime.now(timezone.utc)
+    if item.settled_at > datetime.now(timezone.utc):
+        raise HTTPException(status_code=422, detail="A data da liquidação não pode estar no futuro.")
     item.payment_method = payload.payment_method
     item.payment_reference = (payload.payment_reference or "").strip() or None
     if payload.notes:
@@ -420,6 +427,10 @@ def cancel_manual_title(
     db: Session = Depends(get_db),
 ) -> FinanceCoreItem:
     item = _load_manual(db, context.user.organization_id, title_id)
+    if is_competence_closed(db, organization_id=context.user.organization_id, value=item.competence):
+        raise HTTPException(status_code=409, detail="Esta competência está fechada. Reabra o período antes de cancelar o título.")
+    if item.status == "cancelled":
+        raise HTTPException(status_code=409, detail="Este título já foi cancelado.")
     if item.settled_amount > 0:
         raise HTTPException(status_code=409, detail="Título com liquidação não pode ser cancelado.")
     item.status = "cancelled"
