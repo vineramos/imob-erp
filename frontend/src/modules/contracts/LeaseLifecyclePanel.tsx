@@ -1,5 +1,5 @@
 import { CalendarClock, CheckCircle2, ClipboardCheck, FileSignature, KeyRound, RefreshCw, RotateCcw, WalletCards } from 'lucide-react'
-import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react'
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ApiError, apiRequest } from '../../api/client'
 import './lease-lifecycle.css'
 
@@ -65,6 +65,7 @@ type Lifecycle = {
 type Props = {
   lease: LeaseSummary
   permissions: string[]
+  initialAction?: 'renewal' | 'termination' | null
   onChanged?: () => void
 }
 
@@ -95,7 +96,8 @@ function localDateTimeNow() {
 }
 function iso(value: string) { return value ? new Date(value).toISOString() : null }
 
-export function LeaseLifecyclePanel({ lease, permissions, onChanged }: Props) {
+export function LeaseLifecyclePanel({ lease, permissions, initialAction = null, onChanged }: Props) {
+  const initialActionConsumed = useRef(false)
   const canManage = permissions.includes('contracts.edit')
   const [item, setItem] = useState<Lifecycle | null>(null)
   const [loading, setLoading] = useState(true)
@@ -122,6 +124,14 @@ export function LeaseLifecyclePanel({ lease, permissions, onChanged }: Props) {
     } finally { setLoading(false) }
   }, [lease.id])
   useEffect(() => { void load() }, [load])
+  useEffect(() => {
+    if (loading || initialActionConsumed.current || !initialAction || item || lease.status !== 'signed' || !canManage) return
+    initialActionConsumed.current = true
+    setModal(initialAction)
+    const params = new URLSearchParams(window.location.search)
+    params.delete('action')
+    window.history.replaceState({}, '', window.location.pathname + (params.toString() ? '?' + params.toString() : ''))
+  }, [loading, initialAction, item, lease.status, canManage])
 
   const step = useMemo(() => {
     if (!item) return 0
