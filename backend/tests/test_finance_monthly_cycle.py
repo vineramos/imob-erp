@@ -2,7 +2,7 @@ from datetime import date, datetime, timezone
 from decimal import Decimal
 from types import SimpleNamespace
 
-from app.domains.finance.service import first_billing_competence, first_period_proration, lease_billable_for_competence
+from app.domains.finance.service import billing_period_proration, first_billing_competence, first_period_proration, lease_billable_for_competence
 from tests.helpers import add_months, assert_response, build_signed_rental, decimal, midday
 
 
@@ -217,3 +217,42 @@ def test_contract_signed_before_start_can_bill_on_first_lease_month():
     assert factor == Decimal("1")
     assert active_days == 31
     assert total_days == 31
+
+
+def test_final_service_month_is_billed_on_next_due_month_and_prorated():
+    lease = SimpleNamespace(
+        status="signed",
+        archive_status="archived",
+        final_document_hash="hash",
+        start_date=date(2026, 8, 1),
+        end_date=date(2029, 3, 5),
+        operational_end_date=date(2026, 10, 15),
+        signed_at=datetime(2026, 8, 1, 15, 0, tzinfo=timezone.utc),
+    )
+
+    # Setembro cobra agosto, outubro cobra setembro e novembro cobra outubro.
+    assert first_billing_competence(lease) == date(2026, 9, 1)
+    assert lease_billable_for_competence(lease, date(2026, 11, 1)) is True
+    factor, active_days, total_days = billing_period_proration(lease, date(2026, 11, 1))
+    assert active_days == 15
+    assert total_days == 31
+    assert factor == Decimal(15) / Decimal(31)
+    assert lease_billable_for_competence(lease, date(2026, 12, 1)) is False
+
+
+def test_first_and_final_service_period_can_be_prorated_in_same_month():
+    lease = SimpleNamespace(
+        status="signed",
+        archive_status="archived",
+        final_document_hash="hash",
+        start_date=date(2026, 10, 1),
+        end_date=date(2026, 10, 20),
+        operational_end_date=date(2026, 10, 20),
+        signed_at=datetime(2026, 10, 15, 15, 0, tzinfo=timezone.utc),
+    )
+
+    assert lease_billable_for_competence(lease, date(2026, 11, 1)) is True
+    factor, active_days, total_days = billing_period_proration(lease, date(2026, 11, 1))
+    assert active_days == 5  # 16 a 20/10; o dia da assinatura continua excluído.
+    assert total_days == 31
+    assert factor == Decimal(5) / Decimal(31)
