@@ -5,6 +5,7 @@ from uuid import UUID, uuid4
 
 from app.api.routes import owner_portal as owner_portal_routes
 from app.core.database import SessionLocal
+from app.domains.finance.models import OwnerRepasse
 from app.domains.maintenance.models import MaintenanceRequest
 from tests.helpers import add_months, assert_response, build_signed_rental, decimal, midday
 
@@ -202,3 +203,63 @@ def test_owner_portal_hides_internal_maintenance_cost_and_documents(client, iden
     assert approved["status"] == "approved"
     assert approved["owner_decision_pending"] is False
     assert decimal(approved["owner_charge_amount"]) == decimal("1050.00")
+
+
+def test_owner_portal_excludes_cancelled_repasses_from_annual_forecast(client):
+    journey = build_signed_rental(client, publish=False)
+    owner = journey["owner"]
+    lease = journey["lease"]
+    start = journey["start"]
+
+    first = assert_response(
+        client.post(
+            "/api/finance/charges/generate",
+            json={"competence": start.isoformat(), "lease_contract_id": lease["id"]},
+        )
+    ).json()["charges"][0]
+    assert_response(
+        client.post(
+            f"/api/finance/charges/{first['id']}/payment",
+            json={
+                "paid_amount": "2000.00",
+                "paid_at": midday(start.replace(day=10)).isoformat(),
+                "payment_method": "pix",
+                "payment_reference": "OWNER-CANCELLED-FIRST",
+            },
+        )
+    )
+
+    competence = add_months(start, 1)
+    second = assert_response(
+        client.post(
+            "/api/finance/charges/generate",
+            json={"competence": competence.isoformat(), "lease_contract_id": lease["id"]},
+        )
+    ).json()["charges"][0]
+    paid = assert_response(
+        client.post(
+            f"/api/finance/charges/{second['id']}/payment",
+            json={
+                "paid_amount": "2000.00",
+                "paid_at": midday(competence.replace(day=10)).isoformat(),
+                "payment_method": "pix",
+                "payment_reference": "OWNER-CANCELLED-SECOND",
+            },
+        )
+    ).json()
+    repasse_id = paid["settlement"]["repasses"][0]["id"]
+
+    assert SessionLocal is not None
+    with SessionLocal() as db:
+        repasse = db.get(OwnerRepasse, UUID(repasse_id))
+        assert repasse is not None
+        repasse.status = "cancelled"
+        db.commit()
+
+    _owner_login(client, owner)
+    overview = assert_response(client.get("/api/owner-portal/overview")).json()
+    assert decimal(overview["metrics"]["pending_repasse_amount"]) == decimal("0.00")
+    assert all(
+        not (row["year"] == competence.year and decimal(row["scheduled_amount"]) > decimal("0.00"))
+        for row in overview["annual_reports"]
+    )
