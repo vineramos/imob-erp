@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from io import BytesIO
 from typing import Any
+from xml.sax.saxutils import escape
 
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_CENTER
@@ -103,16 +104,16 @@ def build_administration_contract_pdf(*, contract: Any, organization: Any) -> by
 
     story.append(Paragraph("1. Identificação da administradora", heading))
     story.append(Paragraph(
-        f"<b>{getattr(organization, 'display_name', '')}</b> · {getattr(organization, 'legal_name', '')}<br/>"
-        f"CNPJ: {getattr(organization, 'document_number', None) or 'não informado'} · CRECI PJ: {getattr(organization, 'creci_pj', None) or 'não informado'}",
+        f"<b>{escape(str(getattr(organization, 'display_name', '') or ''))}</b> · {escape(str(getattr(organization, 'legal_name', '') or ''))}<br/>"
+        f"CNPJ: {escape(str(getattr(organization, 'document_number', None) or 'não informado'))} · CRECI PJ: {escape(str(getattr(organization, 'creci_pj', None) or 'não informado'))}",
         body,
     ))
 
     property_snapshot = dict(contract.property_snapshot or {})
     story.append(Paragraph("2. Imóvel administrado", heading))
     story.append(Paragraph(
-        f"Imóvel #{property_snapshot.get('code') or '—'} · {_address(dict(property_snapshot.get('address') or {}))}<br/>"
-        f"Finalidade: {_label(PURPOSE_LABELS, property_snapshot.get('purpose'))} · Tipo: {_label(PROPERTY_TYPE_LABELS, property_snapshot.get('property_type'))} · Aluguel de referência: {_money(property_snapshot.get('rent_amount'))}",
+        f"Imóvel #{escape(str(property_snapshot.get('code') or '—'))} · {escape(_address(dict(property_snapshot.get('address') or {})))}<br/>"
+        f"Finalidade: {escape(_label(PURPOSE_LABELS, property_snapshot.get('purpose')))} · Tipo: {escape(_label(PROPERTY_TYPE_LABELS, property_snapshot.get('property_type')))} · Aluguel de referência: {_money(property_snapshot.get('rent_amount'))}",
         body,
     ))
 
@@ -167,7 +168,7 @@ def build_administration_contract_pdf(*, contract: Any, organization: Any) -> by
 
     signer_section = 5
     if contract.notes:
-        story.extend([Paragraph("5. Condições especiais", heading), Paragraph(str(contract.notes), body)])
+        story.extend([Paragraph("5. Condições especiais", heading), Paragraph(escape(str(contract.notes)), body)])
         signer_section = 6
 
     story.append(Paragraph(f"{signer_section}. Signatários desta versão", heading))
