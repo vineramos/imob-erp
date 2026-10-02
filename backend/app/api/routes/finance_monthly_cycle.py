@@ -131,6 +131,8 @@ def close_monthly_competence(
     db: Session = Depends(get_db),
 ) -> MonthlyClosureResponse:
     target = (competence or date.today()).replace(day=1)
+    if target > date.today().replace(day=1):
+        raise HTTPException(status_code=422, detail="Não é possível fechar uma competência futura.")
     readiness = build_monthly_closing_readiness(db, organization_id=context.user.organization_id, competence=target)
     if not readiness.can_close:
         raise HTTPException(
