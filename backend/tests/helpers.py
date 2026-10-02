@@ -167,8 +167,9 @@ def _run_signature_flow(client: TestClient, *, kind: str, contract_id: str) -> d
         item = db.get(model, UUID(contract_id))
         assert item is not None
         if getattr(item, "start_date", None):
-            item.signed_at = midday(item.start_date)
-            item.archived_at = midday(item.start_date)
+            signed_fixture_date = add_months(item.start_date.replace(day=1), -1)
+            item.signed_at = midday(signed_fixture_date)
+            item.archived_at = midday(signed_fixture_date)
             db.commit()
     assert archived["status"] == "signed"
     assert archived["archive_status"] == "archived"
