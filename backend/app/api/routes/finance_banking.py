@@ -490,7 +490,7 @@ def _target_details(
         )
         if item is None:
             raise HTTPException(status_code=404, detail="Repasse ao proprietário não encontrado.")
-        outstanding = Decimal("0.00") if item.status in {"paid", "settled_zero"} else money(item.amount)
+        outstanding = Decimal("0.00") if item.status in {"paid", "settled_zero", "cancelled"} else money(item.amount)
         return {
             "object": item,
             "target_type": "owner_repasse",
