@@ -108,6 +108,7 @@ def _default_signers(owner_snapshot: list[dict], tenant_snapshot: list[dict]) ->
             signers.append(
                 {
                     "role": role,
+                    "person_id": party.get("person_id"),
                     "name": party.get("name") or "",
                     "email": party.get("email") or "",
                     "document_number": party.get("document_number"),
@@ -244,6 +245,68 @@ def _organization(db: Session, organization_id: UUID) -> Organization:
     if item is None:
         raise HTTPException(status_code=404, detail="Organização não encontrada.")
     return item
+
+
+def _digits(value: object) -> str:
+    return "".join(ch for ch in str(value or "") if ch.isdigit())
+
+
+def _signature_readiness(db: Session, item: LeaseContract) -> None:
+    organization = _organization(db, item.organization_id)
+    errors: list[str] = []
+    if len(_digits(organization.document_number)) != 14:
+        errors.append("cadastre o CNPJ da imobiliária em Configurações → Dados da empresa")
+    if not str(organization.creci_pj or "").strip():
+        errors.append("cadastre o CRECI PJ da imobiliária")
+    if not str(organization.representative_name or "").strip():
+        errors.append("cadastre o representante padrão da imobiliária")
+    if not str(organization.representative_email or "").strip():
+        errors.append("cadastre o e-mail do representante padrão")
+    if len(_digits(organization.representative_document_number)) != 11:
+        errors.append("cadastre um CPF válido para o representante padrão")
+
+    property_item = _property(db, item.organization_id, item.property_id)
+    current_owner_ids = {str(owner.person_id) for owner in property_item.owners}
+    snapshot_owner_ids = {str(owner.get("person_id") or "") for owner in list(item.owner_snapshot or []) if owner.get("person_id")}
+    if snapshot_owner_ids != current_owner_ids:
+        errors.append("os proprietários do imóvel mudaram após esta versão; gere uma nova versão antes de assinar")
+    owner_documents = {_digits(owner.person.document_number) for owner in property_item.owners if owner.person.document_number}
+    tenant_ids = {str(row.get("person_id") or "") for row in list(item.tenant_snapshot or []) if row.get("person_id")}
+    tenant_documents = {_digits(row.get("document_number")) for row in list(item.tenant_snapshot or []) if row.get("document_number")}
+
+    signers = list(item.signers_snapshot or [])
+    if not signers:
+        errors.append("inclua ao menos um signatário")
+    for signer in signers:
+        name = str(signer.get("name") or "signatário").strip()
+        email = str(signer.get("email") or "").strip()
+        document = _digits(signer.get("document_number"))
+        role = str(signer.get("role") or "tenant")
+        if not email:
+            errors.append(f"complete o e-mail de {name}")
+        person_id = str(signer.get("person_id") or "").strip()
+        if role == "owner" and ((person_id and person_id not in current_owner_ids) or (not person_id and document and document not in owner_documents)):
+            errors.append(f"{name} não corresponde a um proprietário atual do imóvel")
+        if role == "tenant" and ((person_id and person_id not in tenant_ids) or (not person_id and document and document not in tenant_documents)):
+            errors.append(f"{name} não corresponde a um locatário desta versão")
+
+        is_company = len(document) == 14 or role == "agency"
+        if is_company:
+            rep_name = str(signer.get("representative_name") or "").strip()
+            rep_email = str(signer.get("representative_email") or "").strip()
+            rep_document = _digits(signer.get("representative_document_number"))
+            if role == "agency":
+                rep_name = rep_name or str(organization.representative_name or "").strip()
+                rep_email = rep_email or str(organization.representative_email or "").strip()
+                rep_document = rep_document or _digits(organization.representative_document_number)
+            if not rep_name or not rep_email or len(rep_document) != 11:
+                errors.append(f"defina representante pessoa física com nome, e-mail e CPF para {name}")
+        elif len(document) != 11:
+            errors.append(f"complete o CPF de {name}")
+
+    if errors:
+        unique = list(dict.fromkeys(errors))
+        raise HTTPException(status_code=422, detail="Antes da assinatura: " + "; ".join(unique) + ".")
 
 
 def _signature_provider_key(db: Session, organization_id: UUID) -> str:
@@ -464,6 +527,7 @@ def lease_contract_workflow(
                 status_code=422,
                 detail="Complete o e-mail dos signatários antes da assinatura: " + ", ".join(missing_email),
             )
+        _signature_readiness(db, item)
         provider = _signature_provider_key(db, context.user.organization_id)
         if provider == "none":
             raise HTTPException(status_code=422, detail="Configure um provedor de assinatura antes de continuar.")
@@ -601,6 +665,7 @@ def send_lease_contract_to_signature(
         raise HTTPException(status_code=409, detail="Prepare a assinatura antes de enviar o contrato ao provider.")
     if item.generated_document_version != item.current_version or not item.generated_document_hash:
         raise HTTPException(status_code=409, detail="Gere o PDF da versão atual antes de enviar para assinatura.")
+    _signature_readiness(db, item)
     provider = get_signature_provider(item.signing_provider)
     if provider is None or not provider.configured:
         provider = get_signature_provider_for_organization(db, context.user.organization_id, item.signing_provider)
@@ -629,13 +694,35 @@ def send_lease_contract_to_signature(
         item.signing_document_id = document_id
         metadata = dict(item.signing_metadata or {})
         signer_ids = dict(metadata.get("signer_ids") or {})
+        organization = _organization(db, item.organization_id)
         for signer in item.signers_snapshot or []:
-            email = str(signer.get("email") or "").strip().lower()
+            legal_document = _digits(signer.get("document_number"))
+            role = str(signer.get("role") or "tenant")
+            is_company = len(legal_document) == 14 or role == "agency"
+            provider_signer = signer
+            if is_company:
+                representative_name = str(signer.get("representative_name") or "").strip()
+                representative_email = str(signer.get("representative_email") or "").strip()
+                representative_document = _digits(signer.get("representative_document_number"))
+                representative_phone = signer.get("representative_phone")
+                if role == "agency":
+                    representative_name = representative_name or str(organization.representative_name or "").strip()
+                    representative_email = representative_email or str(organization.representative_email or "").strip()
+                    representative_document = representative_document or _digits(organization.representative_document_number)
+                    representative_phone = representative_phone or organization.representative_phone
+                provider_signer = {
+                    **signer,
+                    "name": representative_name,
+                    "email": representative_email,
+                    "document_number": representative_document,
+                    "phone": representative_phone,
+                }
+            email = str(provider_signer.get("email") or "").strip().lower()
             if not email:
                 raise SignatureProviderError("Todos os signatários precisam possuir e-mail antes do envio.")
             signer_id = signer_ids.get(email)
             if not signer_id:
-                signer_id = provider.create_signer(envelope_id, signer)
+                signer_id = provider.create_signer(envelope_id, provider_signer)
                 signer_ids[email] = signer_id
                 provider.create_signature_requirements(
                     envelope_id,
