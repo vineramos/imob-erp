@@ -1,5 +1,6 @@
 import calendar
 from datetime import date, datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 from decimal import Decimal, ROUND_HALF_UP
 from uuid import UUID
 
@@ -50,6 +51,54 @@ def business_days_after(value: date, days: int) -> date:
 
 def months_since(start: date, competence: date) -> int:
     return (competence.year - start.year) * 12 + competence.month - start.month
+
+
+def add_months(value: date, months: int) -> date:
+    absolute = value.year * 12 + value.month - 1 + months
+    year, month_index = divmod(absolute, 12)
+    return date(year, month_index + 1, 1)
+
+
+def lease_effective_start(lease: LeaseContract) -> date:
+    signed_date = None
+    if lease.signed_at is not None:
+        signed_date = lease.signed_at.astimezone(ZoneInfo("America/Sao_Paulo")).date()
+    return max(lease.start_date, signed_date) if signed_date else lease.start_date
+
+
+def first_billing_competence(lease: LeaseContract) -> date:
+    return add_months(month_start(lease_effective_start(lease)), 1)
+
+
+def service_competence_for_billing(competence: date) -> date:
+    return add_months(month_start(competence), -1)
+
+
+def lease_billable_for_competence(lease: LeaseContract, competence: date) -> bool:
+    competence = month_start(competence)
+    if lease.status != "signed" or lease.archive_status != "archived" or not lease.final_document_hash:
+        return False
+    if competence < first_billing_competence(lease):
+        return False
+    service_competence = service_competence_for_billing(competence)
+    service_end = month_end(service_competence)
+    effective_start = lease_effective_start(lease)
+    operational_end = lease.operational_end_date or lease.end_date
+    return effective_start <= service_end and operational_end >= service_competence
+
+
+def first_period_proration(lease: LeaseContract, competence: date) -> tuple[Decimal, int, int]:
+    competence = month_start(competence)
+    if competence != first_billing_competence(lease):
+        return Decimal("1"), 0, 0
+    effective_start = lease_effective_start(lease)
+    total_days = month_end(effective_start).day
+    if effective_start.day == 1:
+        return Decimal("1"), total_days, total_days
+    active_days = max(0, total_days - effective_start.day)
+    if active_days == 0:
+        return Decimal("0"), 0, total_days
+    return Decimal(active_days) / Decimal(total_days), active_days, total_days
 
 
 def charge_item_agency_retention(item: dict) -> Decimal:
@@ -254,13 +303,24 @@ def charge_rule_applies(rule: dict, competence: date, *, lease_start: date) -> b
     return True
 
 
-def charge_items(lease: LeaseContract, property_item: Property, terms: dict, competence: date) -> list[dict]:
+def charge_items(
+    lease: LeaseContract,
+    property_item: Property,
+    terms: dict,
+    competence: date,
+    *,
+    proration_factor: Decimal = Decimal("1"),
+    proration_days: int = 0,
+    proration_total_days: int = 0,
+) -> list[dict]:
+    service_competence = service_competence_for_billing(competence)
+    prorated_rent = money(money(lease.rent_amount) * proration_factor)
     items: list[dict] = [
         {
             "key": "rent",
             "kind": "rent",
             "label": "Aluguel",
-            "amount": str(money(lease.rent_amount)),
+            "amount": str(prorated_rent),
             "payer": "tenant",
             "beneficiary": "owner",
             "beneficiary_name": "Proprietário",
@@ -271,17 +331,24 @@ def charge_items(lease: LeaseContract, property_item: Property, terms: dict, com
             "agency_retention_amount": "0.00",
             "third_party_net_amount": "0.00",
             "source": "lease_contract",
+            "service_competence": service_competence.isoformat(),
+            "prorated": proration_factor != Decimal("1"),
+            "proration_days": proration_days or None,
+            "proration_total_days": proration_total_days or None,
         }
     ]
     configured = configured_monthly_charge_rules(lease)
     if configured:
         for rule in configured:
-            if rule.get("payer", "tenant") != "tenant" or not charge_rule_applies(rule, competence, lease_start=lease.start_date):
+            if rule.get("payer", "tenant") != "tenant" or not charge_rule_applies(rule, service_competence, lease_start=lease_effective_start(lease)):
                 continue
             beneficiary = str(rule.get("beneficiary") or "third_party")
             if beneficiary not in {"owner", "agency", "third_party"}:
                 beneficiary = "third_party"
             amount = money(rule.get("amount"))
+            frequency = str(rule.get("frequency") or "monthly")
+            if frequency == "monthly" and proration_factor != Decimal("1"):
+                amount = money(amount * proration_factor)
             retention_type = str(rule.get("agency_retention_type") or "none")
             retention_value = money(rule.get("agency_retention_value"))
             draft = {
@@ -301,7 +368,11 @@ def charge_items(lease: LeaseContract, property_item: Property, terms: dict, com
                     "payer": "tenant",
                     "beneficiary": beneficiary,
                     "beneficiary_name": (str(rule.get("beneficiary_name") or "").strip() or None),
-                    "frequency": str(rule.get("frequency") or "monthly"),
+                    "frequency": frequency,
+                    "service_competence": service_competence.isoformat(),
+                    "prorated": frequency == "monthly" and proration_factor != Decimal("1"),
+                    "proration_days": proration_days or None,
+                    "proration_total_days": proration_total_days or None,
                     "include_in_invoice": True,
                     "agency_retention_type": retention_type,
                     "agency_retention_value": str(retention_value),
@@ -351,14 +422,7 @@ def generate_charges(
     if lease_contract_id:
         stmt = stmt.where(LeaseContract.id == lease_contract_id)
     leases = db.scalars(stmt.order_by(LeaseContract.internal_number.asc())).all()
-    eligible = [
-        lease for lease in leases
-        if lease.status == "signed"
-        and lease.archive_status == "archived"
-        and lease.final_document_hash
-        and lease.start_date <= period_end
-        and (lease.operational_end_date or lease.end_date) >= competence
-    ]
+    eligible = [lease for lease in leases if lease_billable_for_competence(lease, competence)]
     skipped_ineligible = max(0, len(leases) - len(eligible))
     if not eligible:
         return [], 0, skipped_ineligible
@@ -386,8 +450,21 @@ def generate_charges(
             skipped_ineligible += 1
             continue
         terms = administration_terms(db, organization_id, property_item.id)
-        components = charge_items(lease, property_item, terms, competence)
+        proration_factor, proration_days, proration_total_days = first_period_proration(lease, competence)
+        if proration_factor <= 0:
+            skipped_ineligible += 1
+            continue
+        components = charge_items(
+            lease,
+            property_item,
+            terms,
+            competence,
+            proration_factor=proration_factor,
+            proration_days=proration_days,
+            proration_total_days=proration_total_days,
+        )
         gross = sum((money(item["amount"]) for item in components), Decimal("0.00"))
+        rent_component = next(item for item in components if item.get("key") == "rent")
         charge = RentCharge(
             organization_id=organization_id,
             lease_contract_id=lease.id,
@@ -395,7 +472,7 @@ def generate_charges(
             competence=competence,
             due_date=due_date_for(competence, lease.due_day),
             status="generated",
-            rent_amount=money(lease.rent_amount),
+            rent_amount=money(rent_component["amount"]),
             gross_amount=money(gross),
             charge_items=components,
             tenant_snapshot=list(lease.tenant_snapshot or []),
@@ -470,8 +547,8 @@ def calculate_settlement(db: Session, charge: RentCharge, paid_at: datetime) -> 
         admin_fee = money(rent * Decimal(str(terms.get("admin_fee_percent") or 0)) / Decimal("100"))
 
     lease = db.get(LeaseContract, charge.lease_contract_id)
-    lease_start = lease.start_date if lease else charge.competence
-    installment_number = months_since(lease_start, charge.competence) + 1
+    billing_start = first_billing_competence(lease) if lease else charge.competence
+    installment_number = months_since(billing_start, charge.competence) + 1
     installments = max(1, int(terms.get("intermediation_installments") or 1))
     intermediation_percent = Decimal(str(terms.get("intermediation_percent") or 0))
     intermediation_fee = Decimal("0.00")
