@@ -1143,7 +1143,26 @@ def dashboard_overview(
         .limit(5)
     ).all()
     events = _collect_events(db, context, today, today, mine=True)
-    overdue_tasks = len([item for item in events if item.needs_justification])
+    _, profiles, _ = ensure_agenda_structure(db, org)
+    profile = profiles[context.user.id]
+    overdue_scope = [AgendaTask.assigned_user_id == context.user.id]
+    if profile.department_id:
+        overdue_scope.append(
+            and_(
+                AgendaTask.assigned_user_id.is_(None),
+                AgendaTask.department_id == profile.department_id,
+            )
+        )
+    overdue_tasks = db.scalar(
+        select(func.count(AgendaTask.id)).where(
+            AgendaTask.organization_id == org,
+            AgendaTask.automatic.is_(True),
+            AgendaTask.mandatory_action.is_(True),
+            AgendaTask.status == "pending",
+            AgendaTask.starts_at < datetime.combine(today, time.min, tzinfo=timezone.utc),
+            or_(*overdue_scope),
+        )
+    ) or 0
     tasks_today = len([item for item in events if item.status not in {"completed", "cancelled", "missed"}])
     db.commit()
     return DashboardOverviewResponse(
