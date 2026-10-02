@@ -5,8 +5,13 @@ No production records, banking transfers, or live signatures are used.
 """
 
 from decimal import Decimal
+from uuid import UUID
 
+from sqlalchemy import select
+
+from app.core.database import SessionLocal
 from app.domains.foundation.access import UserContext, get_current_user_context
+from app.domains.portfolio.models import PropertyOwner
 from app.main import app
 from tests.helpers import (
     add_months,
@@ -241,3 +246,96 @@ def test_rent_receipt_owner_repasse_commission_and_dashboard_stay_consistent(cli
         assert denied_commission.status_code == 403
     finally:
         app.dependency_overrides[get_current_user_context] = lambda: identity["context"]
+
+
+def test_repasse_uses_current_property_owner_when_payment_happens(client):
+    scenario = build_signed_rental(client, publish=False)
+    first_month = scenario["start"]
+    second_month = add_months(first_month, 1)
+    lease_id = scenario["lease"]["id"]
+
+    first = _charge(client, first_month, lease_id)
+    assert_response(
+        client.post(
+            f"/api/finance/charges/{first['id']}/payment",
+            json={
+                "paid_amount": str(first["gross_amount"]),
+                "paid_at": midday(first_month.replace(day=10)).isoformat(),
+                "payment_method": "pix",
+                "payment_reference": "OWNER-SWAP-FIRST",
+            },
+        )
+    )
+
+    second = _charge(client, second_month, lease_id)
+    new_owner = create_person(
+        client,
+        name="Novo Proprietário Financeiro",
+        document="39053344705",
+        email="novo.owner.finance@example.com",
+        role_keys=["owner"],
+    )
+
+    assert SessionLocal is not None
+    with SessionLocal() as db:
+        rows = db.scalars(
+            select(PropertyOwner).where(PropertyOwner.property_id == UUID(scenario["property"]["id"]))
+        ).all()
+        for row in rows:
+            db.delete(row)
+        db.add(
+            PropertyOwner(
+                property_id=UUID(scenario["property"]["id"]),
+                person_id=UUID(new_owner["id"]),
+                ownership_percent=Decimal("100.0000"),
+            )
+        )
+        db.commit()
+
+    paid = assert_response(
+        client.post(
+            f"/api/finance/charges/{second['id']}/payment",
+            json={
+                "paid_amount": str(second["gross_amount"]),
+                "paid_at": midday(second_month.replace(day=10)).isoformat(),
+                "payment_method": "pix",
+                "payment_reference": "OWNER-SWAP-SECOND",
+            },
+        )
+    ).json()
+
+    repasses = paid["settlement"]["repasses"]
+    assert len(repasses) == 1
+    assert repasses[0]["owner_person_id"] == new_owner["id"]
+    assert repasses[0]["owner_name"] == new_owner["name"]
+
+
+def test_future_receipt_and_duplicate_cancellation_are_rejected(client):
+    scenario = build_signed_rental(client, publish=False)
+    charge = _charge(client, scenario["start"], scenario["lease"]["id"])
+
+    future = midday(add_months(scenario["start"], 24).replace(day=10))
+    rejected = client.post(
+        f"/api/finance/charges/{charge['id']}/payment",
+        json={
+            "paid_amount": str(charge["gross_amount"]),
+            "paid_at": future.isoformat(),
+            "payment_method": "pix",
+            "payment_reference": "FUTURE-INVALID",
+        },
+    )
+    assert rejected.status_code == 422
+
+    cancelled = assert_response(
+        client.post(
+            f"/api/finance/charges/{charge['id']}/cancel",
+            json={"reason": "Cancelamento controlado para teste financeiro."},
+        )
+    ).json()
+    assert cancelled["status"] == "cancelled"
+
+    duplicate = client.post(
+        f"/api/finance/charges/{charge['id']}/cancel",
+        json={"reason": "Tentativa duplicada de cancelamento."},
+    )
+    assert duplicate.status_code == 409
