@@ -385,9 +385,11 @@ def charge_items(
 
     # Compatibilidade com contratos assinados antes da composição versionada.
     if terms.get("iptu_operational_payer") == "tenant" and property_item.iptu_amount:
-        items.append({"key": "iptu", "kind": "iptu", "label": "IPTU", "amount": str(money(property_item.iptu_amount)), "payer": "tenant", "beneficiary": "owner", "beneficiary_name": "Proprietário", "frequency": "monthly", "include_in_invoice": True, "agency_retention_type": "none", "agency_retention_value": "0.00", "agency_retention_amount": "0.00", "third_party_net_amount": "0.00", "source": "legacy_property"})
+        amount = money(money(property_item.iptu_amount) * proration_factor)
+        items.append({"key": "iptu", "kind": "iptu", "label": "IPTU", "amount": str(amount), "payer": "tenant", "beneficiary": "owner", "beneficiary_name": "Proprietário", "frequency": "monthly", "include_in_invoice": True, "agency_retention_type": "none", "agency_retention_value": "0.00", "agency_retention_amount": "0.00", "third_party_net_amount": "0.00", "source": "legacy_property", "service_competence": service_competence.isoformat(), "prorated": proration_factor != Decimal("1"), "proration_days": proration_days or None, "proration_total_days": proration_total_days or None})
     if terms.get("condo_operational_payer") == "agency" and property_item.condo_amount:
-        items.append({"key": "condo", "kind": "condo", "label": "Condomínio", "amount": str(money(property_item.condo_amount)), "payer": "tenant", "beneficiary": "agency", "beneficiary_name": "Imobiliária", "frequency": "monthly", "include_in_invoice": True, "agency_retention_type": "none", "agency_retention_value": "0.00", "agency_retention_amount": "0.00", "third_party_net_amount": "0.00", "source": "legacy_property"})
+        amount = money(money(property_item.condo_amount) * proration_factor)
+        items.append({"key": "condo", "kind": "condo", "label": "Condomínio", "amount": str(amount), "payer": "tenant", "beneficiary": "agency", "beneficiary_name": "Imobiliária", "frequency": "monthly", "include_in_invoice": True, "agency_retention_type": "none", "agency_retention_value": "0.00", "agency_retention_amount": "0.00", "third_party_net_amount": "0.00", "source": "legacy_property", "service_competence": service_competence.isoformat(), "prorated": proration_factor != Decimal("1"), "proration_days": proration_days or None, "proration_total_days": proration_total_days or None})
     return items
 
 
