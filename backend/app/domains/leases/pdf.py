@@ -303,10 +303,19 @@ def build_lease_contract_pdf(*, contract: Any, organization: Any) -> bytes:
     if signers:
         rows = [["Papel", "Nome", "E-mail", "Ordem"]]
         for signer in signers:
+            role = str(signer.get("role") or "")
+            representative_name = str(signer.get("representative_name") or "").strip()
+            representative_email = str(signer.get("representative_email") or "").strip()
+            if role == "agency":
+                representative_name = representative_name or str(getattr(organization, "representative_name", None) or "").strip()
+                representative_email = representative_email or str(getattr(organization, "representative_email", None) or "").strip()
+            signer_name = signer.get("name") or "—"
+            if representative_name:
+                signer_name = f"{signer_name} · rep. {representative_name}"
             rows.append([
-                ROLE_LABELS.get(str(signer.get("role") or ""), str(signer.get("role") or "—")),
-                (f"{signer.get('name') or '—'} · rep. {signer.get('representative_name')}" if signer.get("representative_name") else signer.get("name") or "—"),
-                signer.get("representative_email") or signer.get("email") or "—",
+                ROLE_LABELS.get(role, role or "—"),
+                signer_name,
+                representative_email or signer.get("email") or "—",
                 str(signer.get("sign_order") or 1),
             ])
         table = Table(rows, colWidths=[30 * mm, 57 * mm, 68 * mm, 17 * mm], repeatRows=1)
