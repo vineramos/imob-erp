@@ -67,6 +67,7 @@ from app.domains.foundation.access import UserContext, require_permission
 from app.domains.foundation.audit import write_audit
 from app.domains.foundation.models import AppUser
 from app.domains.leases.models import LeaseContract
+from app.domains.lease_lifecycle.models import LeaseLifecycleCase
 from app.domains.maintenance.models import MaintenanceRequest
 from app.domains.portfolio.models import Capture, Person, Property
 
@@ -379,29 +380,38 @@ def _collect_events(
                 or_(LeaseContract.end_date.between(start, window_end), LeaseContract.next_adjustment_date.between(start, end)),
             )
         ).all()
+        decided_lease_ids = set(
+            db.scalars(
+                select(LeaseLifecycleCase.lease_contract_id).where(
+                    LeaseLifecycleCase.organization_id == organization_id,
+                    LeaseLifecycleCase.status != "cancelled",
+                )
+            ).all()
+        )
         for item in leases:
             code = f"LOC-{item.internal_number:06d}"
-            for days in (120, 90, 60, 30, 0):
-                alert_day = item.end_date - timedelta(days=days)
-                if start <= alert_day <= end:
-                    events.append(_event(
-                        event_id=f"lease:{item.id}:end-{days}",
-                        event_type="contract_expiry",
-                        title=f"Contrato encerra hoje · {code}" if days == 0 else f"Contrato vence em {days} dias · {code}",
-                        description=f"Imóvel {property_codes.get(item.property_id) or '—'} · término em {item.end_date.strftime('%d/%m/%Y')}",
-                        start_at=noon(alert_day),
-                        all_day=True,
-                        module="contracts",
-                        source_id=str(item.id),
-                        source_code=code,
-                        department_id=admin_department.id,
-                        department_name=admin_department.name,
-                        property_code=property_codes.get(item.property_id),
-                        priority="urgent" if days == 0 else "high" if days <= 30 else "normal" if days <= 60 else "low",
-                        status_value=item.status,
-                        automatic=True,
-                        mandatory_action=False,
-                    ))
+            if item.id not in decided_lease_ids:
+                for days in (120, 90, 60, 30, 0):
+                    alert_day = item.end_date - timedelta(days=days)
+                    if start <= alert_day <= end:
+                        events.append(_event(
+                            event_id=f"lease:{item.id}:end-{days}",
+                            event_type="contract_expiry",
+                            title=f"Contrato encerra hoje · {code}" if days == 0 else f"Contrato vence em {days} dias · {code}",
+                            description=f"Imóvel {property_codes.get(item.property_id) or '—'} · término em {item.end_date.strftime('%d/%m/%Y')}",
+                            start_at=noon(alert_day),
+                            all_day=True,
+                            module="contracts",
+                            source_id=str(item.id),
+                            source_code=code,
+                            department_id=admin_department.id,
+                            department_name=admin_department.name,
+                            property_code=property_codes.get(item.property_id),
+                            priority="urgent" if days == 0 else "high" if days <= 30 else "normal" if days <= 60 else "low",
+                            status_value=item.status,
+                            automatic=True,
+                            mandatory_action=False,
+                        ))
             if start <= item.next_adjustment_date <= end:
                 events.append(_event(
                     event_id=f"lease:{item.id}:adjustment",
