@@ -441,13 +441,21 @@ def _collect_events(
             if item.end_date is None:
                 continue
             code = f"ADM-{item.internal_number:06d}"
+            end_action = str((item.rules_snapshot or {}).get("end_of_term_action") or "renew_indefinite")
             for days in (120, 90, 60, 30, 0):
                 alert_day = item.end_date - timedelta(days=days)
                 if start <= alert_day <= end:
+                    title = (
+                        f"Administração entra em prazo indeterminado hoje · {code}"
+                        if days == 0 and end_action == "renew_indefinite"
+                        else f"Administração encerra hoje · {code}"
+                        if days == 0
+                        else f"Revisar continuidade da administração em {days} dias · {code}"
+                    )
                     events.append(_event(
                         event_id=f"admin:{item.id}:end-{days}",
                         event_type="contract_expiry",
-                        title=f"Administração encerra hoje · {code}" if days == 0 else f"Administração vence em {days} dias · {code}",
+                        title=title,
                         description=f"Imóvel {property_codes.get(item.property_id) or '—'} · término em {item.end_date.strftime('%d/%m/%Y')}",
                         start_at=noon(alert_day),
                         all_day=True,
