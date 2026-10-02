@@ -58,6 +58,10 @@ class AdministrationContract(Base):
     final_document_hash: Mapped[str | None] = mapped_column(String(64))
     archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+    closed_by_user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("app_users.id"))
+    closure_reason: Mapped[str | None] = mapped_column(Text)
+
     created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("app_users.id"))
     approved_by_user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("app_users.id"))
     approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
