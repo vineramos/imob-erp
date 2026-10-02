@@ -172,6 +172,7 @@ def test_first_rent_charge_starts_next_month_and_prorates_signature_month():
     )
 
     assert first_billing_competence(lease) == date(2026, 11, 1)
+    assert lease_billable_for_competence(lease, date(2026, 9, 1)) is False
     assert lease_billable_for_competence(lease, date(2026, 10, 1)) is False
     assert lease_billable_for_competence(lease, date(2026, 11, 1)) is True
 
@@ -195,6 +196,24 @@ def test_signature_on_first_day_bills_full_month_only_on_next_due_month():
     assert lease_billable_for_competence(lease, date(2026, 10, 1)) is False
     assert lease_billable_for_competence(lease, date(2026, 11, 1)) is True
     factor, active_days, total_days = first_period_proration(lease, date(2026, 11, 1))
+    assert factor == Decimal("1")
+    assert active_days == 31
+    assert total_days == 31
+
+
+def test_contract_signed_before_start_can_bill_on_first_lease_month():
+    lease = SimpleNamespace(
+        status="signed",
+        archive_status="archived",
+        final_document_hash="hash",
+        start_date=date(2026, 10, 1),
+        end_date=date(2029, 3, 5),
+        operational_end_date=None,
+        signed_at=datetime(2026, 9, 20, 15, 0, tzinfo=timezone.utc),
+    )
+    assert first_billing_competence(lease) == date(2026, 10, 1)
+    assert lease_billable_for_competence(lease, date(2026, 10, 1)) is True
+    factor, active_days, total_days = first_period_proration(lease, date(2026, 10, 1))
     assert factor == Decimal("1")
     assert active_days == 31
     assert total_days == 31
