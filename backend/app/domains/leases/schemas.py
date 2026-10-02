@@ -24,10 +24,16 @@ class LeaseSignerPayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     role: LeaseSignerRole
+    person_id: UUID | None = None
     name: str = Field(min_length=2, max_length=180)
     email: EmailStr | Literal[""] = ""
     document_number: str | None = Field(default=None, max_length=24)
     phone: str | None = Field(default=None, max_length=40)
+    representative_person_id: UUID | None = None
+    representative_name: str | None = Field(default=None, max_length=180)
+    representative_email: EmailStr | None = None
+    representative_document_number: str | None = Field(default=None, max_length=24)
+    representative_phone: str | None = Field(default=None, max_length=40)
     sign_order: int = Field(default=1, ge=1, le=50)
     communication: SignerCommunication = "email"
 
