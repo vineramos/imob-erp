@@ -5,6 +5,7 @@ from datetime import date, datetime, timezone
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Literal
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import event, inspect, select
 from sqlalchemy.orm import Session
@@ -193,7 +194,8 @@ def record_payment_with_late_charges(
     if charge.status in {"paid", "cancelled"}:
         raise ValueError("Esta cobrança não está disponível para recebimento.")
     paid_at = paid_at or datetime.now(timezone.utc)
-    if paid_at > datetime.now(timezone.utc):
+    local_zone = ZoneInfo("America/Sao_Paulo")
+    if paid_at.astimezone(local_zone).date() > datetime.now(local_zone).date():
         raise ValueError("A data do recebimento não pode estar no futuro.")
     breakdown = charge_late_breakdown(db, charge, as_of=paid_at.date())
     received = money(paid_amount)
