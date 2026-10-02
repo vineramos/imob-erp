@@ -1,3 +1,8 @@
+from datetime import date, datetime, timezone
+from decimal import Decimal
+from types import SimpleNamespace
+
+from app.domains.finance.service import first_billing_competence, first_period_proration, lease_billable_for_competence
 from tests.helpers import add_months, assert_response, build_signed_rental, decimal, midday
 
 
@@ -153,3 +158,43 @@ def test_finance_closing_control_reports_clean_period_without_bank_anomalies(cli
     assert result["dre_unclassified_commissions"] == 0
     assert result["ready_to_close"] is True
     assert result["issues"] == []
+
+
+def test_first_rent_charge_starts_next_month_and_prorates_signature_month():
+    lease = SimpleNamespace(
+        status="signed",
+        archive_status="archived",
+        final_document_hash="hash",
+        start_date=date(2026, 9, 5),
+        end_date=date(2029, 3, 5),
+        operational_end_date=None,
+        signed_at=datetime(2026, 10, 15, 15, 0, tzinfo=timezone.utc),
+    )
+
+    assert first_billing_competence(lease) == date(2026, 11, 1)
+    assert lease_billable_for_competence(lease, date(2026, 10, 1)) is False
+    assert lease_billable_for_competence(lease, date(2026, 11, 1)) is True
+
+    factor, active_days, total_days = first_period_proration(lease, date(2026, 11, 1))
+    assert active_days == 16
+    assert total_days == 31
+    assert factor == Decimal(16) / Decimal(31)
+
+
+def test_signature_on_first_day_bills_full_month_only_on_next_due_month():
+    lease = SimpleNamespace(
+        status="signed",
+        archive_status="archived",
+        final_document_hash="hash",
+        start_date=date(2026, 9, 5),
+        end_date=date(2029, 3, 5),
+        operational_end_date=None,
+        signed_at=datetime(2026, 10, 1, 15, 0, tzinfo=timezone.utc),
+    )
+
+    assert lease_billable_for_competence(lease, date(2026, 10, 1)) is False
+    assert lease_billable_for_competence(lease, date(2026, 11, 1)) is True
+    factor, active_days, total_days = first_period_proration(lease, date(2026, 11, 1))
+    assert factor == Decimal("1")
+    assert active_days == 31
+    assert total_days == 31
