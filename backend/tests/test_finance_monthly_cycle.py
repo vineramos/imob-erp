@@ -274,3 +274,61 @@ def test_contractual_start_midmonth_includes_first_day_when_signed_before_start(
     assert active_days == 17
     assert total_days == 31
     assert factor == Decimal(17) / Decimal(31)
+
+
+
+def test_monthly_closing_requires_billing_decision_and_no_open_charge(client):
+    scenario = build_signed_rental(client, publish=False)
+    competence = scenario["start"]
+
+    missing = assert_response(
+        client.get(
+            "/api/finance/monthly-cycle/closing-readiness",
+            params={"competence": competence.isoformat()},
+        )
+    ).json()
+    assert missing["can_close"] is False
+    assert missing["missing_charges_count"] == 1
+    assert missing["open_charges_count"] == 0
+    assert any("não possuem cobrança" in item for item in missing["blockers"])
+
+    generated = assert_response(
+        client.post(
+            "/api/finance/charges/generate",
+            json={"competence": competence.isoformat(), "lease_contract_id": scenario["lease"]["id"]},
+        )
+    ).json()
+    charge = generated["charges"][0]
+
+    open_period = assert_response(
+        client.get(
+            "/api/finance/monthly-cycle/closing-readiness",
+            params={"competence": competence.isoformat()},
+        )
+    ).json()
+    assert open_period["can_close"] is False
+    assert open_period["missing_charges_count"] == 0
+    assert open_period["open_charges_count"] == 1
+    assert any("permanecem em aberto" in item for item in open_period["blockers"])
+
+    assert_response(
+        client.post(
+            f"/api/finance/charges/{charge['id']}/cancel",
+            json={"reason": "Cobrança dispensada nesta competência para homologação do fechamento."},
+        )
+    )
+
+    decided = load_cycle(client, competence)
+    assert decided["missing_charges"] == 0
+    assert decided["charges_count"] == 0
+    assert decided["next_action"] is None
+
+    ready = assert_response(
+        client.get(
+            "/api/finance/monthly-cycle/closing-readiness",
+            params={"competence": competence.isoformat()},
+        )
+    ).json()
+    assert ready["missing_charges_count"] == 0
+    assert ready["open_charges_count"] == 0
+    assert ready["can_close"] is True
