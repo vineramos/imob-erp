@@ -61,6 +61,8 @@ class MonthlyClosingReadiness(BaseModel):
     competence: date
     period_end: date
     can_close: bool
+    missing_charges_count: int = 0
+    open_charges_count: int = 0
     bank_accounts_count: int
     accounts_closed_count: int
     unclosed_accounts_count: int
