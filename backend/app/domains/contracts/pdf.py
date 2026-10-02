@@ -44,6 +44,25 @@ def _address(address: dict[str, Any]) -> str:
     return ", ".join(str(item) for item in parts if item)
 
 
+PROPERTY_TYPE_LABELS = {
+    "apartment": "Apartamento",
+    "house": "Casa",
+    "commercial": "Comercial",
+    "land": "Terreno",
+    "studio": "Studio",
+    "office": "Sala comercial",
+    "warehouse": "Galpão",
+}
+PURPOSE_LABELS = {"rent": "Locação", "sale": "Venda", "both": "Venda e locação"}
+PLAN_LABELS = {"essential": "Essencial", "complete": "Completo", "custom": "Personalizado"}
+PAYER_LABELS = {"tenant": "Locatário", "owner": "Proprietário", "agency": "Imobiliária"}
+
+
+def _label(mapping: dict[str, str], value: Any) -> str:
+    text = str(value or "—")
+    return mapping.get(text, text.replace("_", " ").title())
+
+
 def _lease_months(start: Any, end: Any) -> str:
     if not start or not end:
         return "—"
@@ -93,7 +112,7 @@ def build_administration_contract_pdf(*, contract: Any, organization: Any) -> by
     story.append(Paragraph("2. Imóvel administrado", heading))
     story.append(Paragraph(
         f"Imóvel #{property_snapshot.get('code') or '—'} · {_address(dict(property_snapshot.get('address') or {}))}<br/>"
-        f"Finalidade: {property_snapshot.get('purpose') or '—'} · Tipo: {property_snapshot.get('property_type') or '—'} · Aluguel de referência: {_money(property_snapshot.get('rent_amount'))}",
+        f"Finalidade: {_label(PURPOSE_LABELS, property_snapshot.get('purpose'))} · Tipo: {_label(PROPERTY_TYPE_LABELS, property_snapshot.get('property_type'))} · Aluguel de referência: {_money(property_snapshot.get('rent_amount'))}",
         body,
     ))
 
@@ -119,12 +138,12 @@ def build_administration_contract_pdf(*, contract: Any, organization: Any) -> by
     end_action_label = "Fim do contrato" if end_action == "end_contract" else "Renovação por prazo indeterminado"
     story.append(Paragraph("4. Condições econômicas e operacionais", heading))
     rules = [
-        ["Plano", str(contract.plan).title()],
+        ["Plano", _label(PLAN_LABELS, contract.plan)],
         ["Administração após intermediação", fee],
         ["Intermediação inicial", f"{_percent(contract.intermediation_percent)} do aluguel em {contract.intermediation_installments} parcela(s) inicial(is)"],
         ["Repasse ao proprietário", f"D+{contract.owner_repasse_business_days} dias úteis após liquidação confirmada"],
-        ["Condomínio · pagador operacional", str(contract.condo_operational_payer)],
-        ["IPTU · pagador operacional", str(contract.iptu_operational_payer)],
+        ["Condomínio · pagador operacional", _label(PAYER_LABELS, contract.condo_operational_payer)],
+        ["IPTU · pagador operacional", _label(PAYER_LABELS, contract.iptu_operational_payer)],
         ["Prazo previsto da locação", _lease_months(contract.start_date, contract.end_date)],
         ["Ao fim do prazo", end_action_label],
         ["Aprovação para publicação", "Obrigatória" if contract.publication_requires_owner_approval else "Dispensada"],
@@ -146,10 +165,12 @@ def build_administration_contract_pdf(*, contract: Any, organization: Any) -> by
         small,
     ))
 
+    signer_section = 5
     if contract.notes:
         story.extend([Paragraph("5. Condições especiais", heading), Paragraph(str(contract.notes), body)])
+        signer_section = 6
 
-    story.append(Paragraph("6. Signatários desta versão", heading))
+    story.append(Paragraph(f"{signer_section}. Signatários desta versão", heading))
     signers = list(contract.signers_snapshot or [])
     role_labels = {"owner": "Proprietário", "tenant": "Locatário", "agency": "Imobiliária", "witness": "Testemunha", "other": "Outro"}
     if signers:
