@@ -78,9 +78,9 @@ def first_billing_competence(lease: LeaseContract) -> date:
 
 def service_competence_for_billing(lease: LeaseContract, competence: date) -> date:
     competence = month_start(competence)
-    if competence == first_billing_competence(lease):
-        return month_start(lease_effective_start(lease))
-    return add_months(competence, -1)
+    first_due = first_billing_competence(lease)
+    offset = max(0, months_since(first_due, competence))
+    return add_months(month_start(lease_effective_start(lease)), offset)
 
 
 def lease_billable_for_competence(lease: LeaseContract, competence: date) -> bool:
@@ -93,7 +93,7 @@ def lease_billable_for_competence(lease: LeaseContract, competence: date) -> boo
     service_end = month_end(service_competence)
     effective_start = lease_effective_start(lease)
     operational_end = lease.operational_end_date or lease.end_date
-    return effective_start <= service_end and operational_end >= service_competence
+    return effective_start <= service_end and operational_end >= competence
 
 
 def first_period_proration(lease: LeaseContract, competence: date) -> tuple[Decimal, int, int]:
