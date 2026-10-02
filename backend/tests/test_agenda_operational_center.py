@@ -8,6 +8,7 @@ from app.domains.agenda import logic
 from app.domains.agenda.models import AgendaTask
 from app.domains.inspections.models import Inspection
 from app.domains.leases.models import LeaseContract
+from app.domains.lease_lifecycle.models import LeaseLifecycleCase
 from app.domains.maintenance.models import MaintenanceRequest
 from app.domains.portfolio.models import Property
 from tests.helpers import assert_response
@@ -227,6 +228,23 @@ def test_operational_rules_follow_source_truth_across_maintenance_inspection_and
         )
         assert expiry_task is not None
         assert expiry_task.due_at is not None
+
+        lifecycle = LeaseLifecycleCase(
+            organization_id=identity["organization_id"],
+            lease_contract_id=lease_id,
+            property_id=prop.id,
+            process_type="renewal",
+            status="renewal_proposed",
+            renewal_terms={"rent_amount": "2100.00"},
+            created_by_user_id=identity["user_id"],
+        )
+        db.add(lifecycle)
+        db.commit()
+        logic.sync_system_tasks(db, identity["organization_id"])
+        db.flush()
+        db.refresh(expiry_task)
+        assert expiry_task.status == "completed"
+        assert expiry_task.completed_at is not None
 
         maintenance = db.get(MaintenanceRequest, maintenance_id)
         assert maintenance is not None
