@@ -179,11 +179,15 @@ def build_administration_contract_pdf(*, contract: Any, organization: Any) -> by
         for signer in signers:
             role = str(signer.get("role") or "—")
             representative = str(signer.get("representative_name") or "").strip()
+            representative_email = str(signer.get("representative_email") or "").strip()
+            if role == "agency":
+                representative = representative or str(getattr(organization, "representative_name", None) or "").strip()
+                representative_email = representative_email or str(getattr(organization, "representative_email", None) or "").strip()
             signer_name = signer.get("name") or "—"
             signer_email = signer.get("email") or "—"
             if representative:
                 signer_name = f"{signer_name} · rep. {representative}"
-                signer_email = signer.get("representative_email") or signer_email
+                signer_email = representative_email or signer_email
             rows.append([role_labels.get(role, role), signer_name, signer_email, str(signer.get("sign_order") or 1)])
         table = Table(rows, colWidths=[30 * mm, 57 * mm, 68 * mm, 17 * mm], repeatRows=1)
         table.setStyle(TableStyle([
