@@ -106,6 +106,24 @@ def test_lease_charge_composition_generates_only_scheduled_items_and_third_party
     dashboard = assert_response(client.get(f"/api/finance/dashboard?competence={start.isoformat()}")).json()
     assert decimal(dashboard["agency_revenue_amount"]) == Decimal("2285.00")
 
+    overview = assert_response(
+        client.get(
+            "/api/finance/advanced/reports/overview",
+            params={"start_date": start.isoformat(), "end_date": start.replace(day=28).isoformat()},
+        )
+    ).json()
+    assert decimal(overview["agency_revenue"]) == Decimal("2285.00")
+
+    dre = assert_response(
+        client.get(
+            "/api/finance/advanced/reports/dre",
+            params={"start_date": start.isoformat(), "end_date": start.replace(day=28).isoformat(), "regime": "competence"},
+        )
+    ).json()
+    lines = {item["key"]: decimal(item["amount"]) for item in dre["lines"]}
+    assert lines["administration"] + lines["intermediation"] + lines["other_revenue"] == Decimal("2285.00")
+    assert lines["other_revenue"] == Decimal("285.00")
+
     repasses = assert_response(client.get(f"/api/finance/repasses?competence={start.isoformat()}")).json()
     assert any(row["charge_id"] == charge["id"] and row["lease_code"] == created["code"] for row in repasses)
     assert all(row["competence"] == start.isoformat() for row in repasses)
