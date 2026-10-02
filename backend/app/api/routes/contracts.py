@@ -1,5 +1,5 @@
 import hashlib
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from decimal import Decimal
 from uuid import UUID
 
@@ -79,6 +79,7 @@ def _default_signers_from_owners(item: Property) -> list[dict]:
     return [
         {
             "role": "owner",
+            "person_id": str(owner.person_id),
             "name": owner.person.name,
             "email": owner.person.email,
             "document_number": owner.person.document_number,
@@ -186,6 +187,8 @@ def _contract_response(contract: AdministrationContract) -> AdministrationContra
         archived_document_reference=contract.archived_document_reference,
         final_document_hash=contract.final_document_hash,
         archived_at=contract.archived_at,
+        closed_at=contract.closed_at,
+        closure_reason=contract.closure_reason,
         versions=[
             AdministrationContractVersionResponse(
                 version_number=version.version_number,
@@ -216,6 +219,64 @@ def _organization(db: Session, organization_id: UUID) -> Organization:
     if item is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Organização não encontrada.")
     return item
+
+
+def _digits(value: object) -> str:
+    return "".join(ch for ch in str(value or "") if ch.isdigit())
+
+
+def _signature_readiness(db: Session, item: AdministrationContract) -> None:
+    organization = _organization(db, item.organization_id)
+    errors: list[str] = []
+    if len(_digits(organization.document_number)) != 14:
+        errors.append("cadastre o CNPJ da imobiliária em Configurações → Dados da empresa")
+    if not str(organization.creci_pj or "").strip():
+        errors.append("cadastre o CRECI PJ da imobiliária")
+    if not str(organization.representative_name or "").strip():
+        errors.append("cadastre o representante padrão da imobiliária")
+    if not str(organization.representative_email or "").strip():
+        errors.append("cadastre o e-mail do representante padrão")
+    if len(_digits(organization.representative_document_number)) != 11:
+        errors.append("cadastre um CPF válido para o representante padrão")
+
+    property_item = _property_for_contract(db, item.organization_id, item.property_id)
+    owner_ids = {str(owner.person_id) for owner in property_item.owners}
+    owner_documents = {_digits(owner.person.document_number) for owner in property_item.owners if owner.person.document_number}
+    for owner in property_item.owners:
+        if len(_digits(owner.person.document_number)) not in {11, 14}:
+            errors.append(f"complete o CPF/CNPJ do proprietário {owner.person.name}")
+
+    signers = list(item.signers_snapshot or [])
+    if not signers:
+        errors.append("inclua ao menos um signatário")
+    for signer in signers:
+        name = str(signer.get("name") or "signatário").strip()
+        email = str(signer.get("email") or "").strip()
+        document = _digits(signer.get("document_number"))
+        role = str(signer.get("role") or "owner")
+        if not email:
+            errors.append(f"complete o e-mail de {name}")
+        if role == "owner":
+            person_id = str(signer.get("person_id") or "").strip()
+            if (person_id and person_id not in owner_ids) or (not person_id and document and document not in owner_documents):
+                errors.append(f"{name} não corresponde a um proprietário atual do imóvel")
+        is_company = len(document) == 14 or role == "agency"
+        if is_company:
+            rep_name = str(signer.get("representative_name") or "").strip()
+            rep_email = str(signer.get("representative_email") or "").strip()
+            rep_document = _digits(signer.get("representative_document_number"))
+            if role == "agency":
+                rep_name = rep_name or str(organization.representative_name or "").strip()
+                rep_email = rep_email or str(organization.representative_email or "").strip()
+                rep_document = rep_document or _digits(organization.representative_document_number)
+            if not rep_name or not rep_email or len(rep_document) != 11:
+                errors.append(f"defina representante pessoa física com nome, e-mail e CPF para {name}")
+        elif len(document) != 11:
+            errors.append(f"complete o CPF de {name}")
+
+    if errors:
+        unique = list(dict.fromkeys(errors))
+        raise HTTPException(status_code=422, detail="Antes da assinatura: " + "; ".join(unique) + ".")
 
 
 def _signature_provider_key(db: Session, organization_id: UUID) -> str:
@@ -276,7 +337,7 @@ def create_administration_contract(
         select(AdministrationContract.id).where(
             AdministrationContract.organization_id == context.user.organization_id,
             AdministrationContract.property_id == payload.property_id,
-            AdministrationContract.status.not_in(("cancelled",)),
+            AdministrationContract.status.not_in(("cancelled", "closed")),
         )
     )
     if existing is not None:
@@ -361,6 +422,7 @@ def administration_contract_workflow(
             raise HTTPException(status_code=409, detail="O contrato precisa estar aprovado antes da assinatura.")
         if not item.signers_snapshot:
             raise HTTPException(status_code=422, detail="Inclua ao menos um signatário antes de preparar a assinatura.")
+        _signature_readiness(db, item)
         provider = _signature_provider_key(db, context.user.organization_id)
         if provider == "none":
             raise HTTPException(status_code=422, detail="Configure um provedor de assinatura antes de continuar.")
@@ -386,6 +448,24 @@ def administration_contract_workflow(
         item.approved_at = None
         item.approved_by_user_id = None
         _clear_signature_artifacts(item)
+    elif action == "close":
+        if not context.has("contracts.edit"):
+            raise HTTPException(status_code=403, detail="Permissão necessária: contracts.edit")
+        if item.status != "signed":
+            raise HTTPException(status_code=409, detail="Somente uma administração assinada pode ser encerrada.")
+        reason = (payload.reason or "").strip()
+        if not reason:
+            raise HTTPException(status_code=422, detail="Informe o motivo do encerramento.")
+        effective_date = payload.effective_date or date.today()
+        if effective_date > date.today():
+            raise HTTPException(status_code=422, detail="A data de encerramento não pode estar no futuro.")
+        if item.start_date and effective_date < item.start_date:
+            raise HTTPException(status_code=422, detail="A data de encerramento não pode ser anterior ao início da administração.")
+        item.status = "closed"
+        item.end_date = effective_date
+        item.closed_at = datetime.now(timezone.utc)
+        item.closed_by_user_id = context.user.id
+        item.closure_reason = reason
     elif action == "cancel":
         if not context.has("contracts.edit"):
             raise HTTPException(status_code=403, detail="Permissão necessária: contracts.edit")
@@ -464,6 +544,7 @@ def send_contract_to_signature(
         raise HTTPException(status_code=409, detail="Prepare a assinatura antes de enviar o contrato ao provider.")
     if item.generated_document_version != item.current_version or not item.generated_document_hash:
         raise HTTPException(status_code=409, detail="Gere o PDF da versão atual antes de enviar para assinatura.")
+    _signature_readiness(db, item)
     provider = get_signature_provider(item.signing_provider)
     if provider is None or not provider.configured:
         provider = get_signature_provider_for_organization(db, context.user.organization_id, item.signing_provider)
