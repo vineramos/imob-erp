@@ -88,8 +88,10 @@ def refresh_billing_batch_counters(db: Session, batch: BillingBatch) -> None:
     batch.issued_count = sum(1 for item in items if item.issued_at is not None)
     batch.sent_count = sum(1 for item in items if item.sent_at is not None)
     batch.confirmed_count = sum(1 for item in items if str(item.provider_status or "").upper() in {"RECEBIDO", "MARCADO_RECEBIDO"})
+    cancelled_count = sum(1 for item in items if str(item.provider_status or "").upper() in {"CANCELADO", "CANCELLED"})
+    terminal_count = batch.confirmed_count + cancelled_count
     batch.error_count = sum(1 for item in items if item.last_error)
-    if batch.generated_count and batch.confirmed_count == batch.generated_count:
+    if batch.generated_count and terminal_count == batch.generated_count:
         batch.status = "completed"
         batch.completed_at = batch.completed_at or datetime.now(timezone.utc)
     elif batch.sent_count:
