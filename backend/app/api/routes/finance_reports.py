@@ -208,7 +208,13 @@ def overview(
         start_date=start_date,
         end_date=end_date,
         tenant_collections=float(money(sum((money(item.paid_amount) for item in paid), ZERO))),
-        agency_revenue=float(money(sum((money(settlements[item.id].agency_fee_withheld) for item in paid if item.id in settlements), ZERO))),
+        agency_revenue=float(money(sum((
+            money(settlements[item.id].agency_fee_withheld)
+            + money(settlements[item.id].agency_reimbursement_amount)
+            + sum((money(component.get("agency_retention_amount")) for component in list(item.charge_items or [])), ZERO)
+            for item in paid
+            if item.id in settlements
+        ), ZERO))),
         owner_repasses=float(money(sum((money(item.amount) for item in repasses if item.paid_at and start_date <= item.paid_at.date() <= end_date), ZERO))),
         maintenance_revenue=float(money(sum((money(item.settled_amount) for item in maintenance if item.direction == "receivable" and item.collection_method != "owner_repasse_deduction" and item.settled_at and start_date <= item.settled_at.date() <= end_date), ZERO))),
         maintenance_cost=float(money(sum((money(item.settled_amount) for item in maintenance if item.direction == "payable" and item.settled_at and start_date <= item.settled_at.date() <= end_date), ZERO))),
