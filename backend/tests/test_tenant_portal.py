@@ -1,4 +1,9 @@
+from uuid import UUID
+
 from app.api.routes import tenant_portal as tenant_portal_routes
+from app.core.database import SessionLocal
+from app.domains.finance.advanced_models import BillingBatch, BillingItem
+from app.domains.finance.models import RentCharge
 from tests.helpers import add_months, assert_response, build_signed_rental, midday
 
 
@@ -193,3 +198,78 @@ def test_tenant_portal_downloads_annual_payment_statement(client):
     assert annual.headers["content-type"].startswith("application/pdf")
     assert "comprovante-anual-pagamentos-" in annual.headers.get("content-disposition", "")
     assert annual.content.startswith(b"%PDF")
+
+
+def test_tenant_portal_hides_cancelled_charge_payment_instruments(client, identity):
+    journey = build_signed_rental(client, publish=False)
+    tenant = journey["tenant"]
+    competence = add_months(journey["start"], 1)
+    charge = assert_response(
+        client.post(
+            "/api/finance/charges/generate",
+            json={"competence": competence.isoformat(), "lease_contract_id": journey["lease"]["id"]},
+        )
+    ).json()["charges"][0]
+
+    assert SessionLocal is not None
+    with SessionLocal() as db:
+        stored = db.get(RentCharge, UUID(charge["id"]))
+        assert stored is not None
+        batch = BillingBatch(
+            organization_id=identity["organization_id"],
+            competence=competence.replace(day=1),
+            status="completed",
+            provider="inter",
+            generated_count=1,
+            issued_count=1,
+            sent_count=1,
+            confirmed_count=0,
+            error_count=0,
+            created_by_user_id=identity["user_id"],
+        )
+        db.add(batch)
+        db.flush()
+        db.add(BillingItem(
+            organization_id=identity["organization_id"],
+            billing_batch_id=batch.id,
+            charge_id=stored.id,
+            provider="inter",
+            provider_charge_id="INTER-CANCELLED-PORTAL",
+            provider_status="CANCELADO",
+            boleto_line="34191.79001 01043.510047 91020.150008 8 00000000200000",
+            pix_copy_paste="pix-cancelado-nao-deve-ser-exibido",
+            pdf_reference="storage://billing/cancelled.pdf",
+            request_snapshot={},
+            response_snapshot={},
+        ))
+        stored.status = "cancelled"
+        db.commit()
+
+    access = assert_response(
+        client.post(
+            "/api/finance/advanced/portal/access",
+            json={"person_id": tenant["id"], "label": "Portal cobrança cancelada"},
+        ),
+        201,
+    ).json()
+    assert_response(
+        client.post(
+            f"/api/finance/advanced/portal/access/{access['id']}/credentials",
+            json={"password": "SenhaCancelada#2026"},
+        )
+    )
+    assert_response(
+        client.post(
+            "/api/tenant-portal/auth/login",
+            json={"email": tenant["email"], "password": "SenhaCancelada#2026"},
+        )
+    )
+
+    overview = assert_response(client.get("/api/tenant-portal/overview")).json()
+    row = next(item for item in overview["charges"] if item["id"] == charge["id"])
+    assert row["status"] == "cancelled"
+    assert row["boleto_line"] is None
+    assert row["pix_copy_paste"] is None
+    assert row["billing_pdf_available"] is False
+    assert overview["metrics"]["open_charges"] == 0
+    assert client.get(f"/api/tenant-portal/charges/{charge['id']}/billing.pdf").status_code == 409
