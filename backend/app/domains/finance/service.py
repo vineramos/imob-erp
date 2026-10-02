@@ -119,7 +119,15 @@ def billing_period_proration(lease: LeaseContract, competence: date) -> tuple[De
 
     active_start = period_start
     if effective_start > period_start:
-        active_start = effective_start + timedelta(days=1)
+        signed_date = (
+            lease.signed_at.astimezone(ZoneInfo("America/Sao_Paulo")).date()
+            if lease.signed_at is not None else None
+        )
+        # Se a assinatura ocorreu depois do início contratual, o dia da assinatura
+        # não é cobrado. Se o próprio contrato começa no meio do mês, o primeiro
+        # dia contratual é cobrado normalmente.
+        delayed_by_signature = signed_date is not None and signed_date > lease.start_date and effective_start == signed_date
+        active_start = effective_start + timedelta(days=1) if delayed_by_signature else effective_start
     active_end = min(period_end, operational_end)
 
     if active_end < active_start:
