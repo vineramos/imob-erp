@@ -375,7 +375,7 @@ def _collect_events(
         leases = db.scalars(
             select(LeaseContract).where(
                 LeaseContract.organization_id == organization_id,
-                LeaseContract.status.not_in(("draft", "review", "cancelled")),
+                LeaseContract.status == "signed",
                 or_(LeaseContract.end_date.between(start, window_end), LeaseContract.next_adjustment_date.between(start, end)),
             )
         ).all()
@@ -424,7 +424,7 @@ def _collect_events(
                 AdministrationContract.organization_id == organization_id,
                 AdministrationContract.end_date.is_not(None),
                 AdministrationContract.end_date.between(start, window_end),
-                AdministrationContract.status.not_in(("draft", "review", "cancelled")),
+                AdministrationContract.status == "signed",
             )
         ).all()
         for item in admin_contracts:
