@@ -56,6 +56,57 @@ def _date(value: Any) -> str:
     return text
 
 
+PROPERTY_TYPE_LABELS = {
+    "apartment": "Apartamento",
+    "house": "Casa",
+    "commercial": "Comercial",
+    "land": "Terreno",
+    "studio": "Studio",
+    "office": "Sala comercial",
+    "warehouse": "Galpão",
+}
+PURPOSE_LABELS = {"rent": "Locação", "sale": "Venda", "both": "Venda e locação"}
+GUARANTEE_LABELS = {
+    "insurance": "Seguro fiança",
+    "deposit": "Caução",
+    "capitalization": "Título de capitalização",
+    "guarantor": "Fiador",
+    "none": "Sem garantia",
+}
+ROLE_LABELS = {
+    "owner": "Proprietário",
+    "tenant": "Locatário",
+    "agency": "Imobiliária",
+    "witness": "Testemunha",
+    "other": "Outro",
+}
+
+
+def _label(mapping: dict[str, str], value: Any) -> str:
+    text = str(value or "—")
+    return mapping.get(text, text.replace("_", " ").title())
+
+
+def _guarantee_details(value: Any) -> str:
+    if not isinstance(value, dict) or not value:
+        return "Sem detalhes adicionais."
+    labels = {
+        "provider": "Seguradora/garantidor",
+        "policy_number": "Apólice",
+        "amount": "Valor",
+        "guarantor_name": "Fiador",
+        "guarantor_document": "CPF/CNPJ do fiador",
+        "notes": "Observações",
+    }
+    parts = []
+    for key, raw in value.items():
+        if raw in (None, "", [], {}):
+            continue
+        label = labels.get(str(key), str(key).replace("_", " ").title())
+        parts.append(f"<b>{escape(label)}:</b> {escape(str(raw))}")
+    return "<br/>".join(parts) if parts else "Sem detalhes adicionais."
+
+
 def _monthly_rules(contract: Any) -> list[dict[str, Any]]:
     rules = dict(getattr(contract, "rules_snapshot", {}) or {})
     return [dict(item) for item in list(rules.get("monthly_charges") or []) if isinstance(item, dict)]
@@ -113,8 +164,8 @@ def build_lease_contract_pdf(*, contract: Any, organization: Any) -> bytes:
         Paragraph(
             f"Imóvel #{escape(str(property_snapshot.get('code') or '—'))} · "
             f"{escape(_address(dict(property_snapshot.get('address') or {})))}<br/>"
-            f"Finalidade: {escape(str(property_snapshot.get('purpose') or '—'))} · "
-            f"Tipo: {escape(str(property_snapshot.get('property_type') or '—'))}",
+            f"Finalidade: {escape(_label(PURPOSE_LABELS, property_snapshot.get('purpose')))} · "
+            f"Tipo: {escape(_label(PROPERTY_TYPE_LABELS, property_snapshot.get('property_type')))}",
             body,
         ),
     ])
@@ -173,7 +224,7 @@ def build_lease_contract_pdf(*, contract: Any, organization: Any) -> bytes:
         ["Próximo reajuste", _date(contract.next_adjustment_date)],
         ["Multa rescisória-base", f"{contract.termination_fine_months} aluguel(is), proporcional ao período restante"],
         ["Contestação da vistoria inicial", f"{contract.inspection_contest_days} dia(s) corrido(s)"],
-        ["Garantia", str(contract.guarantee_type).replace("_", " ")],
+        ["Garantia", _label(GUARANTEE_LABELS, contract.guarantee_type)],
     ]
     conditions_table = Table(conditions, colWidths=[64 * mm, 108 * mm])
     conditions_table.setStyle(TableStyle([
@@ -239,21 +290,23 @@ def build_lease_contract_pdf(*, contract: Any, organization: Any) -> bytes:
             body,
         ),
         Paragraph("9. Garantia locatícia", heading),
-        Paragraph(escape(str(contract.guarantee_details or {})), body),
+        Paragraph(_guarantee_details(contract.guarantee_details), body),
     ])
 
+    signer_section = 10
     if contract.notes:
         story.extend([Paragraph("10. Condições especiais", heading), Paragraph(escape(str(contract.notes)), body)])
+        signer_section = 11
 
-    story.append(Paragraph("11. Signatários desta versão", heading))
+    story.append(Paragraph(f"{signer_section}. Signatários desta versão", heading))
     signers = list(contract.signers_snapshot or [])
     if signers:
         rows = [["Papel", "Nome", "E-mail", "Ordem"]]
         for signer in signers:
             rows.append([
-                signer.get("role") or "—",
-                signer.get("name") or "—",
-                signer.get("email") or "—",
+                ROLE_LABELS.get(str(signer.get("role") or ""), str(signer.get("role") or "—")),
+                (f"{signer.get('name') or '—'} · rep. {signer.get('representative_name')}" if signer.get("representative_name") else signer.get("name") or "—"),
+                signer.get("representative_email") or signer.get("email") or "—",
                 str(signer.get("sign_order") or 1),
             ])
         table = Table(rows, colWidths=[30 * mm, 57 * mm, 68 * mm, 17 * mm], repeatRows=1)
