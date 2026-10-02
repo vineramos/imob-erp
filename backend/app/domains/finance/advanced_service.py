@@ -16,7 +16,7 @@ from app.domains.finance.advanced_models import (
 )
 from app.domains.finance.core_models import FinancialTitle
 from app.domains.finance.models import FinancialSettlement, MaintenanceFinancialEntry, OwnerRepasse, RentCharge
-from app.domains.finance.service import generate_charges, money, months_since, refresh_overdue
+from app.domains.finance.service import charge_item_agency_retention, generate_charges, money, months_since, refresh_overdue
 from app.domains.leases.models import LeaseContract
 from app.domains.portfolio.models import Person
 
@@ -354,6 +354,11 @@ def dre_values(
         factor = (withheld / requested) if requested > 0 and withheld < requested else Decimal("1")
         values["administration"] += money(admin * factor)
         values["intermediation"] += money(intermediation * factor)
+        values["other_revenue"] += money(settlement.agency_reimbursement_amount)
+        values["other_revenue"] += money(sum(
+            (charge_item_agency_retention(component) for component in list(charge.charge_items or [])),
+            ZERO,
+        ))
 
     maintenance = db.scalars(
         select(MaintenanceFinancialEntry).where(
