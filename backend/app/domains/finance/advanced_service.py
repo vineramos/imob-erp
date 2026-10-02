@@ -627,15 +627,15 @@ def annual_income_values(
             method = "divisão igual entre locatários do contrato" if len(tenants) > 1 else "locatário único"
         allocation_method = method
         rent = money(charge.rent_amount * share)
-        gross = money(charge.gross_amount * share)
+        paid_total = money((charge.paid_amount if charge.paid_amount is not None else charge.gross_amount) * share)
         lines.append({
             "competence": charge.competence,
             "payment_date": charge.paid_at.date(),
             "property_code": str((charge.property_snapshot or {}).get("code") or "—"),
             "charge_code": f"COB-{charge.internal_number:06d}",
             "rent_amount": rent,
-            "additional_charges": money(max(ZERO, gross - rent)),
-            "total_amount": gross,
+            "additional_charges": money(max(ZERO, paid_total - rent)),
+            "total_amount": paid_total,
             "administration_fee": ZERO,
             "owner_net_amount": ZERO,
         })
