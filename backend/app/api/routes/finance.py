@@ -1,6 +1,7 @@
 from datetime import date, datetime, timezone
 from decimal import Decimal
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy import and_, func, or_, select
@@ -336,7 +337,8 @@ def receive_charge(
     item = _load_charge(db, context.user.organization_id, charge_id)
     if is_competence_closed(db, organization_id=context.user.organization_id, value=item.competence):
         raise HTTPException(status_code=409, detail="Esta competência está fechada. Reabra o período antes de registrar o recebimento.")
-    if payload.paid_at is not None and payload.paid_at > datetime.now(timezone.utc):
+    local_zone = ZoneInfo("America/Sao_Paulo")
+    if payload.paid_at is not None and payload.paid_at.astimezone(local_zone).date() > datetime.now(local_zone).date():
         raise HTTPException(status_code=422, detail="A data do recebimento não pode estar no futuro.")
     try:
         settlement = record_payment_with_late_charges(
