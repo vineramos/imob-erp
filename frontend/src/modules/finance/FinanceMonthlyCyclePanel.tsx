@@ -32,6 +32,8 @@ type ClosingReadiness = {
   competence:string
   period_end:string
   can_close:boolean
+  missing_charges_count:number
+  open_charges_count:number
   bank_accounts_count:number
   accounts_closed_count:number
   unclosed_accounts_count:number
@@ -188,6 +190,8 @@ export function FinanceMonthlyCyclePanel({onNavigateArea,permissions}:Props){
           <div className="finance-closing-readiness-score"><b>{readiness.blocker_count}</b><span>bloqueadores</span></div>
         </div>
         <div className="finance-closing-readiness-stats">
+          <span>Cobranças faltantes <b>{readiness.missing_charges_count}</b></span>
+          <span>Cobranças em aberto <b>{readiness.open_charges_count}</b></span>
           <span>Contas fechadas <b>{readiness.accounts_closed_count}/{readiness.bank_accounts_count}</b></span>
           <span>Movimentos bancários pendentes <b>{readiness.unreconciled_bank_transactions_count}</b></span>
           <span>Exceções bancárias <b>{readiness.open_bank_exceptions_count}</b></span>
