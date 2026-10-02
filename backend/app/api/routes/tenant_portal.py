@@ -34,6 +34,7 @@ SESSION_DAYS = 30
 LOCK_MINUTES = 15
 MAX_FAILED_ATTEMPTS = 5
 ZERO = Decimal("0.00")
+OPEN_CHARGE_STATUSES = {"generated", "sent", "overdue"}
 
 
 class PortalLoginRequest(BaseModel):
@@ -371,8 +372,9 @@ def portal_overview(identity: PortalIdentity = Depends(require_portal_identity),
     open_amount = ZERO
     for charge in charges:
         bill = billing.get(charge.id)
+        active_bill = bill if charge.status in OPEN_CHARGE_STATUSES else None
         financial = charge_financial_view(db, charge)
-        if charge.status in {"generated", "sent", "overdue"}:
+        if charge.status in OPEN_CHARGE_STATUSES:
             open_amount += financial.payable_amount
         charge_rows.append({
             "id": str(charge.id),
@@ -389,9 +391,9 @@ def portal_overview(identity: PortalIdentity = Depends(require_portal_identity),
             "status": charge.status,
             "paid_at": charge.paid_at,
             "paid_amount": float(charge.paid_amount) if charge.paid_amount is not None else None,
-            "boleto_line": bill.boleto_line if bill else None,
-            "pix_copy_paste": bill.pix_copy_paste if bill else None,
-            "billing_pdf_available": bool(bill and bill.pdf_reference),
+            "boleto_line": active_bill.boleto_line if active_bill else None,
+            "pix_copy_paste": active_bill.pix_copy_paste if active_bill else None,
+            "billing_pdf_available": bool(active_bill and active_bill.pdf_reference),
         })
     maintenance = db.scalars(
         select(MaintenanceRequest)
@@ -404,7 +406,7 @@ def portal_overview(identity: PortalIdentity = Depends(require_portal_identity),
         .where(Inspection.organization_id == identity.account.organization_id, Inspection.lease_contract_id.in_(lease_ids))
         .order_by(Inspection.created_at.desc())
     ).all() if lease_ids else []
-    next_open = next((row for row in sorted(charges, key=lambda item: item.due_date) if row.status in {"generated", "sent", "overdue"}), None)
+    next_open = next((row for row in sorted(charges, key=lambda item: item.due_date) if row.status in OPEN_CHARGE_STATUSES), None)
     return {
         "person": {
             "id": str(identity.person.id),
@@ -420,7 +422,7 @@ def portal_overview(identity: PortalIdentity = Depends(require_portal_identity),
         "metrics": {
             "active_leases": sum(1 for item in leases if item.status == "signed"),
             "open_amount": float(open_amount),
-            "open_charges": sum(1 for item in charges if item.status in {"generated", "sent", "overdue"}),
+            "open_charges": sum(1 for item in charges if item.status in OPEN_CHARGE_STATUSES),
             "maintenance_open": sum(1 for item in maintenance if item.status not in {"completed", "cancelled"}),
             "next_due_date": next_open.due_date if next_open else None,
         },
@@ -503,6 +505,8 @@ def portal_billing_pdf(
     charge = db.scalar(select(RentCharge).where(RentCharge.id == charge_id, RentCharge.organization_id == identity.account.organization_id))
     if charge is None or not _charge_belongs_to_identity(db, identity, charge):
         raise HTTPException(status_code=404, detail="Cobrança não encontrada neste portal.")
+    if charge.status not in OPEN_CHARGE_STATUSES:
+        raise HTTPException(status_code=409, detail="Esta cobrança não possui mais instrumento de pagamento ativo.")
     billing = db.scalar(select(BillingItem).where(BillingItem.charge_id == charge.id))
     if billing is None or not billing.pdf_reference:
         raise HTTPException(status_code=404, detail="PDF da cobrança ainda não está disponível.")
