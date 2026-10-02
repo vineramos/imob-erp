@@ -80,10 +80,16 @@ type MonthlyChargeConfig = {
 }
 type LeaseSigner = {
   role: LeaseSignerRole
+  person_id?: string | null
   name: string
   email: string
   document_number: string | null
   phone: string | null
+  representative_person_id?: string | null
+  representative_name?: string | null
+  representative_email?: string | null
+  representative_document_number?: string | null
+  representative_phone?: string | null
   sign_order: number
   communication: 'email' | 'sms' | 'whatsapp' | 'none'
 }
@@ -217,7 +223,7 @@ function signingLabel(item: Lease) {
   return labels[item.signing_status] ?? item.signing_status.replaceAll('_', ' ')
 }
 function blankSigner(): LeaseSigner {
-  return { role: 'tenant', name: '', email: '', document_number: null, phone: null, sign_order: 1, communication: 'email' }
+  return { role: 'tenant', person_id: null, name: '', email: '', document_number: null, phone: null, representative_person_id: null, representative_name: null, representative_email: null, representative_document_number: null, representative_phone: null, sign_order: 1, communication: 'email' }
 }
 function standardMonthlyCharges(property?: Property): MonthlyCharge[] {
   const iptu = Number(property?.iptu_amount ?? 0)
@@ -469,6 +475,7 @@ export function LeaseContractsPage({ permissions }: Props) {
   }
   function chooseSigner(index: number, person: Person) {
     updateSigner(index, {
+      person_id: person.id,
       name: person.name,
       email: person.email ?? '',
       document_number: person.document_number,
@@ -770,6 +777,12 @@ export function LeaseContractsPage({ permissions }: Props) {
             <label className="field signer-person-field"><span>Nome</span><input required autoComplete="off" value={signer.name} onFocus={() => setSignerLookupIndex(index)} onBlur={() => window.setTimeout(() => setSignerLookupIndex((current) => current === index ? null : current), 120)} onChange={(event) => { updateSigner(index, { name: event.target.value }); setSignerLookupIndex(index) }}/>{signerLookupIndex === index && <div className="signer-person-results">{signerMatches(signer).length ? signerMatches(signer).map((person) => <button type="button" key={person.id} onMouseDown={(event) => { event.preventDefault(); chooseSigner(index, person) }}><LeasePersonPhoto person={person} className="lease-person-avatar"/><span><strong>{person.name}</strong><small>{person.document_number || person.email || 'Cadastro sem documento'}</small></span></button>) : <span>Nenhuma pessoa encontrada.</span>}</div>}</label>
             <label className="field"><span>E-mail</span><input required type="email" value={signer.email} onChange={(event) => updateSigner(index, { email: event.target.value })}/></label>
             <label className="field"><span>CPF/CNPJ</span><input value={signer.document_number ?? ''} onChange={(event) => updateSigner(index, { document_number: event.target.value || null })}/></label>
+            {((signer.document_number||'').replace(/\D/g,'').length===14||signer.role==='agency')&&<>
+              <label className="field"><span>Representante que assinará</span><input value={signer.representative_name ?? ''} onChange={(event)=>updateSigner(index,{representative_name:event.target.value||null})} placeholder="Nome da pessoa física"/></label>
+              <label className="field"><span>E-mail do representante</span><input type="email" value={signer.representative_email ?? ''} onChange={(event)=>updateSigner(index,{representative_email:event.target.value||null})}/></label>
+              <label className="field"><span>CPF do representante</span><input value={signer.representative_document_number ?? ''} onChange={(event)=>updateSigner(index,{representative_document_number:event.target.value||null})}/></label>
+              <label className="field"><span>Telefone do representante</span><input value={signer.representative_phone ?? ''} onChange={(event)=>updateSigner(index,{representative_phone:event.target.value||null})}/></label>
+            </>}
             <label className="field"><span>Comunicação</span><select value={signer.communication} onChange={(event) => updateSigner(index, { communication: event.target.value as LeaseSigner['communication'] })}><option value="email">E-mail</option><option value="sms">SMS</option><option value="whatsapp">WhatsApp</option><option value="none">Nenhuma</option></select></label>
             <label className="field signer-order"><span>Ordem</span><input type="number" min="1" max="50" value={signer.sign_order} onChange={(event) => updateSigner(index, { sign_order: Number(event.target.value) })}/></label>
             <button className="signer-remove" type="button" aria-label="Remover signatário" onClick={() => setForm((current) => ({ ...current, signers: current.signers.filter((_, signerIndex) => signerIndex !== index) }))}><Trash2 size={15}/></button>
