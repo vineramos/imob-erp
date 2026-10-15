@@ -1,0 +1,5 @@
+/* Controle global discreto: um único seletor para todos os módulos. */
+.view-mode-control { display:flex; align-items:center; gap:7px; color:var(--text-muted); font-size:12px; white-space:nowrap; }
+.view-mode-control select { appearance:auto; min-height:32px; max-width:125px; border:1px solid var(--border); border-radius:7px; color:var(--text); background:var(--surface, #fff); padding:4px 7px; font:inherit; cursor:pointer; }
+.view-mode-control select:focus-visible { outline:2px solid var(--brand-primary); outline-offset:2px; }
+@media (max-width:760px) { .view-mode-control span { display:none; } .view-mode-control select { max-width:98px; font-size:11px; } }
