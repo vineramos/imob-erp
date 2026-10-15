@@ -19,3 +19,11 @@
 .finance-more-menu button svg{flex:0 0 auto}
 @media(max-width:1180px){.finance-primary-tabs button{padding:7px 9px;font-size:9.5px}}
 @media(max-width:700px){.finance-nav-workspace{padding-left:10px;padding-right:10px}.finance-nav-shell{gap:5px;padding:5px}.finance-primary-tabs button{min-height:34px}.finance-more summary{padding:8px 9px}}
+
+/* Navegação orientada a operações: quatro entradas visíveis e funções agrupadas. */
+.finance-nav-workspace .finance-primary-tabs{gap:5px}
+.finance-nav-workspace .finance-primary-tabs button{font-size:12px;font-weight:600;padding:8px 12px}
+.finance-nav-workspace .finance-more summary{font-size:12px;font-weight:600}
+.finance-nav-workspace .finance-more-menu button{font-size:12px;font-weight:500}
+.finance-nav-workspace .finance-more-heading{display:block;font-size:10px}
+@media(max-width:700px){.finance-nav-workspace .finance-primary-tabs button{font-size:11px;padding:7px 9px}}
