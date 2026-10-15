@@ -2,7 +2,11 @@ import { CircleHelp, Mail, Menu } from 'lucide-react'
 import { GlobalSearch } from './GlobalSearch'
 import { NotificationCenter } from './NotificationCenter'
 
+export type ViewMode = 'essential' | 'managerial' | 'advanced'
+
 type TopHeaderProps = {
+  viewMode: ViewMode
+  onChangeViewMode: (mode: ViewMode) => void
   userName: string
   userRole: string
   userInitials: string
@@ -12,7 +16,7 @@ type TopHeaderProps = {
 }
 
 export function TopHeader({
-  userName, userRole, userInitials, authConfigured, onNavigate, onToggleSidebar,
+  userName, userRole, userInitials, authConfigured, onNavigate, onToggleSidebar, viewMode, onChangeViewMode,
 }: TopHeaderProps) {
   return <header className="topbar">
     <div className="topbar-left">
@@ -22,6 +26,14 @@ export function TopHeader({
       <GlobalSearch onNavigate={onNavigate} />
     </div>
     <div className="topbar-actions">
+      <label className="view-mode-control">
+        <span>Visualização</span>
+        <select aria-label="Nível de visualização" value={viewMode} onChange={event => onChangeViewMode(event.target.value as ViewMode)}>
+          <option value="essential">Essencial</option>
+          <option value="managerial">Gerencial</option>
+          <option value="advanced">Avançado</option>
+        </select>
+      </label>
       {!authConfigured && <span className="dev-badge">DEV · Auth pendente</span>}
       <NotificationCenter onNavigate={onNavigate} />
       <button className="topbar-icon topbar-secondary-action" type="button" aria-label="Mensagens" onClick={() => onNavigate('communications')}>
