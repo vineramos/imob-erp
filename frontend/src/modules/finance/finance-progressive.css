@@ -21,3 +21,20 @@
 @media(min-width:1200px){.finance-dashboard-advanced .finance-dashboard-lower{grid-template-columns:minmax(0,1fr) minmax(310px,.72fr)}}
 @media(max-width:760px){.finance-dashboard .finance-dashboard-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.finance-dashboard .finance-dashboard-lower{grid-template-columns:minmax(0,1fr)}}
 @media(max-width:440px){.finance-dashboard .finance-dashboard-metrics{grid-template-columns:minmax(0,1fr)}}
+
+/* Alertas: título, detalhe e ação claramente separados. */
+.finance-dashboard .finance-alert-row{display:flex;align-items:center;justify-content:space-between;gap:16px;background:transparent;border-bottom:1px solid var(--border)!important}
+.finance-dashboard .finance-alert-row:last-child{border-bottom:0!important}
+.finance-dashboard .finance-alert-content{display:flex;flex-direction:column;gap:4px;min-width:0}
+.finance-dashboard .finance-alert-content strong{font-size:14px;font-weight:650}
+.finance-dashboard .finance-alert-content span{font-size:13px;line-height:1.5;color:var(--text-muted)}
+.finance-dashboard .finance-alert-link{flex-shrink:0;font-size:12px;font-weight:650;color:var(--primary-strong)}
+.finance-dashboard .finance-advanced-card-head p,.finance-dashboard .finance-dashboard-copy p{font-size:13px;line-height:1.5}
+.finance-dashboard .finance-core-detail-head p{font-size:12px}
+.finance-dashboard .finance-core-detail-grid span{font-size:12px}
+.finance-dashboard .finance-core-detail-grid strong{font-size:15px}
+.finance-dashboard .finance-dashboard-summary .finance-core-detail-grid>div{display:flex;flex-direction:column;gap:5px}
+.finance-receivables-essential .receivables-master{margin-top:10px}
+.finance-receivables .receivables-directory small,.finance-receivables .receivables-row small{font-size:12px}
+.finance-receivables .receivables-row strong,.finance-receivables .receivables-detail strong{overflow-wrap:anywhere}
+@media(max-width:700px){.finance-dashboard .finance-alert-row{align-items:flex-start;flex-direction:column;gap:8px}}
