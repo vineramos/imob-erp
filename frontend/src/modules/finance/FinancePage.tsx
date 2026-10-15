@@ -1,6 +1,7 @@
 import { AlertTriangle, CalendarDays, ChevronDown, ChevronLeft, ChevronRight, CircleDollarSign, RefreshCw, ShieldCheck } from 'lucide-react'
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import './finance-navigation.css'
+import './finance-progressive.css'
 import type { ViewMode } from '../../components/TopHeader'
 import { ApiError, apiRequest } from '../../api/client'
 const FinanceBankControlPanel = lazy(() => import('./FinanceBankControlPanel').then(module => ({ default: module.FinanceBankControlPanel })))
@@ -41,7 +42,7 @@ const money=(value:number)=>Number(value||0).toLocaleString('pt-BR',{style:'curr
 const currentMonth=()=>{const now=new Date();return `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`}
 const monthLabel=(month:string)=>new Date(`${month}-01T12:00:00`).toLocaleDateString('pt-BR',{month:'long',year:'numeric'})
 
-function FinanceDashboardPanel({onNavigate,month,setMonth}:{onNavigate:(area:Area)=>void;month:string;setMonth:(next:string|((month:string)=>string))=>void}){
+function FinanceDashboardPanel({onNavigate,month,setMonth,viewMode}:{onNavigate:(area:Area)=>void;month:string;setMonth:(next:string|((month:string)=>string))=>void;viewMode:ViewMode}){
   const requestId=useRef(0)
   const [dashboard,setDashboard]=useState<Dashboard|null>(null)
   const [commissions,setCommissions]=useState<CommissionEntry[]>([])
@@ -55,7 +56,7 @@ function FinanceDashboardPanel({onNavigate,month,setMonth}:{onNavigate:(area:Are
     try{
       const [summary,commissionRows]=await Promise.all([
         apiRequest<Dashboard>(`/finance/dashboard?competence=${competence}`),
-        apiRequest<CommissionEntry[]>(`/finance/advanced/commissions?competence=${competence}`),
+        viewMode==='advanced'?apiRequest<CommissionEntry[]>(`/finance/advanced/commissions?competence=${competence}`):Promise.resolve([] as CommissionEntry[]),
       ])
       if(request!==requestId.current)return
       setDashboard(summary)
@@ -63,7 +64,7 @@ function FinanceDashboardPanel({onNavigate,month,setMonth}:{onNavigate:(area:Are
     }catch(cause){
       if(request===requestId.current)setError(cause instanceof ApiError?cause.detail:'Não foi possível carregar o dashboard financeiro.')
     }finally{if(request===requestId.current)setLoading(false)}
-  },[competence])
+  },[competence,viewMode])
   useEffect(()=>{void load();return()=>{requestId.current+=1}},[load])
 
   const pendingCommissions=useMemo(()=>commissions.filter(item=>!['paid','cancelled'].includes(item.status)),[commissions])
@@ -76,9 +77,9 @@ function FinanceDashboardPanel({onNavigate,month,setMonth}:{onNavigate:(area:Are
     pendingCommissions.length>0?{key:'commissions',title:`${pendingCommissions.length} comissão(ões) pendente(s)`,detail:`${money(pendingCommissionAmount)} ainda não concluídos no fluxo financeiro.`,target:'commissions' as Area,tone:'warning'}:null,
   ].filter(Boolean) as {key:string;title:string;detail:string;target:Area;tone:string}[]:[]
 
-  return <section className="workspace finance-workspace finance-dashboard">
+  return <section className={`workspace finance-workspace finance-dashboard finance-dashboard-${viewMode}`}>
     <div className="page-heading finance-heading finance-dashboard-heading">
-      <div className="finance-dashboard-copy"><span className="eyebrow">Financeiro · Visão geral</span><h1>Dashboard financeiro</h1><p>Caixa, inadimplência, repasses e comissões em uma leitura operacional da competência.</p></div>
+      <div className="finance-dashboard-copy"><span className="eyebrow">Financeiro · Visão geral</span><h1>Visão geral financeira</h1><p>{viewMode==='essential'?'Indicadores essenciais da competência.':'Caixa, inadimplência, repasses e comissões na competência.'}</p></div>
       <div className="heading-actions finance-dashboard-controls">
         <div className="finance-competence-control">
           <button className="icon-button" type="button" onClick={()=>moveMonth(-1)} aria-label="Competência anterior"><ChevronLeft size={15}/></button>
@@ -96,8 +97,8 @@ function FinanceDashboardPanel({onNavigate,month,setMonth}:{onNavigate:(area:Are
         <article className="panel finance-metric"><span>Valores em aberto</span><strong>{money(dashboard.open_amount)}</strong><small>{dashboard.charges_open} cobrança(s)</small></article>
         <article className={`panel finance-metric ${dashboard.charges_overdue?'critical':''}`}><span>Inadimplência</span><strong>{money(dashboard.overdue_amount)}</strong><small>{dashboard.charges_overdue} cobrança(s) vencida(s)</small></article>
         <article className="panel finance-metric"><span>Repasses pendentes</span><strong>{money(dashboard.pending_repasse_amount)}</strong><small>{dashboard.repasses_pending} repasse(s)</small></article>
-        <article className="panel finance-metric"><span>Receita da imobiliária</span><strong>{money(dashboard.agency_revenue_amount)}</strong><small>Taxas e retenções da competência</small></article>
-        <article className="panel finance-metric"><span>Comissões pendentes</span><strong>{money(pendingCommissionAmount)}</strong><small>{pendingCommissions.length} comissão(ões)</small></article>
+        {viewMode!=='essential'&&<article className="panel finance-metric"><span>Receita da imobiliária</span><strong>{money(dashboard.agency_revenue_amount)}</strong><small>Taxas e retenções da competência</small></article>}
+        {viewMode==='advanced'&&<article className="panel finance-metric"><span>Comissões pendentes</span><strong>{money(pendingCommissionAmount)}</strong><small>{pendingCommissions.length} comissão(ões)</small></article>}
       </div>
 
       <div className="finance-core-master-detail finance-dashboard-lower">
@@ -111,7 +112,7 @@ function FinanceDashboardPanel({onNavigate,month,setMonth}:{onNavigate:(area:Are
           </div>
         </article>
 
-        <aside className="panel finance-core-detail finance-dashboard-summary">
+        {viewMode==='advanced'&&<aside className="panel finance-core-detail finance-dashboard-summary">
           <div className="finance-core-detail-head"><div><span className="eyebrow">Competência</span><h2>{monthLabel(month)}</h2><p>Resumo operacional consolidado</p></div><CircleDollarSign size={19}/></div>
           <div className="finance-core-detail-grid">
             <div><span>Cobranças abertas</span><strong>{dashboard.charges_open}</strong></div>
@@ -122,7 +123,7 @@ function FinanceDashboardPanel({onNavigate,month,setMonth}:{onNavigate:(area:Are
             <div><span>Comissões pendentes</span><strong>{pendingCommissions.length}</strong></div>
           </div>
           <div className="finance-core-detail-actions"><button className="button secondary" type="button" onClick={()=>onNavigate('ledger')}>Ver lançamentos</button><button className="button primary" type="button" onClick={()=>onNavigate('billing')}>Abrir cobranças</button><button className="button secondary" type="button" onClick={()=>onNavigate('commissions')}>Ver comissões</button></div>
-        </aside>
+        </aside>}
       </div>
     </>}
   </section>
@@ -175,5 +176,5 @@ export function FinancePage({permissions,viewMode}:{permissions:string[];viewMod
     </nav>
   </div>
   <Suspense fallback={<section className="workspace"><div className="panel settings-loading">Carregando área financeira...</div></section>}>
-  {area==='overview'?<FinanceDashboardPanel onNavigate={setArea} month={month} setMonth={setMonth}/>:area==='ledger'?<FinanceCorePanel permissions={permissions} onNavigateSource={source=>setArea(source==='maintenance'?'maintenance':'rent')}/>:area==='cycle'?<FinanceMonthlyCyclePanel permissions={permissions} onNavigateArea={target=>setArea(target)}/>:area==='billing'?<FinanceReceivablesPanel permissions={permissions} month={month} setMonth={setMonth}/>:area==='billing-batches'?<FinanceBillingPanel permissions={permissions}/>:area==='repasses'?<FinanceRepassesPanel permissions={permissions} month={month} setMonth={setMonth}/>:area==='delinquency'?<FinanceDelinquencyPanel permissions={permissions}/>:area==='treasury'?<FinanceTreasuryPanel permissions={permissions}/>:area==='banking'?<FinanceBankingPanel permissions={permissions}/>:area==='bank-setup'?<FinanceBankSetupPanel permissions={permissions}/>:area==='bank-control'?<FinanceBankControlPanel permissions={permissions}/>:area==='inter'?<FinanceInterPanel permissions={permissions}/>:area==='reports'?<FinanceReportsPanel permissions={permissions}/>:area==='commissions'?<FinanceCommissionsPanel permissions={permissions} month={month} setMonth={setMonth}/>:area==='classifications'?<FinanceClassificationsPanel permissions={permissions}/>:area==='portals'?<FinancePortalsPanel permissions={permissions}/>:area==='rent'?<FinanceRentPage permissions={permissions}/>:<MaintenanceFinancePanel permissions={permissions}/>}</Suspense></>
+  {area==='overview'?<FinanceDashboardPanel onNavigate={setArea} month={month} setMonth={setMonth} viewMode={viewMode}/>:area==='ledger'?<FinanceCorePanel permissions={permissions} onNavigateSource={source=>setArea(source==='maintenance'?'maintenance':'rent')}/>:area==='cycle'?<FinanceMonthlyCyclePanel permissions={permissions} onNavigateArea={target=>setArea(target)}/>:area==='billing'?<FinanceReceivablesPanel permissions={permissions} month={month} setMonth={setMonth}/>:area==='billing-batches'?<FinanceBillingPanel permissions={permissions}/>:area==='repasses'?<FinanceRepassesPanel permissions={permissions} month={month} setMonth={setMonth}/>:area==='delinquency'?<FinanceDelinquencyPanel permissions={permissions}/>:area==='treasury'?<FinanceTreasuryPanel permissions={permissions}/>:area==='banking'?<FinanceBankingPanel permissions={permissions}/>:area==='bank-setup'?<FinanceBankSetupPanel permissions={permissions}/>:area==='bank-control'?<FinanceBankControlPanel permissions={permissions}/>:area==='inter'?<FinanceInterPanel permissions={permissions}/>:area==='reports'?<FinanceReportsPanel permissions={permissions}/>:area==='commissions'?<FinanceCommissionsPanel permissions={permissions} month={month} setMonth={setMonth}/>:area==='classifications'?<FinanceClassificationsPanel permissions={permissions}/>:area==='portals'?<FinancePortalsPanel permissions={permissions}/>:area==='rent'?<FinanceRentPage permissions={permissions}/>:<MaintenanceFinancePanel permissions={permissions}/>}</Suspense></>
 }
