@@ -1,6 +1,7 @@
 import { AlertTriangle, BarChart3, CalendarDays, ChevronDown, ChevronLeft, ChevronRight, CircleDollarSign, ExternalLink, Landmark, LayoutDashboard, ListTree, LockKeyhole, Percent, PlugZap, ReceiptText, RefreshCw, Send, ShieldCheck, Tags, TrendingUp, WalletCards } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import './finance-navigation.css'
+import type { ViewMode } from '../../components/TopHeader'
 import { ApiError, apiRequest } from '../../api/client'
 import { FinanceBankControlPanel } from './FinanceBankControlPanel'
 import { FinanceBankSetupPanel } from './FinanceBankSetupPanel'
@@ -127,8 +128,11 @@ function FinanceDashboardPanel({onNavigate,month,setMonth}:{onNavigate:(area:Are
   </section>
 }
 
-export function FinancePage({permissions}:{permissions:string[]}){
-  const [area,setArea]=useState<Area>('overview')
+export function FinancePage({permissions,viewMode}:{permissions:string[];viewMode:ViewMode}){
+  const [area,setArea]=useState<Area>(()=>viewMode==='essential'?'billing':viewMode==='managerial'?'ledger':'overview')
+  useEffect(()=>{
+    if(viewMode==='essential'&&area==='overview')setArea('billing')
+  },[viewMode,area])
   const [month,setMonth]=useState(currentMonth())
   const moreRef=useRef<HTMLDetailsElement>(null)
   const secondaryLabels:Partial<Record<Area,string>>={
@@ -141,7 +145,7 @@ export function FinancePage({permissions}:{permissions:string[]}){
     if(moreRef.current)moreRef.current.open=false
   }
   const secondaryActive=Object.prototype.hasOwnProperty.call(secondaryLabels,area)
-  return <><div className="workspace finance-area-switch finance-nav-workspace">
+  return <><div className={`workspace finance-area-switch finance-nav-workspace finance-view-${viewMode}`}>
     <nav className="panel finance-nav-shell" aria-label="Navegação do Financeiro">
       <div className="finance-primary-tabs" role="group" aria-label="Áreas principais">
         <button type="button" className={area==='overview'?'active':''} onClick={()=>choose('overview')}><LayoutDashboard size={15}/> Visão geral</button>
