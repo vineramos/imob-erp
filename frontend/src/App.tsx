@@ -5,7 +5,7 @@ import { authConfigured } from './auth/client'
 import { LoginPage } from './auth/LoginPage'
 import { AppSidebar } from './components/AppSidebar'
 import { EntityDeepLink } from './components/EntityDeepLink'
-import { TopHeader } from './components/TopHeader'
+import { TopHeader, type ViewMode } from './components/TopHeader'
 import { navigation, type ModuleKey } from './config/navigation'
 import { AgendaNotifier } from './modules/agenda/AgendaNotifier'
 import { useTheme } from './theme/ThemeProvider'
@@ -64,6 +64,11 @@ function ErpApp() {
   const { theme, setTheme } = useTheme()
   const [activeModule, setActiveModule] = useState<ModuleKey>(() => moduleFromPath(window.location.pathname))
   const [currentRoute, setCurrentRoute] = useState(() => browserRoute())
+  const [viewMode, setViewMode] = useState<ViewMode>(() => {
+    try { const saved = window.localStorage.getItem('imob.view-mode'); return saved === 'managerial' || saved === 'advanced' ? saved : 'essential' }
+    catch { return 'essential' }
+  })
+  useEffect(() => { try { window.localStorage.setItem('imob.view-mode', viewMode) } catch { /* armazenamento indisponível */ } }, [viewMode])
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
   const [authState, setAuthState] = useState<AuthState>(devBypass ? 'authenticated' : 'loading')
@@ -149,10 +154,12 @@ function ErpApp() {
       authConfigured={authConfigured}
       onNavigate={navigateModule}
       onToggleSidebar={toggleSidebar}
+      viewMode={viewMode}
+      onChangeViewMode={setViewMode}
     />
       {currentUser.permissions.includes('agenda.view') && <AgendaNotifier onOpenAgenda={() => navigateModule('agenda')}/>} 
       <Suspense fallback={<ModuleLoading/>}>
-        {activeModule === 'dashboard' && <DashboardPage onNavigate={module => navigateModule(module)}/>}{activeModule === 'people' && <PropertiesPage permissions={currentUser.permissions} initialTab="people"/>}{activeModule === 'properties' && <PropertiesPage permissions={currentUser.permissions} initialTab="properties"/>}{activeModule === 'brokers' && <BrokersPage permissions={currentUser.permissions}/>}{activeModule === 'captures' && <CapturesPage permissions={currentUser.permissions}/>}{activeModule === 'crm' && <CommercialSiteHub permissions={currentUser.permissions} organizationId={currentUser.organization_id}/>}{activeModule === 'contracts' && <ContractsHub permissions={currentUser.permissions}/>}{activeModule === 'inspections' && <InspectionsPage permissions={currentUser.permissions}/>}{activeModule === 'maintenance' && <MaintenancePage permissions={currentUser.permissions}/>}{activeModule === 'finance' && <FinancePage permissions={currentUser.permissions}/>}{activeModule === 'agenda' && <AgendaPage permissions={currentUser.permissions} onNavigate={module => navigateModule(module)}/>}{activeModule === 'communications' && <CommunicationsPage permissions={currentUser.permissions}/>}{activeModule === 'reports' && <ReportsPage permissions={currentUser.permissions}/>}{activeModule === 'documents' && <DocumentsPage permissions={currentUser.permissions}/>}{activeModule === 'settings' && <SettingsPage permissions={currentUser.permissions}/>} {!implemented.includes(activeModule) && <ModulePlaceholder module={activeModule}/>} 
+        {activeModule === 'dashboard' && <DashboardPage onNavigate={module => navigateModule(module)}/>}{activeModule === 'people' && <PropertiesPage permissions={currentUser.permissions} initialTab="people"/>}{activeModule === 'properties' && <PropertiesPage permissions={currentUser.permissions} initialTab="properties"/>}{activeModule === 'brokers' && <BrokersPage permissions={currentUser.permissions}/>}{activeModule === 'captures' && <CapturesPage permissions={currentUser.permissions}/>}{activeModule === 'crm' && <CommercialSiteHub permissions={currentUser.permissions} organizationId={currentUser.organization_id}/>}{activeModule === 'contracts' && <ContractsHub permissions={currentUser.permissions}/>}{activeModule === 'inspections' && <InspectionsPage permissions={currentUser.permissions}/>}{activeModule === 'maintenance' && <MaintenancePage permissions={currentUser.permissions}/>}{activeModule === 'finance' && <FinancePage permissions={currentUser.permissions} viewMode={viewMode}/>}{activeModule === 'agenda' && <AgendaPage permissions={currentUser.permissions} onNavigate={module => navigateModule(module)}/>}{activeModule === 'communications' && <CommunicationsPage permissions={currentUser.permissions}/>}{activeModule === 'reports' && <ReportsPage permissions={currentUser.permissions}/>}{activeModule === 'documents' && <DocumentsPage permissions={currentUser.permissions}/>}{activeModule === 'settings' && <SettingsPage permissions={currentUser.permissions}/>} {!implemented.includes(activeModule) && <ModulePlaceholder module={activeModule}/>} 
       </Suspense>
       <EntityDeepLink route={currentRoute}/>
     </main>
