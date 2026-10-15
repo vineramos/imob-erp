@@ -130,9 +130,6 @@ function FinanceDashboardPanel({onNavigate,month,setMonth}:{onNavigate:(area:Are
 
 export function FinancePage({permissions,viewMode}:{permissions:string[];viewMode:ViewMode}){
   const [area,setArea]=useState<Area>(()=>viewMode==='essential'?'billing':viewMode==='managerial'?'ledger':'overview')
-  useEffect(()=>{
-    if(viewMode==='essential'&&area==='overview')setArea('billing')
-  },[viewMode,area])
   const [month,setMonth]=useState(currentMonth())
   const moreRef=useRef<HTMLDetailsElement>(null)
   const secondaryLabels:Partial<Record<Area,string>>={
