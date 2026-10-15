@@ -41,6 +41,7 @@ import './public-search-map-enhancer.css'
 import './public-search-condo-fix.css'
 import './public-search-map-size-fix.css'
 import './imob-8-1.css'
+import './view-mode.css'
 
 installBrazilianInputFormatting()
 installGlobalModalEscape()
