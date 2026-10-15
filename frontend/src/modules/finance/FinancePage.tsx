@@ -1,25 +1,25 @@
 import { AlertTriangle, BarChart3, CalendarDays, ChevronDown, ChevronLeft, ChevronRight, CircleDollarSign, ExternalLink, Landmark, LayoutDashboard, ListTree, LockKeyhole, Percent, PlugZap, ReceiptText, RefreshCw, Send, ShieldCheck, Tags, TrendingUp, WalletCards } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import './finance-navigation.css'
 import type { ViewMode } from '../../components/TopHeader'
 import { ApiError, apiRequest } from '../../api/client'
-import { FinanceBankControlPanel } from './FinanceBankControlPanel'
-import { FinanceBankSetupPanel } from './FinanceBankSetupPanel'
-import { FinanceBankingPanel } from './FinanceBankingPanel'
-import { FinanceBillingPanel } from './FinanceBillingPanel'
-import { FinanceReceivablesPanel } from './FinanceReceivablesPanel'
-import { FinanceRepassesPanel } from './FinanceRepassesPanel'
-import { FinanceClassificationsPanel } from './FinanceClassificationsPanel'
-import { FinanceCommissionsPanel } from './FinanceCommissionsPanel'
-import { FinanceCorePanel } from './FinanceCorePanel'
-import { FinanceDelinquencyPanel } from './FinanceDelinquencyPanel'
-import { FinanceInterPanel } from './FinanceInterPanel'
-import { FinanceMonthlyCyclePanel } from './FinanceMonthlyCyclePanel'
-import { FinancePage as FinanceRentPage } from './FinanceRentPage'
-import { FinancePortalsPanel } from './FinancePortalsPanel'
-import { FinanceReportsPanel } from './FinanceReportsPanel'
-import { FinanceTreasuryPanel } from './FinanceTreasuryPanel'
-import { MaintenanceFinancePanel } from './MaintenanceFinancePanel'
+const FinanceBankControlPanel = lazy(() => import('./FinanceBankControlPanel').then(module => ({ default: module.FinanceBankControlPanel })))
+const FinanceBankSetupPanel = lazy(() => import('./FinanceBankSetupPanel').then(module => ({ default: module.FinanceBankSetupPanel })))
+const FinanceBankingPanel = lazy(() => import('./FinanceBankingPanel').then(module => ({ default: module.FinanceBankingPanel })))
+const FinanceBillingPanel = lazy(() => import('./FinanceBillingPanel').then(module => ({ default: module.FinanceBillingPanel })))
+const FinanceReceivablesPanel = lazy(() => import('./FinanceReceivablesPanel').then(module => ({ default: module.FinanceReceivablesPanel })))
+const FinanceRepassesPanel = lazy(() => import('./FinanceRepassesPanel').then(module => ({ default: module.FinanceRepassesPanel })))
+const FinanceClassificationsPanel = lazy(() => import('./FinanceClassificationsPanel').then(module => ({ default: module.FinanceClassificationsPanel })))
+const FinanceCommissionsPanel = lazy(() => import('./FinanceCommissionsPanel').then(module => ({ default: module.FinanceCommissionsPanel })))
+const FinanceCorePanel = lazy(() => import('./FinanceCorePanel').then(module => ({ default: module.FinanceCorePanel })))
+const FinanceDelinquencyPanel = lazy(() => import('./FinanceDelinquencyPanel').then(module => ({ default: module.FinanceDelinquencyPanel })))
+const FinanceInterPanel = lazy(() => import('./FinanceInterPanel').then(module => ({ default: module.FinanceInterPanel })))
+const FinanceMonthlyCyclePanel = lazy(() => import('./FinanceMonthlyCyclePanel').then(module => ({ default: module.FinanceMonthlyCyclePanel })))
+const FinanceRentPage = lazy(() => import('./FinanceRentPage').then(module => ({ default: module.FinancePage })))
+const FinancePortalsPanel = lazy(() => import('./FinancePortalsPanel').then(module => ({ default: module.FinancePortalsPanel })))
+const FinanceReportsPanel = lazy(() => import('./FinanceReportsPanel').then(module => ({ default: module.FinanceReportsPanel })))
+const FinanceTreasuryPanel = lazy(() => import('./FinanceTreasuryPanel').then(module => ({ default: module.FinanceTreasuryPanel })))
+const MaintenanceFinancePanel = lazy(() => import('./MaintenanceFinancePanel').then(module => ({ default: module.MaintenanceFinancePanel })))
 
 type Area = 'overview'|'ledger'|'cycle'|'billing'|'billing-batches'|'repasses'|'delinquency'|'treasury'|'banking'|'bank-setup'|'bank-control'|'inter'|'reports'|'commissions'|'classifications'|'portals'|'rent'|'maintenance'
 type Dashboard = {
@@ -178,5 +178,6 @@ export function FinancePage({permissions,viewMode}:{permissions:string[];viewMod
       </details>
     </nav>
   </div>
-  {area==='overview'?<FinanceDashboardPanel onNavigate={setArea} month={month} setMonth={setMonth}/>:area==='ledger'?<FinanceCorePanel permissions={permissions} onNavigateSource={source=>setArea(source==='maintenance'?'maintenance':'rent')}/>:area==='cycle'?<FinanceMonthlyCyclePanel permissions={permissions} onNavigateArea={target=>setArea(target)}/>:area==='billing'?<FinanceReceivablesPanel permissions={permissions} month={month} setMonth={setMonth}/>:area==='billing-batches'?<FinanceBillingPanel permissions={permissions}/>:area==='repasses'?<FinanceRepassesPanel permissions={permissions} month={month} setMonth={setMonth}/>:area==='delinquency'?<FinanceDelinquencyPanel permissions={permissions}/>:area==='treasury'?<FinanceTreasuryPanel permissions={permissions}/>:area==='banking'?<FinanceBankingPanel permissions={permissions}/>:area==='bank-setup'?<FinanceBankSetupPanel permissions={permissions}/>:area==='bank-control'?<FinanceBankControlPanel permissions={permissions}/>:area==='inter'?<FinanceInterPanel permissions={permissions}/>:area==='reports'?<FinanceReportsPanel permissions={permissions}/>:area==='commissions'?<FinanceCommissionsPanel permissions={permissions} month={month} setMonth={setMonth}/>:area==='classifications'?<FinanceClassificationsPanel permissions={permissions}/>:area==='portals'?<FinancePortalsPanel permissions={permissions}/>:area==='rent'?<FinanceRentPage permissions={permissions}/>:<MaintenanceFinancePanel permissions={permissions}/>}</>
+  <Suspense fallback={<section className="workspace"><div className="panel settings-loading">Carregando área financeira...</div></section>}>
+  {area==='overview'?<FinanceDashboardPanel onNavigate={setArea} month={month} setMonth={setMonth}/>:area==='ledger'?<FinanceCorePanel permissions={permissions} onNavigateSource={source=>setArea(source==='maintenance'?'maintenance':'rent')}/>:area==='cycle'?<FinanceMonthlyCyclePanel permissions={permissions} onNavigateArea={target=>setArea(target)}/>:area==='billing'?<FinanceReceivablesPanel permissions={permissions} month={month} setMonth={setMonth}/>:area==='billing-batches'?<FinanceBillingPanel permissions={permissions}/>:area==='repasses'?<FinanceRepassesPanel permissions={permissions} month={month} setMonth={setMonth}/>:area==='delinquency'?<FinanceDelinquencyPanel permissions={permissions}/>:area==='treasury'?<FinanceTreasuryPanel permissions={permissions}/>:area==='banking'?<FinanceBankingPanel permissions={permissions}/>:area==='bank-setup'?<FinanceBankSetupPanel permissions={permissions}/>:area==='bank-control'?<FinanceBankControlPanel permissions={permissions}/>:area==='inter'?<FinanceInterPanel permissions={permissions}/>:area==='reports'?<FinanceReportsPanel permissions={permissions}/>:area==='commissions'?<FinanceCommissionsPanel permissions={permissions} month={month} setMonth={setMonth}/>:area==='classifications'?<FinanceClassificationsPanel permissions={permissions}/>:area==='portals'?<FinancePortalsPanel permissions={permissions}/>:area==='rent'?<FinanceRentPage permissions={permissions}/>:<MaintenanceFinancePanel permissions={permissions}/>}</Suspense></>
 }
