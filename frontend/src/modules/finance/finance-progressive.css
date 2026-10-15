@@ -1,0 +1,23 @@
+/* Financeiro progressivo: layouts legíveis, sem cartões vazios gigantes. */
+.finance-dashboard .finance-dashboard-metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px}
+.finance-dashboard .finance-metric{min-width:0;min-height:88px;padding:14px}
+.finance-dashboard .finance-metric span{font-size:12px;line-height:1.35}
+.finance-dashboard .finance-metric strong{font-size:19px;line-height:1.4}
+.finance-dashboard .finance-metric small{font-size:11px}
+.finance-dashboard .finance-dashboard-lower{display:grid;grid-template-columns:minmax(0,1fr);gap:12px;align-items:start}
+.finance-dashboard .finance-dashboard-alerts,.finance-dashboard .finance-dashboard-summary{min-height:0;height:auto;padding:16px;align-self:start}
+.finance-dashboard .finance-advanced-card-head{align-items:start}
+.finance-dashboard .finance-compact-row{min-height:0;padding:12px;align-items:center}
+.finance-dashboard .finance-compact-row strong{font-size:12px;line-height:1.4}
+.finance-dashboard .finance-compact-row span,.finance-dashboard .finance-compact-row small{font-size:11px;line-height:1.5}
+.finance-dashboard .finance-core-detail-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:10px}
+.finance-dashboard .finance-core-detail-grid>div{min-height:0;padding:9px 11px}
+.finance-dashboard .finance-core-detail-grid span{font-size:11px}
+.finance-dashboard .finance-core-detail-grid strong{font-size:13px}
+.finance-dashboard .finance-core-detail-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.finance-dashboard-essential .finance-dashboard-metrics{grid-template-columns:repeat(auto-fit,minmax(190px,1fr))}
+.finance-dashboard-essential .finance-dashboard-copy p{max-width:52ch}
+.finance-dashboard-managerial .finance-dashboard-lower{grid-template-columns:1fr}
+@media(min-width:1200px){.finance-dashboard-advanced .finance-dashboard-lower{grid-template-columns:minmax(0,1fr) minmax(310px,.72fr)}}
+@media(max-width:760px){.finance-dashboard .finance-dashboard-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.finance-dashboard .finance-dashboard-lower{grid-template-columns:minmax(0,1fr)}}
+@media(max-width:440px){.finance-dashboard .finance-dashboard-metrics{grid-template-columns:minmax(0,1fr)}}
